@@ -37,13 +37,13 @@ export function HomeScreen({ onProjectOpened }: HomeScreenProps) {
     setError(null)
     setBusy(true)
     try {
-      const path = await pickSaveProjectPath()
+      const name = projectName.trim() || 'Sin título'
+      const path = await pickSaveProjectPath(name)
       if (!path) {
         // Cancelado por el usuario: sin error visible, se mantiene el formulario.
         setBusy(false)
         return
       }
-      const name = projectName.trim() || 'Sin título'
       const document = createProject(name)
       await repository.createProject(path, document)
       loadProject(document)

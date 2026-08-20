@@ -34,7 +34,9 @@ describe('HomeScreen', () => {
     fireEvent.click(screen.getByText('Crear'))
 
     await vi.waitFor(() => expect(onProjectOpened).toHaveBeenCalledWith('/tmp/nuevo.branch'))
-    expect(pickSaveProjectPath).toHaveBeenCalled()
+    // El nombre escrito en el formulario se propone como nombre de archivo
+    // en el propio diálogo nativo de guardar (el usuario puede cambiarlo).
+    expect(pickSaveProjectPath).toHaveBeenCalledWith('Mi escenario')
 
     const stored = await repository.openProject('/tmp/nuevo.branch')
     expect(stored.metadata.name).toBe('Mi escenario')

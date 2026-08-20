@@ -7,8 +7,28 @@ import type { AppServices } from './AppServices'
 /** Único filtro de extensión de archivo que reconoce este editor. */
 const BRANCH_FILE_FILTERS = [{ name: 'Proyecto Brunch Studio', extensions: ['branch'] }]
 
-async function pickSaveProjectPathWithNativeDialog(): Promise<string | null> {
-  const path = await save({ filters: BRANCH_FILE_FILTERS })
+/** Caracteres no válidos en un nombre de archivo en Windows/macOS. */
+const INVALID_FILENAME_CHARS = /[/\\:*?"<>|]/g
+
+/**
+ * Convierte el nombre de proyecto escrito por el usuario en un nombre de
+ * archivo válido en disco: quita caracteres prohibidos, colapsa espacios y
+ * recorta puntos o espacios al final (Windows los rechaza). Si no queda
+ * nada aprovechable, usa un nombre por defecto en vez de proponer un
+ * archivo sin nombre.
+ */
+export function sanitizeFileName(name: string): string {
+  const cleaned = name
+    .replace(INVALID_FILENAME_CHARS, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/[. ]+$/, '')
+  return cleaned.length > 0 ? cleaned : 'Sin título'
+}
+
+async function pickSaveProjectPathWithNativeDialog(suggestedName?: string): Promise<string | null> {
+  const defaultPath = suggestedName ? `${sanitizeFileName(suggestedName)}.branch` : undefined
+  const path = await save({ filters: BRANCH_FILE_FILTERS, defaultPath })
   return path ?? null
 }
 

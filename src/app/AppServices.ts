@@ -13,8 +13,14 @@ import type { ProjectRepository } from '../persistence'
  */
 export interface AppServices {
   repository: ProjectRepository
-  /** Abre el diálogo nativo de "Guardar como…"; `null` si el usuario cancela. */
-  pickSaveProjectPath: () => Promise<string | null>
+  /**
+   * Abre el diálogo nativo de "Guardar como…"; `null` si el usuario cancela.
+   * `suggestedName` (el nombre de proyecto que el usuario acaba de escribir
+   * en "Nuevo proyecto") se usa para preseleccionar el nombre de archivo
+   * propuesto en el propio diálogo — el usuario sigue pudiendo cambiarlo
+   * antes de guardar.
+   */
+  pickSaveProjectPath: (suggestedName?: string) => Promise<string | null>
   /** Abre el diálogo nativo de "Abrir…"; `null` si el usuario cancela. */
   pickOpenProjectPath: () => Promise<string | null>
 }
