@@ -30,6 +30,14 @@ export interface UiState {
   contextMenu: ContextMenuState
   hoveredNodeId: string | null
   previewMode: boolean
+  /**
+   * Petición de "centrar el lienzo en este nodo", fijada por `focusNode`
+   * (p.ej. al hacer clic en un elemento de `LeftPanel`) y consumida por el
+   * componente del lienzo (fase 5), que centra la vista y la limpia con
+   * `clearFocusRequest`. Existe para que `LeftPanel` pueda pedir un
+   * centrado sin conocer `@xyflow/react` ni la instancia de React Flow.
+   */
+  focusRequestNodeId: string | null
 }
 
 /** Estado de guardado expuesto para una futura fase de autoguardado. */

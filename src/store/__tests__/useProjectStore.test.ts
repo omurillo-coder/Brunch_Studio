@@ -336,3 +336,37 @@ describe('selectores/hooks de conveniencia', () => {
     expect(selected.result.current).toEqual([finalId])
   })
 })
+
+describe('focusNode / clearFocusRequest (fase 5: comunicación LeftPanel → lienzo)', () => {
+  it('focusNode selecciona el nodo y fija ui.focusRequestNodeId', () => {
+    useProjectStore.getState().createNode('final', { x: 0, y: 0 })
+    const finalId = nodeIdOf('final')
+
+    useProjectStore.getState().focusNode(finalId)
+
+    expect(useProjectStore.getState().selection.selectedNodeIds).toEqual([finalId])
+    expect(useProjectStore.getState().ui.focusRequestNodeId).toBe(finalId)
+  })
+
+  it('clearFocusRequest limpia la petición sin tocar la selección', () => {
+    useProjectStore.getState().createNode('final', { x: 0, y: 0 })
+    const finalId = nodeIdOf('final')
+    useProjectStore.getState().focusNode(finalId)
+
+    useProjectStore.getState().clearFocusRequest()
+
+    expect(useProjectStore.getState().ui.focusRequestNodeId).toBeNull()
+    expect(useProjectStore.getState().selection.selectedNodeIds).toEqual([finalId])
+  })
+
+  it('loadProject también resetea ui.focusRequestNodeId', () => {
+    useProjectStore.getState().createNode('final', { x: 0, y: 0 })
+    const finalId = nodeIdOf('final')
+    useProjectStore.getState().focusNode(finalId)
+
+    const fresh = useProjectStore.getState().project
+    useProjectStore.getState().loadProject(fresh)
+
+    expect(useProjectStore.getState().ui.focusRequestNodeId).toBeNull()
+  })
+})

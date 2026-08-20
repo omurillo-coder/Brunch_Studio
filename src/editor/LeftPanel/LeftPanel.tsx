@@ -36,6 +36,7 @@ export function LeftPanel() {
   const project = useProject()
   const createNode = useProjectStore((state) => state.createNode)
   const selectNode = useProjectStore((state) => state.selectNode)
+  const focusNode = useProjectStore((state) => state.focusNode)
 
   function handleCreate(type: NodeType) {
     const position = nextCascadePosition(project.graph.nodes.length)
@@ -68,7 +69,11 @@ export function LeftPanel() {
       <ul className={styles.nodeList}>
         {project.graph.nodes.map((node) => (
           <li key={node.id}>
-            <button type="button" className={styles.nodeItem} onClick={() => selectNode(node.id)}>
+            {/* `focusNode` selecciona el nodo (igual que `selectNode`) y
+                además pide al lienzo que centre la vista en él, sin que
+                este componente conozca `@xyflow/react` — ver
+                `ui.focusRequestNodeId` en `src/store`. */}
+            <button type="button" className={styles.nodeItem} onClick={() => focusNode(node.id)}>
               <span className={styles.nodeType}>{NODE_TYPE_LABEL[node.type]}</span>
               <span className={styles.nodeNumber}>{node.number}</span>
               <span className={styles.nodeTitle}>{node.title.trim() || 'Sin título'}</span>

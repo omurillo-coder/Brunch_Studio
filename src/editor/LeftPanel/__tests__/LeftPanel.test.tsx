@@ -81,4 +81,17 @@ describe('LeftPanel', () => {
 
     expect(useProjectStore.getState().selection.selectedNodeIds).toEqual([created.id])
   })
+
+  it('click en un ítem de la lista también pide centrar el lienzo en ese nodo (focusRequestNodeId)', () => {
+    render(<LeftPanel />)
+
+    act(() => {
+      useProjectStore.getState().createNode('content', { x: 0, y: 0 })
+    })
+    const created = lastNode()
+
+    fireEvent.click(screen.getByText(created.number.toString()))
+
+    expect(useProjectStore.getState().ui.focusRequestNodeId).toBe(created.id)
+  })
 })

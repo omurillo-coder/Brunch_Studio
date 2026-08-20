@@ -1,12 +1,12 @@
 import { Topbar } from '../Topbar/Topbar'
 import { LeftPanel } from '../LeftPanel/LeftPanel'
 import { Inspector } from '../Inspector/Inspector'
-import { CanvasPlaceholder } from '../CanvasPlaceholder/CanvasPlaceholder'
+import { Canvas } from '../Canvas/Canvas'
 import styles from './EditorScreen.module.css'
 
 /**
  * Shell visual del editor: barra superior + panel izquierdo + lienzo
- * (placeholder en esta fase) + inspector derecho. El lienzo central es el
+ * (`@xyflow/react`, fase 5) + inspector derecho. El lienzo central es el
  * que domina el espacio; el resto son paneles compactos.
  */
 export function EditorScreen() {
@@ -15,7 +15,7 @@ export function EditorScreen() {
       <Topbar />
       <div className={styles.body}>
         <LeftPanel />
-        <CanvasPlaceholder />
+        <Canvas />
         <Inspector />
       </div>
     </div>

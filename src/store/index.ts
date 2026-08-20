@@ -18,5 +18,6 @@ export {
   usePreviewMode,
   useHoveredNodeId,
   useContextMenu,
+  useFocusRequestNodeId,
 } from './selectors'
 export { resetProjectStore } from './testHelpers'

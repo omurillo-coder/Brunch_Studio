@@ -100,6 +100,15 @@ import type {
  *     empuja ese snapshot a `history.past` y se vacía `history.future` — una
  *     única entrada, igual que cualquier otra acción de dominio.
  *
+ * Foco de lienzo (`ui.focusRequestNodeId`), fase 5:
+ * `LeftPanel` no debe conocer `@xyflow/react` ni la instancia de React Flow,
+ * así que la comunicación "centra la vista en este nodo" pasa por este
+ * estado transitorio: `focusNode(id)` selecciona el nodo (igual que
+ * `selectNode`) y además fija `focusRequestNodeId`. El componente del
+ * lienzo se suscribe a ese campo; cuando cambia a un id no nulo, centra la
+ * vista y llama a `clearFocusRequest()` para no repetir el centrado en
+ * renders posteriores (p.ej. si el usuario mueve la cámara a mano después).
+ *
  * Reset entre tests:
  * Zustand no ofrece un "reset" de fábrica. El patrón elegido (ver
  * `testHelpers.ts`) es exportar una función `createInitialState()` y, en
@@ -153,6 +162,10 @@ export interface ProjectStoreActions {
   closeContextMenu: () => void
   setHover: (nodeId: string | null) => void
   setPreviewMode: (enabled: boolean) => void
+
+  // -- Foco de lienzo (transitorio; ver `UiState.focusRequestNodeId`) --
+  focusNode: (nodeId: string) => void
+  clearFocusRequest: () => void
 }
 
 export type ProjectStoreState = ProjectStoreData & ProjectStoreActions
@@ -173,6 +186,7 @@ export function createInitialState(): ProjectStoreData {
       contextMenu: emptyContextMenu,
       hoveredNodeId: null,
       previewMode: false,
+      focusRequestNodeId: null,
     },
     saveStatus: 'idle',
     history: { past: [], future: [] },
@@ -345,6 +359,7 @@ export const useProjectStore = create<ProjectStoreState>()(
           contextMenu: emptyContextMenu,
           hoveredNodeId: null,
           previewMode: false,
+          focusRequestNodeId: null,
         }
         state.saveStatus = 'idle'
         state.drag = null
@@ -411,6 +426,19 @@ export const useProjectStore = create<ProjectStoreState>()(
     setPreviewMode: (enabled) => {
       set((state) => {
         state.ui.previewMode = enabled
+      })
+    },
+
+    focusNode: (nodeId) => {
+      set((state) => {
+        state.selection.selectedNodeIds = [nodeId]
+        state.ui.focusRequestNodeId = nodeId
+      })
+    },
+
+    clearFocusRequest: () => {
+      set((state) => {
+        state.ui.focusRequestNodeId = null
       })
     },
   })),

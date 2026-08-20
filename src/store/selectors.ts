@@ -29,3 +29,5 @@ export const usePreviewMode = () => useProjectStore((state) => state.ui.previewM
 export const useHoveredNodeId = () => useProjectStore((state) => state.ui.hoveredNodeId)
 
 export const useContextMenu = () => useProjectStore((state) => state.ui.contextMenu)
+
+export const useFocusRequestNodeId = () => useProjectStore((state) => state.ui.focusRequestNodeId)

@@ -1,0 +1,110 @@
+/**
+ * Estilo compartido por los 4 tipos de nodo del lienzo. Deliberadamente
+ * compacto: solo tipo/número/título (+ resumen de respuestas en decision),
+ * nunca el `body` completo — el lienzo debe seguir siendo legible con
+ * decenas de nodos.
+ */
+
+.card {
+  min-width: 160px;
+  max-width: 220px;
+  border: 1px solid var(--bs-color-border);
+  border-radius: var(--bs-radius-md);
+  background: var(--bs-color-surface);
+  box-shadow: var(--bs-shadow-sm);
+  font-size: var(--bs-font-size-sm);
+  color: var(--bs-color-text);
+}
+
+/* `@xyflow/react` añade `.selected` al wrapper del nodo; nuestro estilo de
+   selección vive ahí para no depender de una clase propia. */
+:global(.react-flow__node.selected) .card {
+  border-color: var(--bs-color-accent);
+  box-shadow: 0 0 0 2px var(--bs-color-focus-ring);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: var(--bs-space-2);
+  padding: var(--bs-space-2) var(--bs-space-3);
+  border-bottom: 1px solid var(--bs-color-border);
+}
+
+.type {
+  font-size: var(--bs-font-size-xs);
+  color: var(--bs-color-text-muted);
+  background: var(--bs-color-bg);
+  border-radius: var(--bs-radius-sm);
+  padding: 1px 6px;
+}
+
+.number {
+  font-size: var(--bs-font-size-xs);
+  color: var(--bs-color-text-faint);
+}
+
+.title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  text-align: right;
+  font-weight: 600;
+}
+
+.body {
+  padding: var(--bs-space-2) var(--bs-space-3);
+}
+
+.responseList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--bs-space-1);
+}
+
+.responseRow {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--bs-space-2);
+  padding: 2px 0;
+}
+
+.responseLetter {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--bs-color-bg);
+  color: var(--bs-color-text-muted);
+  font-size: var(--bs-font-size-xs);
+  font-weight: 600;
+}
+
+.responseText {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--bs-color-text-muted);
+}
+
+.emptyResponses {
+  color: var(--bs-color-text-faint);
+  font-size: var(--bs-font-size-xs);
+}
+
+/* Handles: puntos discretos con el color de acento, en vez del estilo por
+   defecto (más grande y sin integrar con la paleta). */
+.handle {
+  width: 8px;
+  height: 8px;
+  background: var(--bs-color-accent);
+  border: 1px solid var(--bs-color-surface);
+}
