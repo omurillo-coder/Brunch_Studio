@@ -1,0 +1,83 @@
+.panel {
+  flex: 0 0 220px;
+  display: flex;
+  flex-direction: column;
+  background: var(--bs-color-surface);
+  border-right: 1px solid var(--bs-color-border);
+  min-height: 0;
+}
+
+.addSection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--bs-space-2);
+  padding: var(--bs-space-3);
+  border-bottom: 1px solid var(--bs-color-border);
+}
+
+.addButton {
+  padding: var(--bs-space-2) var(--bs-space-3);
+  border: 1px solid var(--bs-color-border);
+  border-radius: var(--bs-radius-sm);
+  background: var(--bs-color-surface);
+  color: var(--bs-color-text);
+  font-size: var(--bs-font-size-sm);
+  text-align: left;
+}
+
+.addButton:hover {
+  border-color: var(--bs-color-border-strong);
+  background: var(--bs-color-bg);
+}
+
+.nodeList {
+  list-style: none;
+  margin: 0;
+  padding: var(--bs-space-2);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+}
+
+.nodeItem {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--bs-space-2);
+  padding: var(--bs-space-2);
+  border: 1px solid transparent;
+  border-radius: var(--bs-radius-sm);
+  background: transparent;
+  text-align: left;
+  font-size: var(--bs-font-size-sm);
+  color: var(--bs-color-text);
+}
+
+.nodeItem:hover {
+  background: var(--bs-color-bg);
+  border-color: var(--bs-color-border);
+}
+
+.nodeType {
+  flex: 0 0 auto;
+  font-size: var(--bs-font-size-xs);
+  color: var(--bs-color-text-muted);
+  background: var(--bs-color-bg);
+  border-radius: var(--bs-radius-sm);
+  padding: 1px 6px;
+}
+
+.nodeNumber {
+  flex: 0 0 auto;
+  color: var(--bs-color-text-faint);
+  font-size: var(--bs-font-size-xs);
+}
+
+.nodeTitle {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}

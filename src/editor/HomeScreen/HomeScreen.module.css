@@ -1,0 +1,109 @@
+.screen {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bs-color-bg);
+}
+
+.panel {
+  width: 360px;
+  padding: var(--bs-space-6);
+  background: var(--bs-color-surface);
+  border: 1px solid var(--bs-color-border);
+  border-radius: var(--bs-radius-lg);
+  box-shadow: var(--bs-shadow-sm);
+}
+
+.title {
+  margin: 0 0 var(--bs-space-2);
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--bs-color-text);
+}
+
+.subtitle {
+  margin: 0 0 var(--bs-space-5);
+  font-size: var(--bs-font-size-sm);
+  color: var(--bs-color-text-muted);
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--bs-space-2);
+}
+
+.primaryButton,
+.secondaryButton {
+  padding: var(--bs-space-3);
+  border-radius: var(--bs-radius-md);
+  font-size: var(--bs-font-size-md);
+}
+
+.primaryButton {
+  border: 1px solid var(--bs-color-accent);
+  background: var(--bs-color-accent);
+  color: var(--bs-color-accent-contrast);
+  font-weight: 600;
+}
+
+.primaryButton:hover:not(:disabled) {
+  background: var(--bs-color-accent-hover);
+  border-color: var(--bs-color-accent-hover);
+}
+
+.secondaryButton {
+  border: 1px solid var(--bs-color-border);
+  background: var(--bs-color-surface);
+  color: var(--bs-color-text);
+}
+
+.secondaryButton:hover:not(:disabled) {
+  border-color: var(--bs-color-border-strong);
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.namingForm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--bs-space-2);
+}
+
+.label {
+  font-size: var(--bs-font-size-xs);
+  color: var(--bs-color-text-muted);
+}
+
+.input {
+  padding: var(--bs-space-2);
+  border: 1px solid var(--bs-color-border);
+  border-radius: var(--bs-radius-sm);
+  background: var(--bs-color-bg);
+  color: var(--bs-color-text);
+  font-size: var(--bs-font-size-md);
+}
+
+.input:focus {
+  border-color: var(--bs-color-accent);
+}
+
+.namingActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--bs-space-2);
+  margin-top: var(--bs-space-2);
+}
+
+.error {
+  margin: var(--bs-space-4) 0 0;
+  padding: var(--bs-space-2) var(--bs-space-3);
+  border-radius: var(--bs-radius-sm);
+  background: var(--bs-color-danger-bg);
+  color: var(--bs-color-danger);
+  font-size: var(--bs-font-size-sm);
+}

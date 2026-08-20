@@ -1,0 +1,71 @@
+import { fireEvent, render, screen } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import App from '../App'
+import { MemoryProjectRepository } from '../persistence'
+import { createProject } from '../domain'
+import { resetProjectStore } from '../store/testHelpers'
+
+beforeEach(() => {
+  resetProjectStore()
+})
+
+describe('App: navegación HomeScreen -> EditorScreen', () => {
+  it('"Nuevo proyecto" lleva a EditorScreen con el nodo de Inicio creado', async () => {
+    const repository = new MemoryProjectRepository()
+    const pickSaveProjectPath = vi.fn().mockResolvedValue('/tmp/proyecto-nuevo.branch')
+    const pickOpenProjectPath = vi.fn().mockResolvedValue(null)
+
+    render(<App services={{ repository, pickSaveProjectPath, pickOpenProjectPath }} />)
+
+    fireEvent.click(screen.getByText('Nuevo proyecto'))
+    fireEvent.change(screen.getByLabelText('Nombre del proyecto'), {
+      target: { value: 'Escenario de prueba' },
+    })
+    fireEvent.click(screen.getByText('Crear'))
+
+    // El shell del editor está montado: barra superior con el nombre del
+    // proyecto y el botón "Probar", panel izquierdo con los botones de
+    // creación. El nombre del proyecto aparece dos veces (barra superior +
+    // inspector sin selección), por eso se usa `findAllByText`.
+    await screen.findByText('▶ Probar')
+    expect(screen.getAllByText('Escenario de prueba').length).toBeGreaterThan(0)
+    expect(screen.getByText('+ Pantalla')).toBeInTheDocument()
+    // El nodo de Inicio, creado automáticamente por `createProject`, ya
+    // aparece en la lista del panel izquierdo (también aparece en el
+    // desglose del inspector sin selección, por eso son al menos dos).
+    expect(screen.getAllByText('Inicio').length).toBeGreaterThanOrEqual(1)
+  })
+
+  it('"Abrir proyecto" con un documento existente lleva a EditorScreen con esos datos', async () => {
+    const repository = new MemoryProjectRepository()
+    const existing = createProject('Proyecto ya guardado')
+    await repository.createProject('/tmp/existente.branch', existing)
+
+    const pickSaveProjectPath = vi.fn().mockResolvedValue(null)
+    const pickOpenProjectPath = vi.fn().mockResolvedValue('/tmp/existente.branch')
+
+    render(<App services={{ repository, pickSaveProjectPath, pickOpenProjectPath }} />)
+
+    fireEvent.click(screen.getByText('Abrir proyecto'))
+
+    await screen.findByText('▶ Probar')
+    expect(screen.getAllByText('Proyecto ya guardado').length).toBeGreaterThan(0)
+  })
+
+  it('cancelar el selector de ruta no rompe nada y deja la pantalla inicial', async () => {
+    const repository = new MemoryProjectRepository()
+    const pickSaveProjectPath = vi.fn().mockResolvedValue(null)
+    const pickOpenProjectPath = vi.fn().mockResolvedValue(null)
+
+    render(<App services={{ repository, pickSaveProjectPath, pickOpenProjectPath }} />)
+
+    fireEvent.click(screen.getByText('Abrir proyecto'))
+    await vi.waitFor(() => expect(pickOpenProjectPath).toHaveBeenCalled())
+
+    // Sigue en HomeScreen: los dos botones iniciales están presentes y no
+    // hay rastro del shell del editor.
+    expect(screen.getByText('Nuevo proyecto')).toBeInTheDocument()
+    expect(screen.getByText('Abrir proyecto')).toBeInTheDocument()
+    expect(screen.queryByText('▶ Probar')).not.toBeInTheDocument()
+  })
+})

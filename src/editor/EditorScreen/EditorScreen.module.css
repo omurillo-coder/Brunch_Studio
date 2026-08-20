@@ -1,0 +1,12 @@
+.screen {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--bs-color-bg);
+}
+
+.body {
+  flex: 1 1 auto;
+  display: flex;
+  min-height: 0;
+}

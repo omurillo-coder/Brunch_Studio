@@ -1,0 +1,47 @@
+/**
+ * Reset básico y dimensionado del contenedor raíz de la aplicación real
+ * (distinto del `#root` centrado a 1126px de `src/index.css`, que era para
+ * la pantalla de bienvenida de la plantilla de Vite).
+ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+}
+
+#root {
+  height: 100vh;
+  width: 100%;
+}
+
+body {
+  font-family: var(--bs-font-sans);
+  font-size: var(--bs-font-size-md);
+  color: var(--bs-color-text);
+  background: var(--bs-color-bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+:focus-visible {
+  outline: 2px solid var(--bs-color-focus-ring);
+  outline-offset: 1px;
+}
