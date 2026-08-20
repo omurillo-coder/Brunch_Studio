@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 /**
- * Modelo de dominio de `branch-studio`.
+ * Modelo de dominio de `Brunch Studio`.
  *
  * `ProjectDocument` es la única fuente de verdad de un escenario
  * interactivo ramificado. Se define aquí con esquemas Zod y los tipos de

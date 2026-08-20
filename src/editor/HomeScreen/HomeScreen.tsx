@@ -3,6 +3,7 @@ import type { FormEvent } from 'react'
 import { createProject } from '../../domain'
 import { useAppServices } from '../../app/AppServicesContext'
 import { useProjectStore } from '../../store'
+import logo from '../../assets/logo.png'
 import styles from './HomeScreen.module.css'
 
 export interface HomeScreenProps {
@@ -69,7 +70,7 @@ export function HomeScreen({ onProjectOpened }: HomeScreenProps) {
       loadProject(document)
       onProjectOpened(path)
     } catch {
-      setError('No se ha podido abrir ese archivo. Comprueba que es un proyecto de Branch Studio válido.')
+      setError('No se ha podido abrir ese archivo. Comprueba que es un proyecto de Brunch Studio válido.')
       setBusy(false)
     }
   }
@@ -77,7 +78,7 @@ export function HomeScreen({ onProjectOpened }: HomeScreenProps) {
   return (
     <div className={styles.screen}>
       <div className={styles.panel}>
-        <h1 className={styles.title}>Branch Studio</h1>
+        <img className={styles.logo} src={logo} alt="Brunch Studio" />
         <p className={styles.subtitle}>Crea un proyecto nuevo o abre uno existente para empezar.</p>
 
         {mode === 'idle' && (
@@ -137,6 +138,8 @@ export function HomeScreen({ onProjectOpened }: HomeScreenProps) {
             {error}
           </p>
         )}
+
+        <p className={styles.footer}>Herramienta propia de Content Factory - iLERNA</p>
       </div>
     </div>
   )

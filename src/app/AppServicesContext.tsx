@@ -5,7 +5,7 @@ import { TauriProjectRepository } from '../persistence'
 import type { AppServices } from './AppServices'
 
 /** Único filtro de extensión de archivo que reconoce este editor. */
-const BRANCH_FILE_FILTERS = [{ name: 'Proyecto Branch Studio', extensions: ['branch'] }]
+const BRANCH_FILE_FILTERS = [{ name: 'Proyecto Brunch Studio', extensions: ['branch'] }]
 
 async function pickSaveProjectPathWithNativeDialog(): Promise<string | null> {
   const path = await save({ filters: BRANCH_FILE_FILTERS })
