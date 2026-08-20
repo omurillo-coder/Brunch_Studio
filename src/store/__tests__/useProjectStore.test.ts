@@ -404,3 +404,111 @@ describe('focusNode / clearFocusRequest (fase 5: comunicación LeftPanel → lie
     expect(useProjectStore.getState().ui.focusRequestNodeId).toBeNull()
   })
 })
+
+describe('createConnectedNodeFromMenu (fase 7: menú "¿Qué quieres añadir?")', () => {
+  it('crea, conecta, selecciona el nodo nuevo, pide foco de título y cierra el menú — todo en una única llamada', () => {
+    const startId = nodeIdOf('start')
+    useProjectStore.getState().openContextMenu({
+      position: { x: 100, y: 200 },
+      originNodeId: startId,
+    })
+    const idsBefore = new Set(useProjectStore.getState().project.graph.nodes.map((n) => n.id))
+    const nodesBefore = idsBefore.size
+    const historyBefore = useProjectStore.getState().history.past.length
+
+    useProjectStore.getState().createConnectedNodeFromMenu('content', { x: 300, y: 40 })
+
+    const state = useProjectStore.getState()
+    expect(state.project.graph.nodes.length).toBe(nodesBefore + 1)
+    expect(state.history.past.length).toBe(historyBefore + 1)
+
+    const created = state.project.graph.nodes.find((node) => !idsBefore.has(node.id))
+    if (!created) throw new Error('no se encontró el nodo creado')
+
+    expect(created.type).toBe('content')
+    expect(created.position).toEqual({ x: 300, y: 40 })
+
+    const start = state.project.graph.nodes.find((n) => n.id === startId)
+    expect(start?.type === 'start' ? start.targetNodeId : undefined).toBe(created.id)
+
+    expect(state.selection.selectedNodeIds).toEqual([created.id])
+    expect(state.ui.titleFocusRequestNodeId).toBe(created.id)
+    expect(state.ui.contextMenu.open).toBe(false)
+  })
+
+  it('produce exactamente una entrada de historial deshacible/rehacible', () => {
+    const startId = nodeIdOf('start')
+    useProjectStore.getState().openContextMenu({ position: { x: 0, y: 0 }, originNodeId: startId })
+
+    const historyBefore = useProjectStore.getState().history.past.length
+    useProjectStore.getState().createConnectedNodeFromMenu('final', { x: 0, y: 0 })
+    const nodesAfterCreate = useProjectStore.getState().project.graph.nodes.length
+
+    expect(useProjectStore.getState().history.past.length).toBe(historyBefore + 1)
+
+    useProjectStore.getState().undo()
+    expect(useProjectStore.getState().project.graph.nodes.length).toBe(nodesAfterCreate - 1)
+
+    useProjectStore.getState().redo()
+    expect(useProjectStore.getState().project.graph.nodes.length).toBe(nodesAfterCreate)
+  })
+
+  it('deriva el responseId de origen desde ui.contextMenu.originResponseId (nodo decision)', () => {
+    useProjectStore.getState().createNode('decision', { x: 0, y: 0 })
+    const decisionId = nodeIdOf('decision')
+    const decision = useProjectStore.getState().project.graph.nodes.find(
+      (n) => n.id === decisionId,
+    ) as DecisionNode
+    const responseId = decision.responses[0]?.id
+    if (!responseId) throw new Error('setup inválido')
+
+    useProjectStore.getState().openContextMenu({
+      position: { x: 0, y: 0 },
+      originNodeId: decisionId,
+      originResponseId: responseId,
+    })
+
+    useProjectStore.getState().createConnectedNodeFromMenu('final', { x: 0, y: 0 })
+
+    const decisionAfter = useProjectStore.getState().project.graph.nodes.find(
+      (n) => n.id === decisionId,
+    ) as DecisionNode
+    const response = decisionAfter.responses.find((r) => r.id === responseId)
+    expect(response?.targetNodeId).toBeDefined()
+  })
+
+  it('no hace nada si el menú no está abierto', () => {
+    const before = useProjectStore.getState().project
+
+    useProjectStore.getState().createConnectedNodeFromMenu('final', { x: 0, y: 0 })
+
+    expect(useProjectStore.getState().project).toBe(before)
+    expect(useProjectStore.getState().history.past.length).toBe(0)
+  })
+})
+
+describe('clearTitleFocusRequest', () => {
+  it('limpia ui.titleFocusRequestNodeId sin tocar la selección', () => {
+    const startId = nodeIdOf('start')
+    useProjectStore.getState().openContextMenu({ position: { x: 0, y: 0 }, originNodeId: startId })
+    useProjectStore.getState().createConnectedNodeFromMenu('final', { x: 0, y: 0 })
+    expect(useProjectStore.getState().ui.titleFocusRequestNodeId).not.toBeNull()
+    const selectedBefore = useProjectStore.getState().selection.selectedNodeIds
+
+    useProjectStore.getState().clearTitleFocusRequest()
+
+    expect(useProjectStore.getState().ui.titleFocusRequestNodeId).toBeNull()
+    expect(useProjectStore.getState().selection.selectedNodeIds).toEqual(selectedBefore)
+  })
+
+  it('loadProject también resetea ui.titleFocusRequestNodeId', () => {
+    const startId = nodeIdOf('start')
+    useProjectStore.getState().openContextMenu({ position: { x: 0, y: 0 }, originNodeId: startId })
+    useProjectStore.getState().createConnectedNodeFromMenu('final', { x: 0, y: 0 })
+
+    const fresh = useProjectStore.getState().project
+    useProjectStore.getState().loadProject(fresh)
+
+    expect(useProjectStore.getState().ui.titleFocusRequestNodeId).toBeNull()
+  })
+})

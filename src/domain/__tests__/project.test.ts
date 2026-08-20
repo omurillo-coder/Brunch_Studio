@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createNode, createProject, deleteNode, moveNode, updateNode } from '../project'
+import { createConnectedNode, createNode, createProject, deleteNode, moveNode, updateNode } from '../project'
 import { connect } from '../graph'
 import { addResponse } from '../responses'
 
@@ -123,5 +123,88 @@ describe('updateNode', () => {
     expect(node?.title).toBe('Inicio del escenario')
     expect(node?.body).toBe('texto')
     expect(node?.id).toBe(startId)
+  })
+})
+
+describe('createConnectedNode', () => {
+  it('crea y conecta en una sola llamada desde un nodo start/content (sin sourceResponseId)', () => {
+    const project = createProject('P')
+    const startId = project.graph.nodes[0]?.id
+    if (!startId) throw new Error('setup inválido')
+
+    const { project: updated, nodeId } = createConnectedNode(
+      project,
+      'content',
+      { x: 200, y: 50 },
+      startId,
+    )
+
+    expect(updated.graph.nodes).toHaveLength(2)
+    const created = updated.graph.nodes.find((node) => node.id === nodeId)
+    expect(created?.type).toBe('content')
+    expect(created?.position).toEqual({ x: 200, y: 50 })
+
+    const start = updated.graph.nodes.find((node) => node.id === startId)
+    expect(start?.type === 'start' ? start.targetNodeId : undefined).toBe(nodeId)
+
+    // Inmutabilidad: el proyecto original no se toca.
+    expect(project.graph.nodes).toHaveLength(1)
+  })
+
+  it('crea y conecta en una sola llamada desde una respuesta de un nodo decision', () => {
+    let project = createProject('P')
+    project = createNode(project, 'decision', { x: 0, y: 0 })
+    const decision = project.graph.nodes.find((node) => node.type === 'decision')
+    const responseId = decision?.type === 'decision' ? decision.responses[0]?.id : undefined
+    if (!decision || !responseId) throw new Error('setup inválido')
+
+    const { project: updated, nodeId } = createConnectedNode(
+      project,
+      'final',
+      { x: 300, y: 0 },
+      decision.id,
+      responseId,
+    )
+
+    const created = updated.graph.nodes.find((node) => node.id === nodeId)
+    expect(created?.type).toBe('final')
+
+    const decisionAfter = updated.graph.nodes.find((node) => node.id === decision.id)
+    const response =
+      decisionAfter?.type === 'decision'
+        ? decisionAfter.responses.find((r) => r.id === responseId)
+        : undefined
+    expect(response?.targetNodeId).toBe(nodeId)
+  })
+
+  it('el nodo nuevo creado es un nodo decision con respuestas A y B iniciales', () => {
+    const project = createProject('P')
+    const startId = project.graph.nodes[0]?.id
+    if (!startId) throw new Error('setup inválido')
+
+    const { project: updated, nodeId } = createConnectedNode(
+      project,
+      'decision',
+      { x: 0, y: 0 },
+      startId,
+    )
+
+    const created = updated.graph.nodes.find((node) => node.id === nodeId)
+    expect(created?.type === 'decision' ? created.responses.map((r) => r.letter) : []).toEqual([
+      'A',
+      'B',
+    ])
+  })
+
+  it('propaga el error de `connect` si la combinación origen/respuesta es inválida', () => {
+    let project = createProject('P')
+    project = createNode(project, 'decision', { x: 0, y: 0 })
+    const decisionId = project.graph.nodes.find((node) => node.type === 'decision')?.id
+    if (!decisionId) throw new Error('setup inválido')
+
+    // Un nodo decision requiere `sourceResponseId`; omitirlo debe propagar
+    // el error que ya lanza `connect` de dominio, sin dejar el proyecto en
+    // un estado intermedio (nodo creado pero no conectado).
+    expect(() => createConnectedNode(project, 'final', { x: 0, y: 0 }, decisionId)).toThrow()
   })
 })

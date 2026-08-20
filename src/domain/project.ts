@@ -1,6 +1,7 @@
 import { produce } from 'immer'
 import { createId, nextNodeNumber } from './id'
 import { addResponse } from './responses'
+import { connect } from './graph'
 import type {
   ContentNode,
   DecisionNode,
@@ -206,4 +207,61 @@ export function updateNode(
     if (patch.body !== undefined) node.body = patch.body
     touchUpdatedAt(draft)
   })
+}
+
+/** Resultado de `createConnectedNode`: el documento resultante más el id del
+ *  nodo recién creado (para poder seleccionarlo de inmediato sin recurrir a
+ *  heurísticas como "el de mayor `number`"). */
+export interface CreateConnectedNodeResult {
+  project: ProjectDocument
+  nodeId: string
+}
+
+/**
+ * Crea un nodo nuevo y lo conecta a un nodo/respuesta de origen en una sola
+ * operación de dominio.
+ *
+ * Pensada para el flujo "arrastrar una conexión hasta el vacío del lienzo y
+ * elegir qué crear" (fase 7): sin esta función, el store tendría que
+ * encadenar `createNode` + `connect` como dos llamadas independientes, lo
+ * que en el diseño actual del store (cada acción de dominio empuja una
+ * entrada a `history.past`) generaría dos entradas de historial deshacibles
+ * por separado en vez de una única acción percibida por el usuario.
+ *
+ * Internamente llama a `createNode` y después a `connect` sobre su
+ * resultado. El `nodeId` devuelto se obtiene comparando los ids de nodo
+ * antes/después de `createNode` (el único nodo nuevo es el que no estaba en
+ * el conjunto anterior) — deliberadamente no "el nodo de mayor `number`"
+ * (atajo que sí usa hoy `LeftPanel`): esa heurística deja de ser correcta en
+ * cuanto haya habido borrados o, en el futuro, reordenaciones, mientras que
+ * comparar por id es correcto sea cual sea el estado previo del proyecto.
+ *
+ * Si `sourceNodeId`/`sourceResponseId` no describen una combinación válida
+ * (nodo inexistente, `sourceResponseId` obligatorio y ausente para un
+ * `decision`, etc.), `connect` lanza y esta función propaga el error sin
+ * capturarlo — igual que el resto de funciones de dominio (`createNode`,
+ * `deleteNode`...) ya hacen para sus propias combinaciones inválidas. En la
+ * práctica no debería ocurrir cuando el origen se deriva de un handle real
+ * de un nodo existente (ver `resolveEmptyPaneDrop` en la capa de edición),
+ * pero no se enmascara el fallo por si esa invariante se rompiera.
+ */
+export function createConnectedNode(
+  project: ProjectDocument,
+  type: NodeType,
+  position: NodePosition,
+  sourceNodeId: string,
+  sourceResponseId?: string,
+): CreateConnectedNodeResult {
+  const existingIds = new Set(project.graph.nodes.map((node) => node.id))
+  const withNewNode = createNode(project, type, position)
+  const newNode = withNewNode.graph.nodes.find((node) => !existingIds.has(node.id))
+  if (!newNode) {
+    // No debería ocurrir nunca: `createNode` siempre añade exactamente un
+    // nodo con un id nuevo salvo que lance. Se cubre de todos modos para no
+    // dejar pasar un `undefined` silencioso hacia `connect`.
+    throw new Error('createConnectedNode: no se pudo identificar el nodo recién creado.')
+  }
+
+  const connected = connect(withNewNode, sourceNodeId, newNode.id, sourceResponseId)
+  return { project: connected, nodeId: newNode.id }
 }

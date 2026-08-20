@@ -32,3 +32,54 @@ export function parseResponseHandleId(handleId: string | null | undefined): stri
   if (!handleId || !handleId.startsWith(RESPONSE_HANDLE_PREFIX)) return undefined
   return handleId.slice(RESPONSE_HANDLE_PREFIX.length)
 }
+
+/** Origen resuelto de un gesto de conexión que terminó soltado en el vacío
+ *  del lienzo (ver `resolveEmptyPaneDrop`). */
+export interface EmptyPaneDropOrigin {
+  sourceNodeId: string
+  sourceResponseId?: string
+}
+
+/**
+ * Decide si el final de un gesto de conexión de `@xyflow/react`
+ * (`onConnectEnd`) corresponde al patrón "arrastrar desde un handle real de
+ * un nodo existente y soltar en una zona vacía del lienzo" — el gatillo del
+ * menú contextual "¿Qué quieres añadir?" (fase 7).
+ *
+ * Pura y testeable sin montar `@xyflow/react` ni el DOM real: recibe ya
+ * reducidos los tres datos relevantes de `FinalConnectionState` y del evento
+ * DOM del gesto, en vez del objeto completo de la librería.
+ *
+ * - `isValid`: `connectionState.isValid` tal cual. `true` significa que el
+ *   gesto terminó sobre un handle de destino válido — ese caso ya lo cubre
+ *   el `onConnect` normal (fase anterior) y aquí se descarta explícitamente
+ *   devolviendo `null`.
+ * - `fromHandle`: `connectionState.fromHandle`. Si es `null` no hubo un
+ *   arrastre real desde un handle existente (no debería ocurrir en la
+ *   práctica para que `onConnectEnd` dispare, pero se cubre por si acaso en
+ *   vez de asumirlo).
+ * - `droppedOnPane`: si el elemento DOM sobre el que se soltó el gesto
+ *   (`event.target`) es el pane vacío de `@xyflow/react` — normalmente
+ *   comprobado con `target.classList.contains('react-flow__pane')` por
+ *   quien llama. Si el drop cae dentro de un nodo existente pero no sobre un
+ *   handle válido, esto debe ser `false`: ese caso no debe abrir el menú (lo
+ *   pide el spec explícitamente: "no sobre un nodo/handle existente").
+ *
+ * `sourceResponseId` se deriva del `id` del handle de origen reutilizando
+ * `parseResponseHandleId` — la misma lógica que ya usa `resolveConnection`
+ * en `adapter.ts` para el `onConnect` normal, sin duplicarla.
+ */
+export function resolveEmptyPaneDrop(params: {
+  isValid: boolean | null
+  fromHandle: { nodeId: string; id?: string | null } | null
+  droppedOnPane: boolean
+}): EmptyPaneDropOrigin | null {
+  if (params.isValid) return null
+  if (!params.droppedOnPane) return null
+  if (!params.fromHandle) return null
+
+  return {
+    sourceNodeId: params.fromHandle.nodeId,
+    sourceResponseId: parseResponseHandleId(params.fromHandle.id),
+  }
+}

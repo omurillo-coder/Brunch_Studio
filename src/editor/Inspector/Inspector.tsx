@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ChangeEvent, KeyboardEvent } from 'react'
-import { useProject, useProjectStore, useSelectedNodeIds } from '../../store'
+import {
+  useProject,
+  useProjectStore,
+  useSelectedNodeIds,
+  useTitleFocusRequestNodeId,
+} from '../../store'
 import { RESPONSE_LETTERS } from '../../domain'
 import type { DecisionNode, DecisionResponse, Node, NodeType, ProjectDocument } from '../../domain'
 import styles from './Inspector.module.css'
@@ -188,8 +193,8 @@ function ResponseRow({
  * Sección de respuestas de un nodo decision (fase 6, "inspector completo").
  * Explícitamente fuera de alcance en este milestone: imagen/audio/puntos
  * por respuesta (existen como campos opcionales del dominio pero no se
- * editan aquí) y el menú "¿qué quieres añadir?" al soltar una conexión en
- * el vacío (fase siguiente).
+ * editan aquí). El menú "¿qué quieres añadir?" al soltar una conexión en el
+ * vacío se implementa en la fase 7 (`Canvas`/`ConnectionMenu`), no aquí.
  */
 function DecisionResponsesSection({
   node,
@@ -247,6 +252,9 @@ function DecisionResponsesSection({
  */
 function NodeFields({ node, allNodes }: { node: Node; allNodes: Node[] }) {
   const updateNode = useProjectStore((state) => state.updateNode)
+  const titleFocusRequestNodeId = useTitleFocusRequestNodeId()
+  const clearTitleFocusRequest = useProjectStore((state) => state.clearTitleFocusRequest)
+  const titleInputRef = useRef<HTMLInputElement>(null)
 
   const [title, setTitle] = useState(node.title)
   const [body, setBody] = useState(node.body)
@@ -267,6 +275,21 @@ function NodeFields({ node, allNodes }: { node: Node; allNodes: Node[] }) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Foco de título tras crear un nodo desde el menú "¿Qué quieres añadir?"
+  // (fase 7, ver `ui.titleFocusRequestNodeId`). Solo actúa cuando la
+  // petición apunta exactamente a este nodo — una selección "normal" (clic
+  // en `LeftPanel` o en el lienzo) nunca fija este campo, así que nunca le
+  // roba el foco al usuario en esos casos. Se limpia inmediatamente para no
+  // repetir el foco en renders posteriores (p.ej. si el usuario edita el
+  // título y luego el componente se re-renderiza por otro motivo).
+  useEffect(() => {
+    if (titleFocusRequestNodeId === node.id) {
+      titleInputRef.current?.focus()
+      clearTitleFocusRequest()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [titleFocusRequestNodeId, node.id])
 
   function commitPending() {
     const pending = latestRef.current
@@ -291,6 +314,7 @@ function NodeFields({ node, allNodes }: { node: Node; allNodes: Node[] }) {
         </label>
         <input
           id="inspector-node-title"
+          ref={titleInputRef}
           className={styles.input}
           type="text"
           value={title}

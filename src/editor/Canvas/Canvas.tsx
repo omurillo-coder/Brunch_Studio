@@ -7,21 +7,40 @@ import {
 } from '@xyflow/react'
 import type {
   Connection,
+  FinalConnectionState,
   OnSelectionChangeFunc,
   ReactFlowInstance,
   Viewport,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import {
+  useContextMenu,
   useFocusRequestNodeId,
   useProject,
   useProjectStore,
   useSelectedNodeIds,
 } from '../../store'
+import type { NodeType } from '../../domain'
 import type { CanvasFlowEdge, CanvasFlowNode } from './adapter'
 import { resolveConnection, toFlowEdges, toFlowNodes } from './adapter'
+import { resolveEmptyPaneDrop } from './handles'
 import { nodeTypes } from './nodes/nodeTypes'
+import { ConnectionMenu } from './ConnectionMenu'
 import styles from './Canvas.module.css'
+
+/**
+ * Extrae la posición de pantalla (viewport) de un evento de fin de gesto de
+ * conexión, tanto de ratón como táctil. Función de módulo (no un closure
+ * dentro del componente) para poder invocarla en aislado si hiciera falta, y
+ * porque no depende de ningún estado del componente.
+ */
+function pointFromConnectEndEvent(event: MouseEvent | TouchEvent): { x: number; y: number } | null {
+  if ('changedTouches' in event) {
+    const touch = event.changedTouches[0]
+    return touch ? { x: touch.clientX, y: touch.clientY } : null
+  }
+  return { x: event.clientX, y: event.clientY }
+}
 
 /**
  * Tamaño asumido de un nodo cuando `@xyflow/react` todavía no lo ha medido
@@ -47,6 +66,7 @@ export function Canvas() {
   const project = useProject()
   const selectedNodeIds = useSelectedNodeIds()
   const focusRequestNodeId = useFocusRequestNodeId()
+  const contextMenu = useContextMenu()
 
   const connect = useProjectStore((state) => state.connect)
   const setSelection = useProjectStore((state) => state.setSelection)
@@ -55,6 +75,9 @@ export function Canvas() {
   const updateNodeDragPosition = useProjectStore((state) => state.updateNodeDragPosition)
   const endNodeDrag = useProjectStore((state) => state.endNodeDrag)
   const clearFocusRequest = useProjectStore((state) => state.clearFocusRequest)
+  const openContextMenu = useProjectStore((state) => state.openContextMenu)
+  const closeContextMenu = useProjectStore((state) => state.closeContextMenu)
+  const createConnectedNodeFromMenu = useProjectStore((state) => state.createConnectedNodeFromMenu)
 
   const nodes = toFlowNodes(project, selectedNodeIds)
   const edges = toFlowEdges(project)
@@ -123,6 +146,62 @@ export function Canvas() {
     [connect],
   )
 
+  // -- Crear nodo arrastrando una conexión hasta el vacío (fase 7). Se
+  // dispara siempre que termina un gesto de conexión, válido o no —
+  // `resolveEmptyPaneDrop` (puro, testeado por separado) decide si es
+  // justo el caso "vino de un handle real y se soltó en el pane vacío". Si
+  // lo es, se guarda la posición de PANTALLA (no de lienzo) en
+  // `ui.contextMenu`: convertir a coordenadas de lienzo requiere la
+  // instancia de React Flow, y es más simple/robusto hacer esa conversión
+  // una sola vez, en el momento de confirmar la creación
+  // (`handleSelectMenuType`), que guardar ya la posición de lienzo aquí y
+  // arriesgarse a que un pan/zoom entre medias la desactualizara (aunque
+  // para una interacción tan corta el riesgo real es mínimo).
+  const handleConnectEnd = useCallback(
+    (event: MouseEvent | TouchEvent, connectionState: FinalConnectionState) => {
+      const target = event.target
+      const droppedOnPane = target instanceof Element && target.classList.contains('react-flow__pane')
+
+      const origin = resolveEmptyPaneDrop({
+        isValid: connectionState.isValid,
+        fromHandle: connectionState.fromHandle,
+        droppedOnPane,
+      })
+      if (!origin) return
+
+      const screenPosition = pointFromConnectEndEvent(event)
+      if (!screenPosition) return
+
+      openContextMenu({
+        position: screenPosition,
+        originNodeId: origin.sourceNodeId,
+        originResponseId: origin.sourceResponseId,
+      })
+    },
+    [openContextMenu],
+  )
+
+  // -- Confirmar una opción del menú "¿Qué quieres añadir?". Aquí, y solo
+  // aquí, se convierte la posición de pantalla guardada en `ui.contextMenu`
+  // a coordenadas de lienzo (`screenToFlowPosition`), justo antes de pedirle
+  // al store que cree el nodo y lo conecte. Sin instancia de React Flow
+  // disponible (no debería ocurrir: si hubo un gesto de conexión, ya está
+  // montada) se cierra el menú sin crear nada en vez de arriesgarse a una
+  // posición incorrecta.
+  const handleSelectMenuType = useCallback(
+    (type: NodeType) => {
+      if (!contextMenu.position) return
+      const instance = instanceRef.current
+      if (!instance) {
+        closeContextMenu()
+        return
+      }
+      const flowPosition = instance.screenToFlowPosition(contextMenu.position)
+      createConnectedNodeFromMenu(type, flowPosition)
+    },
+    [contextMenu, createConnectedNodeFromMenu, closeContextMenu],
+  )
+
   // -- Viewport: fuera del historial (ver store). Solo se persiste al
   // terminar un gesto de pan/zoom, nunca en cada frame.
   const handleMoveEnd = useCallback(
@@ -171,6 +250,7 @@ export function Canvas() {
         onNodeDragStop={handleNodeDragStop}
         onSelectionChange={handleSelectionChange}
         onConnect={handleConnect}
+        onConnectEnd={handleConnectEnd}
         onMoveEnd={handleMoveEnd}
         deleteKeyCode={null}
         minZoom={0.1}
@@ -179,6 +259,13 @@ export function Canvas() {
         <Background variant={BackgroundVariant.Dots} gap={24} size={1.5} color="var(--bs-color-canvas-dot)" />
         <Controls showInteractive={false} />
       </ReactFlow>
+      {contextMenu.open && contextMenu.position && (
+        <ConnectionMenu
+          position={contextMenu.position}
+          onSelect={handleSelectMenuType}
+          onClose={closeContextMenu}
+        />
+      )}
     </div>
   )
 }

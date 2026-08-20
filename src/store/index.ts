@@ -19,5 +19,6 @@ export {
   useHoveredNodeId,
   useContextMenu,
   useFocusRequestNodeId,
+  useTitleFocusRequestNodeId,
 } from './selectors'
 export { resetProjectStore } from './testHelpers'

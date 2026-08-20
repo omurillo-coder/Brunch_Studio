@@ -3,6 +3,7 @@ import { immer } from 'zustand/middleware/immer'
 import {
   addResponse as domainAddResponse,
   connect as domainConnect,
+  createConnectedNode as domainCreateConnectedNode,
   createNode as domainCreateNode,
   createProject,
   deleteNode as domainDeleteNode,
@@ -111,6 +112,31 @@ import type {
  * vista y llama a `clearFocusRequest()` para no repetir el centrado en
  * renders posteriores (p.ej. si el usuario mueve la cámara a mano después).
  *
+ * Crear+conectar desde el menú contextual del lienzo, fase 7:
+ * `createConnectedNodeFromMenu(type, position)` es la acción que dispara el
+ * botón elegido en el menú "¿Qué quieres añadir?" (`ConnectionMenu`), que se
+ * abre al soltar una conexión arrastrada desde un handle real sobre una zona
+ * vacía del lienzo (ver `Canvas.handleConnectEnd` y
+ * `handles.resolveEmptyPaneDrop`). Lee el origen (`ui.contextMenu.
+ * originNodeId`/`originResponseId`) fijado por `openContextMenu`, llama UNA
+ * vez a `createConnectedNode` de dominio (crear + conectar es una única
+ * entrada de historial, no dos) y en el mismo `set` selecciona el nodo
+ * nuevo, pide el foco de su título (`ui.titleFocusRequestNodeId`, ver más
+ * abajo) y cierra el menú. `position` llega ya en coordenadas de lienzo: la
+ * conversión desde la posición de pantalla guardada en `ui.contextMenu.
+ * position` la hace quien llama (`Canvas`, con `screenToFlowPosition` de la
+ * instancia de React Flow) justo en el momento de confirmar la creación —
+ * este store nunca importa `@xyflow/react`, así que no puede hacer esa
+ * conversión él mismo.
+ *
+ * Foco de título del Inspector (`ui.titleFocusRequestNodeId`), fase 7:
+ * mismo patrón que `focusRequestNodeId`, pero deliberadamente un campo
+ * separado: seleccionar un nodo desde `LeftPanel` o desde el propio lienzo
+ * NO debe robarle el foco al usuario, solo el flujo "crear nodo desde el
+ * menú contextual" debe hacerlo (es la única vía que fija este campo).
+ * `Inspector` se suscribe a él; cuando coincide con el nodo seleccionado,
+ * enfoca su input de título y llama a `clearTitleFocusRequest()`.
+ *
  * Reset entre tests:
  * Zustand no ofrece un "reset" de fábrica. El patrón elegido (ver
  * `testHelpers.ts`) es exportar una función `createInitialState()` y, en
@@ -135,6 +161,10 @@ export interface ProjectStoreActions {
   updateResponse: (decisionNodeId: string, responseId: string, patch: UpdateResponsePatch) => void
   connect: (sourceNodeId: string, targetNodeId: string, responseId?: string) => void
   disconnect: (sourceNodeId: string, responseId?: string) => void
+
+  // -- Crear + conectar en una sola operación desde el menú contextual del
+  // -- lienzo ("¿Qué quieres añadir?", fase 7) --
+  createConnectedNodeFromMenu: (type: NodeType, position: NodePosition) => void
 
   // -- Drag de nodos (una única entrada de historial al finalizar) --
   beginNodeDrag: (nodeId: string) => void
@@ -169,6 +199,10 @@ export interface ProjectStoreActions {
   // -- Foco de lienzo (transitorio; ver `UiState.focusRequestNodeId`) --
   focusNode: (nodeId: string) => void
   clearFocusRequest: () => void
+
+  // -- Foco de título del Inspector (transitorio; ver
+  // -- `UiState.titleFocusRequestNodeId`) --
+  clearTitleFocusRequest: () => void
 }
 
 export type ProjectStoreState = ProjectStoreData & ProjectStoreActions
@@ -190,6 +224,7 @@ export function createInitialState(): ProjectStoreData {
       hoveredNodeId: null,
       previewMode: false,
       focusRequestNodeId: null,
+      titleFocusRequestNodeId: null,
     },
     saveStatus: 'idle',
     history: { past: [], future: [] },
@@ -286,6 +321,33 @@ export const useProjectStore = create<ProjectStoreState>()(
       })
     },
 
+    createConnectedNodeFromMenu: (type, position) => {
+      const { contextMenu } = get().ui
+      // Guarda defensiva: sin menú abierto o sin nodo de origen no hay nada
+      // que crear ni conectar. No debería ocurrir a través de la UI (solo
+      // `ConnectionMenu` llama a esta acción, y solo se monta con el menú
+      // abierto), pero evita dejar el proyecto en un estado inconsistente si
+      // se invocara fuera de ese flujo.
+      if (!contextMenu.open || !contextMenu.originNodeId) return
+
+      const { project: next, nodeId } = domainCreateConnectedNode(
+        get().project,
+        type,
+        position,
+        contextMenu.originNodeId,
+        contextMenu.originResponseId ?? undefined,
+      )
+
+      set((state) => {
+        state.history.past.push(state.project as ProjectDocument)
+        state.history.future = []
+        state.project = next
+        state.selection.selectedNodeIds = [nodeId]
+        state.ui.titleFocusRequestNodeId = nodeId
+        state.ui.contextMenu = emptyContextMenu
+      })
+    },
+
     beginNodeDrag: (nodeId) => {
       const snapshot = get().project
       const node = snapshot.graph.nodes.find((candidate) => candidate.id === nodeId)
@@ -372,6 +434,7 @@ export const useProjectStore = create<ProjectStoreState>()(
           hoveredNodeId: null,
           previewMode: false,
           focusRequestNodeId: null,
+          titleFocusRequestNodeId: null,
         }
         state.saveStatus = 'idle'
         state.drag = null
@@ -451,6 +514,12 @@ export const useProjectStore = create<ProjectStoreState>()(
     clearFocusRequest: () => {
       set((state) => {
         state.ui.focusRequestNodeId = null
+      })
+    },
+
+    clearTitleFocusRequest: () => {
+      set((state) => {
+        state.ui.titleFocusRequestNodeId = null
       })
     },
   })),

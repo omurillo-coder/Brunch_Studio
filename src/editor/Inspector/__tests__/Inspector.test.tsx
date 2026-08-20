@@ -142,6 +142,39 @@ describe('Inspector', () => {
   })
 })
 
+describe('Inspector — foco de título tras crear desde el menú contextual (fase 7)', () => {
+  it('titleFocusRequestNodeId fijado por createConnectedNodeFromMenu enfoca el input de título y se limpia', () => {
+    act(() => {
+      useProjectStore.getState().openContextMenu({
+        position: { x: 0, y: 0 },
+        originNodeId: startNodeId(),
+      })
+      useProjectStore.getState().createConnectedNodeFromMenu('content', { x: 10, y: 10 })
+    })
+
+    const createdId = useProjectStore.getState().selection.selectedNodeIds[0]
+    if (!createdId) throw new Error('setup inválido')
+    expect(useProjectStore.getState().ui.titleFocusRequestNodeId).toBe(createdId)
+
+    render(<Inspector />)
+
+    expect(screen.getByLabelText('Título')).toHaveFocus()
+    expect(useProjectStore.getState().ui.titleFocusRequestNodeId).toBeNull()
+  })
+
+  it('una selección normal (selectNode) no pide ni consume el foco de título', () => {
+    act(() => {
+      useProjectStore.getState().updateNode(startNodeId(), { title: 'Inicio' })
+      useProjectStore.getState().selectNode(startNodeId())
+    })
+
+    render(<Inspector />)
+
+    expect(screen.getByLabelText('Título')).not.toHaveFocus()
+    expect(useProjectStore.getState().ui.titleFocusRequestNodeId).toBeNull()
+  })
+})
+
 describe('Inspector — sección de Decisión (fase 6)', () => {
   it('seleccionar un nodo decision muestra sus respuestas existentes (A y B) con sus textos', () => {
     act(() => {

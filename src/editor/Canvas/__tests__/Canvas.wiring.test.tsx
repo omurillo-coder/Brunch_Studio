@@ -1,4 +1,4 @@
-import { act, render } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ReactFlowProps } from '@xyflow/react'
 import { resetProjectStore } from '../../../store/testHelpers'
@@ -227,5 +227,176 @@ describe('Canvas — cableado con @xyflow/react (ReactFlow stub)', () => {
     }).not.toThrow()
 
     expect(useProjectStore.getState().ui.focusRequestNodeId).toBeNull()
+  })
+})
+
+/**
+ * Tests de `onConnectEnd` (fase 7: crear un nodo arrastrando una conexión
+ * hasta el vacío). La decisión "¿es justo el gesto que abre el menú?" ya
+ * está cubierta de forma pura en `handles.test.ts` (`resolveEmptyPaneDrop`)
+ * — aquí se comprueba que `Canvas` invoca `openContextMenu` con los datos
+ * correctos cuando `onConnectEnd` se dispara con cada combinación relevante,
+ * invocando el callback directamente (mismo criterio pragmático que el
+ * resto de este fichero: simular el gesto de arrastre real con el ratón
+ * contra `@xyflow/react` es frágil en jsdom).
+ */
+describe('Canvas — onConnectEnd abre el menú "¿Qué quieres añadir?" (fase 7)', () => {
+  function panePoint(clientX: number, clientY: number) {
+    const pane = document.createElement('div')
+    pane.className = 'react-flow__pane'
+    return { target: pane, clientX, clientY } as unknown as MouseEvent
+  }
+
+  it('conexión inválida que termina en el pane vacío desde un start/content abre el menú sin responseId', () => {
+    render(<Canvas />)
+    const start = firstNodeOfType('start')
+
+    act(() => {
+      capturedProps?.onConnectEnd?.(panePoint(120, 240), {
+        isValid: false,
+        fromHandle: { nodeId: start.id, id: 'out' },
+      } as never)
+    })
+
+    const menu = useProjectStore.getState().ui.contextMenu
+    expect(menu.open).toBe(true)
+    expect(menu.position).toEqual({ x: 120, y: 240 })
+    expect(menu.originNodeId).toBe(start.id)
+    expect(menu.originResponseId).toBeNull()
+  })
+
+  it('conexión inválida que termina en el pane vacío desde una respuesta de decision abre el menú con el responseId', () => {
+    render(<Canvas />)
+    act(() => {
+      useProjectStore.getState().createNode('decision', { x: 0, y: 0 })
+    })
+    const decision = firstNodeOfType('decision')
+    const response = decision.type === 'decision' ? decision.responses[0] : undefined
+    if (!response) throw new Error('setup inválido')
+
+    act(() => {
+      capturedProps?.onConnectEnd?.(panePoint(10, 20), {
+        isValid: false,
+        fromHandle: { nodeId: decision.id, id: responseHandleId(response.id) },
+      } as never)
+    })
+
+    const menu = useProjectStore.getState().ui.contextMenu
+    expect(menu.open).toBe(true)
+    expect(menu.originNodeId).toBe(decision.id)
+    expect(menu.originResponseId).toBe(response.id)
+  })
+
+  it('conexión válida (soltada sobre un handle real) no abre el menú', () => {
+    render(<Canvas />)
+    const start = firstNodeOfType('start')
+
+    act(() => {
+      capturedProps?.onConnectEnd?.(panePoint(0, 0), {
+        isValid: true,
+        fromHandle: { nodeId: start.id, id: 'out' },
+      } as never)
+    })
+
+    expect(useProjectStore.getState().ui.contextMenu.open).toBe(false)
+  })
+
+  it('conexión inválida soltada dentro de un nodo existente (no el pane vacío) no abre el menú', () => {
+    render(<Canvas />)
+    const start = firstNodeOfType('start')
+    const nodeEl = document.createElement('div')
+    nodeEl.className = 'react-flow__node'
+
+    act(() => {
+      capturedProps?.onConnectEnd?.(
+        { target: nodeEl, clientX: 0, clientY: 0 } as unknown as MouseEvent,
+        {
+          isValid: false,
+          fromHandle: { nodeId: start.id, id: 'out' },
+        } as never,
+      )
+    })
+
+    expect(useProjectStore.getState().ui.contextMenu.open).toBe(false)
+  })
+
+  it('conexión inválida sin fromHandle (sin arrastre real desde un handle) no abre el menú', () => {
+    render(<Canvas />)
+
+    act(() => {
+      capturedProps?.onConnectEnd?.(panePoint(0, 0), {
+        isValid: false,
+        fromHandle: null,
+      } as never)
+    })
+
+    expect(useProjectStore.getState().ui.contextMenu.open).toBe(false)
+  })
+})
+
+describe('Canvas — elegir una opción del menú crea, conecta, selecciona y cierra el menú (fase 7)', () => {
+  function panePoint(clientX: number, clientY: number) {
+    const pane = document.createElement('div')
+    pane.className = 'react-flow__pane'
+    return { target: pane, clientX, clientY } as unknown as MouseEvent
+  }
+
+  it('convierte la posición de pantalla a lienzo con screenToFlowPosition y crea+conecta el nodo elegido', () => {
+    render(<Canvas />)
+    const start = firstNodeOfType('start')
+
+    const screenToFlowPosition = vi.fn(({ x, y }: { x: number; y: number }) => ({
+      x: x + 1000,
+      y: y + 2000,
+    }))
+    act(() => {
+      capturedProps?.onInit?.({ screenToFlowPosition } as never)
+    })
+
+    act(() => {
+      capturedProps?.onConnectEnd?.(panePoint(5, 7), {
+        isValid: false,
+        fromHandle: { nodeId: start.id, id: 'out' },
+      } as never)
+    })
+
+    const idsBefore = new Set(useProjectStore.getState().project.graph.nodes.map((n) => n.id))
+
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Pantalla' }))
+
+    expect(screenToFlowPosition).toHaveBeenCalledWith({ x: 5, y: 7 })
+
+    const state = useProjectStore.getState()
+    const created = state.project.graph.nodes.find((n) => !idsBefore.has(n.id))
+    if (!created) throw new Error('no se creó ningún nodo')
+
+    expect(created.type).toBe('content')
+    expect(created.position).toEqual({ x: 1005, y: 2007 })
+
+    const updatedStart = state.project.graph.nodes.find((n) => n.id === start.id)
+    expect(updatedStart?.type === 'start' ? updatedStart.targetNodeId : undefined).toBe(created.id)
+
+    expect(state.selection.selectedNodeIds).toEqual([created.id])
+    expect(state.ui.titleFocusRequestNodeId).toBe(created.id)
+    expect(state.ui.contextMenu.open).toBe(false)
+  })
+
+  it('Escape cierra el menú sin crear ni conectar nada', () => {
+    render(<Canvas />)
+    const start = firstNodeOfType('start')
+
+    act(() => {
+      capturedProps?.onConnectEnd?.(panePoint(0, 0), {
+        isValid: false,
+        fromHandle: { nodeId: start.id, id: 'out' },
+      } as never)
+    })
+    expect(useProjectStore.getState().ui.contextMenu.open).toBe(true)
+
+    const nodesBefore = useProjectStore.getState().project.graph.nodes.length
+    fireEvent.keyDown(document, { key: 'Escape' })
+
+    expect(useProjectStore.getState().ui.contextMenu.open).toBe(false)
+    expect(useProjectStore.getState().project.graph.nodes.length).toBe(nodesBefore)
   })
 })

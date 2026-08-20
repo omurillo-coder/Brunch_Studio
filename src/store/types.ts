@@ -38,6 +38,16 @@ export interface UiState {
    * centrado sin conocer `@xyflow/react` ni la instancia de React Flow.
    */
   focusRequestNodeId: string | null
+  /**
+   * Petición de "pon el foco en el campo de título del Inspector para este
+   * nodo", fijada por `createConnectedNodeFromMenu` (fase 7: crear un nodo
+   * arrastrando una conexión hasta el vacío) y consumida por `Inspector`,
+   * que enfoca su input de título y la limpia con `clearTitleFocusRequest`.
+   * Mismo patrón que `focusRequestNodeId`, pero deliberadamente un campo
+   * separado: una selección "normal" (clic en la lista o en el lienzo) no
+   * debe robar el foco del usuario, solo este flujo concreto debe hacerlo.
+   */
+  titleFocusRequestNodeId: string | null
 }
 
 /** Estado de guardado expuesto para una futura fase de autoguardado. */

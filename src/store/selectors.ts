@@ -31,3 +31,6 @@ export const useHoveredNodeId = () => useProjectStore((state) => state.ui.hovere
 export const useContextMenu = () => useProjectStore((state) => state.ui.contextMenu)
 
 export const useFocusRequestNodeId = () => useProjectStore((state) => state.ui.focusRequestNodeId)
+
+export const useTitleFocusRequestNodeId = () =>
+  useProjectStore((state) => state.ui.titleFocusRequestNodeId)

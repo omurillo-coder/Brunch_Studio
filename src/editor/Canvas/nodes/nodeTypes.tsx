@@ -13,7 +13,10 @@ import styles from './NodeCard.module.css'
  * nodos; el contenido completo se edita en el inspector.
  */
 
-const NODE_TYPE_LABEL: Record<NodeType, string> = {
+/** Exportado para que otros componentes del lienzo (p.ej. `ConnectionMenu`,
+ *  el menú "¿Qué quieres añadir?" de la fase 7) reutilicen el mismo
+ *  diccionario de etiquetas en vez de duplicarlo. */
+export const NODE_TYPE_LABEL: Record<NodeType, string> = {
   start: 'Inicio',
   content: 'Pantalla',
   decision: 'Decisión',
