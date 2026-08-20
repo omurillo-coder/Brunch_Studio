@@ -1,5 +1,6 @@
 import { produce } from 'immer'
 import { createId, nextNodeNumber } from './id'
+import { addResponse } from './responses'
 import type {
   ContentNode,
   DecisionNode,
@@ -114,10 +115,21 @@ export function createNode(
     }
   }
 
-  return produce(project, (draft) => {
+  const withNode = produce(project, (draft) => {
     draft.graph.nodes.push(newNode)
     touchUpdatedAt(draft)
   })
+
+  // Spec de producto: "Una decisión nueva debe empezar de forma intuitiva,
+  // preferiblemente con respuestas A y B [...]. Nunca debe existir E." Por
+  // eso un nodo decision nunca nace con `responses: []`: se le añaden A y B
+  // de inmediato reutilizando `addResponse` (mismo criterio de
+  // generación de id/letra que usa el resto del dominio, sin duplicarlo).
+  if (type === 'decision') {
+    return addResponse(addResponse(withNode, newNode.id), newNode.id)
+  }
+
+  return withNode
 }
 
 /**

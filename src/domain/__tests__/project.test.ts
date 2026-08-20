@@ -38,13 +38,16 @@ describe('createNode', () => {
     expect(() => createNode(project, 'start', { x: 0, y: 0 })).toThrow()
   })
 
-  it('crea nodos decision sin respuestas por defecto', () => {
+  it('crea nodos decision con respuestas iniciales A y B (nunca vacío, nunca con más de 2 al nacer)', () => {
     const project = createProject('P')
     const updated = createNode(project, 'decision', { x: 0, y: 0 })
     const decision = updated.graph.nodes.find((node) => node.type === 'decision')
     expect(decision?.type).toBe('decision')
     if (decision?.type === 'decision') {
-      expect(decision.responses).toEqual([])
+      expect(decision.responses).toHaveLength(2)
+      expect(decision.responses.map((r) => r.letter)).toEqual(['A', 'B'])
+      expect(decision.responses.every((r) => r.text === '')).toBe(true)
+      expect(decision.responses.every((r) => r.targetNodeId === undefined)).toBe(true)
     }
   })
 })

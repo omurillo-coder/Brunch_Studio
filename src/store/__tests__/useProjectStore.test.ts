@@ -77,14 +77,18 @@ describe('acciones de dominio: una entrada de historial por acción', () => {
     useProjectStore.getState().createNode('decision', { x: 0, y: 0 })
     const decisionId = nodeIdOf('decision')
     const historyAfterCreate = useProjectStore.getState().history.past.length
+    // `createNode` ya deja el decision con A y B (ver fix del dominio).
+    const initialCount = (
+      useProjectStore.getState().project.graph.nodes.find((n) => n.id === decisionId) as DecisionNode
+    ).responses.length
 
     useProjectStore.getState().addResponse(decisionId)
     expect(useProjectStore.getState().history.past.length).toBe(historyAfterCreate + 1)
     const decisionNode = useProjectStore
       .getState()
       .project.graph.nodes.find((n) => n.id === decisionId) as DecisionNode
-    expect(decisionNode.responses.length).toBe(1)
-    const responseId = decisionNode.responses[0]?.id
+    expect(decisionNode.responses.length).toBe(initialCount + 1)
+    const responseId = decisionNode.responses[decisionNode.responses.length - 1]?.id
     if (!responseId) throw new Error('responseId inesperadamente ausente')
 
     useProjectStore.getState().removeResponse(decisionId, responseId)
@@ -92,19 +96,49 @@ describe('acciones de dominio: una entrada de historial por acción', () => {
     const afterRemove = useProjectStore
       .getState()
       .project.graph.nodes.find((n) => n.id === decisionId) as DecisionNode
-    expect(afterRemove.responses.length).toBe(0)
+    expect(afterRemove.responses.length).toBe(initialCount)
 
     useProjectStore.getState().undo() // deshace removeResponse
     const afterUndoRemove = useProjectStore
       .getState()
       .project.graph.nodes.find((n) => n.id === decisionId) as DecisionNode
-    expect(afterUndoRemove.responses.length).toBe(1)
+    expect(afterUndoRemove.responses.length).toBe(initialCount + 1)
 
     useProjectStore.getState().undo() // deshace addResponse
     const afterUndoAdd = useProjectStore
       .getState()
       .project.graph.nodes.find((n) => n.id === decisionId) as DecisionNode
-    expect(afterUndoAdd.responses.length).toBe(0)
+    expect(afterUndoAdd.responses.length).toBe(initialCount)
+  })
+
+  it('updateResponse produce una entrada deshacible/rehacible', () => {
+    useProjectStore.getState().createNode('decision', { x: 0, y: 0 })
+    const decisionId = nodeIdOf('decision')
+    const decisionNode = useProjectStore
+      .getState()
+      .project.graph.nodes.find((n) => n.id === decisionId) as DecisionNode
+    const responseId = decisionNode.responses[0]?.id
+    if (!responseId) throw new Error('responseId inesperadamente ausente')
+    const historyBefore = useProjectStore.getState().history.past.length
+
+    useProjectStore.getState().updateResponse(decisionId, responseId, { text: 'Sí' })
+    expect(useProjectStore.getState().history.past.length).toBe(historyBefore + 1)
+    const updated = useProjectStore
+      .getState()
+      .project.graph.nodes.find((n) => n.id === decisionId) as DecisionNode
+    expect(updated.responses.find((r) => r.id === responseId)?.text).toBe('Sí')
+
+    useProjectStore.getState().undo()
+    const reverted = useProjectStore
+      .getState()
+      .project.graph.nodes.find((n) => n.id === decisionId) as DecisionNode
+    expect(reverted.responses.find((r) => r.id === responseId)?.text).toBe('')
+
+    useProjectStore.getState().redo()
+    const redone = useProjectStore
+      .getState()
+      .project.graph.nodes.find((n) => n.id === decisionId) as DecisionNode
+    expect(redone.responses.find((r) => r.id === responseId)?.text).toBe('Sí')
   })
 
   it('connect y disconnect producen una entrada cada una', () => {

@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { Inspector } from '../Inspector'
 import { useProjectStore } from '../../../store'
 import { resetProjectStore } from '../../../store/testHelpers'
+import type { DecisionNode } from '../../../domain'
 
 beforeEach(() => {
   resetProjectStore()
@@ -12,6 +13,18 @@ function startNodeId(): string {
   const node = useProjectStore.getState().project.graph.nodes.find((n) => n.type === 'start')
   if (!node) throw new Error('No hay nodo start')
   return node.id
+}
+
+function decisionNodeId(): string {
+  const node = useProjectStore.getState().project.graph.nodes.find((n) => n.type === 'decision')
+  if (!node) throw new Error('No hay nodo decision')
+  return node.id
+}
+
+function decisionNode(id: string): DecisionNode {
+  const node = useProjectStore.getState().project.graph.nodes.find((n) => n.id === id)
+  if (!node || node.type !== 'decision') throw new Error('No es un nodo decision')
+  return node
 }
 
 describe('Inspector', () => {
@@ -126,5 +139,171 @@ describe('Inspector', () => {
     expect(useProjectStore.getState().history.past.length).toBe(historyBefore + 1)
     const startNode = useProjectStore.getState().project.graph.nodes.find((n) => n.id === startNodeId())
     expect(startNode?.title).toBe('Editado sin blur')
+  })
+})
+
+describe('Inspector — sección de Decisión (fase 6)', () => {
+  it('seleccionar un nodo decision muestra sus respuestas existentes (A y B) con sus textos', () => {
+    act(() => {
+      useProjectStore.getState().createNode('decision', { x: 0, y: 0 })
+      useProjectStore.getState().selectNode(decisionNodeId())
+    })
+    render(<Inspector />)
+
+    expect(screen.getByLabelText('Texto de la respuesta A')).toHaveValue('')
+    expect(screen.getByLabelText('Texto de la respuesta B')).toHaveValue('')
+    expect(screen.queryByLabelText('Texto de la respuesta C')).not.toBeInTheDocument()
+  })
+
+  it('editar el texto de una respuesta y hacer blur produce exactamente una llamada efectiva', () => {
+    act(() => {
+      useProjectStore.getState().createNode('decision', { x: 0, y: 0 })
+      useProjectStore.getState().selectNode(decisionNodeId())
+    })
+    render(<Inspector />)
+
+    const historyBefore = useProjectStore.getState().history.past.length
+    const responseInput = screen.getByLabelText('Texto de la respuesta A')
+
+    fireEvent.change(responseInput, { target: { value: 'S' } })
+    fireEvent.change(responseInput, { target: { value: 'Sí' } })
+    // Ninguna pulsación debe haber tocado el store todavía.
+    expect(useProjectStore.getState().history.past.length).toBe(historyBefore)
+
+    fireEvent.blur(responseInput)
+
+    expect(useProjectStore.getState().history.past.length).toBe(historyBefore + 1)
+    expect(decisionNode(decisionNodeId()).responses.find((r) => r.letter === 'A')?.text).toBe('Sí')
+
+    // Un segundo blur sin más cambios no debe generar otra entrada.
+    fireEvent.blur(responseInput)
+    expect(useProjectStore.getState().history.past.length).toBe(historyBefore + 1)
+  })
+
+  it('añadir respuesta hasta el límite de 4 oculta el control de añadir; no se puede crear una quinta', () => {
+    act(() => {
+      useProjectStore.getState().createNode('decision', { x: 0, y: 0 })
+      useProjectStore.getState().selectNode(decisionNodeId())
+    })
+    render(<Inspector />)
+
+    // Recién creado: A, B -> el botón de añadir sigue visible (quedan 2 libres).
+    expect(screen.getByRole('button', { name: '+ Añadir respuesta' })).toBeInTheDocument()
+
+    act(() => {
+      useProjectStore.getState().addResponse(decisionNodeId()) // C
+    })
+    expect(screen.getByRole('button', { name: '+ Añadir respuesta' })).toBeInTheDocument()
+
+    act(() => {
+      useProjectStore.getState().addResponse(decisionNodeId()) // D
+    })
+    expect(screen.queryByRole('button', { name: '+ Añadir respuesta' })).not.toBeInTheDocument()
+
+    expect(decisionNode(decisionNodeId()).responses).toHaveLength(4)
+    expect(() => useProjectStore.getState().addResponse(decisionNodeId())).toThrow()
+  })
+
+  it('eliminar una respuesta la quita de la lista mostrada', () => {
+    act(() => {
+      useProjectStore.getState().createNode('decision', { x: 0, y: 0 })
+      useProjectStore.getState().selectNode(decisionNodeId())
+    })
+    render(<Inspector />)
+
+    expect(screen.getByLabelText('Texto de la respuesta B')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Eliminar respuesta B' }))
+
+    expect(screen.queryByLabelText('Texto de la respuesta B')).not.toBeInTheDocument()
+    expect(decisionNode(decisionNodeId()).responses.some((r) => r.letter === 'B')).toBe(false)
+  })
+
+  it('cambiar el select de destino llama a connect y volver a "— Sin destino —" llama a disconnect', () => {
+    act(() => {
+      useProjectStore.getState().createNode('decision', { x: 0, y: 0 })
+      useProjectStore.getState().createNode('final', { x: 100, y: 0 })
+      useProjectStore.getState().selectNode(decisionNodeId())
+    })
+    render(<Inspector />)
+
+    const finalId = useProjectStore.getState().project.graph.nodes.find((n) => n.type === 'final')?.id
+    if (!finalId) throw new Error('setup inválido')
+
+    const select = screen.getByLabelText('Destino de la respuesta A') as HTMLSelectElement
+    fireEvent.change(select, { target: { value: finalId } })
+
+    expect(decisionNode(decisionNodeId()).responses.find((r) => r.letter === 'A')?.targetNodeId).toBe(
+      finalId,
+    )
+
+    fireEvent.change(select, { target: { value: '__none__' } })
+
+    expect(
+      decisionNode(decisionNodeId()).responses.find((r) => r.letter === 'A')?.targetNodeId,
+    ).toBeUndefined()
+  })
+
+  it('el select de destino no muestra ningún UUID como texto', () => {
+    act(() => {
+      useProjectStore.getState().createNode('decision', { x: 0, y: 0 })
+      useProjectStore.getState().createNode('content', { x: 100, y: 0 }, { title: 'Bienvenida' })
+      useProjectStore.getState().selectNode(decisionNodeId())
+    })
+    render(<Inspector />)
+
+    const select = screen.getByLabelText('Destino de la respuesta A') as HTMLSelectElement
+    const optionTexts = Array.from(select.options).map((option) => option.textContent ?? '')
+
+    const uuidPattern = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i
+    for (const text of optionTexts) {
+      expect(text).not.toMatch(uuidPattern)
+    }
+    expect(optionTexts).toContain('— Sin destino —')
+    expect(optionTexts.some((text) => text.includes('Bienvenida'))).toBe(true)
+  })
+
+  it('cambiar de nodo seleccionado actualiza la sección de respuestas mostrada', () => {
+    act(() => {
+      useProjectStore.getState().createNode('decision', { x: 0, y: 0 })
+      useProjectStore.getState().createNode('content', { x: 100, y: 0 })
+      useProjectStore.getState().selectNode(decisionNodeId())
+    })
+    render(<Inspector />)
+
+    expect(screen.getByText('Respuestas')).toBeInTheDocument()
+
+    const contentId = useProjectStore.getState().project.graph.nodes.find((n) => n.type === 'content')?.id
+    if (!contentId) throw new Error('setup inválido')
+
+    act(() => {
+      useProjectStore.getState().selectNode(contentId)
+    })
+    expect(screen.queryByText('Respuestas')).not.toBeInTheDocument()
+
+    act(() => {
+      useProjectStore.getState().selectNode(decisionNodeId())
+    })
+    expect(screen.getByText('Respuestas')).toBeInTheDocument()
+  })
+
+  it('conectar vía store.connect directamente se refleja en el select de destino sin trabajo adicional', () => {
+    act(() => {
+      useProjectStore.getState().createNode('decision', { x: 0, y: 0 })
+      useProjectStore.getState().createNode('final', { x: 100, y: 0 })
+      useProjectStore.getState().selectNode(decisionNodeId())
+    })
+    render(<Inspector />)
+
+    const responseA = decisionNode(decisionNodeId()).responses.find((r) => r.letter === 'A')
+    const finalId = useProjectStore.getState().project.graph.nodes.find((n) => n.type === 'final')?.id
+    if (!responseA || !finalId) throw new Error('setup inválido')
+
+    act(() => {
+      useProjectStore.getState().connect(decisionNodeId(), finalId, responseA.id)
+    })
+
+    const select = screen.getByLabelText('Destino de la respuesta A') as HTMLSelectElement
+    expect(select.value).toBe(finalId)
   })
 })

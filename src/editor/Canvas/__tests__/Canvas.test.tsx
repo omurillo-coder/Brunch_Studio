@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { Canvas } from '../Canvas'
 import { useProjectStore } from '../../../store'
 import { resetProjectStore } from '../../../store/testHelpers'
+import type { DecisionNode } from '../../../domain'
 
 /**
  * Montaje real de `@xyflow/react` (sin mockear), apoyado en los polyfills
@@ -45,6 +46,20 @@ describe('Canvas (montaje real de @xyflow/react)', () => {
 
   it('un nodo decision sin respuestas muestra "Sin respuestas"', async () => {
     useProjectStore.getState().createNode('decision', { x: 0, y: 0 })
+    const decisionId = useProjectStore
+      .getState()
+      .project.graph.nodes.find((n) => n.type === 'decision')?.id
+    if (!decisionId) throw new Error('setup inválido')
+
+    // `createNode` deja el decision con A y B; para probar el caso límite de
+    // "sin ninguna respuesta" se eliminan explícitamente (el dominio no lo
+    // impide, aunque nunca se nazca así).
+    const initialResponses = (
+      useProjectStore.getState().project.graph.nodes.find((n) => n.id === decisionId) as DecisionNode
+    ).responses
+    for (const response of initialResponses) {
+      useProjectStore.getState().removeResponse(decisionId, response.id)
+    }
 
     render(<Canvas />)
 

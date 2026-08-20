@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import type { KeyboardEvent } from 'react'
+import type { ChangeEvent, KeyboardEvent } from 'react'
 import { useProject, useProjectStore, useSelectedNodeIds } from '../../store'
-import type { Node, NodeType, ProjectDocument } from '../../domain'
+import { RESPONSE_LETTERS } from '../../domain'
+import type { DecisionNode, DecisionResponse, Node, NodeType, ProjectDocument } from '../../domain'
 import styles from './Inspector.module.css'
 
 const NODE_TYPE_LABEL: Record<NodeType, string> = {
@@ -47,10 +48,191 @@ function ProjectSummary({ project }: { project: ProjectDocument }) {
   )
 }
 
+/** Valor de la opción "— Sin destino —" del `<select>` de destino de una
+ *  respuesta. Nunca puede coincidir con un id real (los ids son UUIDs). */
+const NO_TARGET_VALUE = '__none__'
+
 /**
- * Campos de edición de un nodo (título/body), comunes a cualquier tipo —
- * incluida Decisión: la edición de respuestas A/B/C/D es explícitamente de
- * una fase posterior ("inspector completo").
+ * Etiqueta legible de un nodo para mostrarlo como destino posible en el
+ * `<select>` de una respuesta — nunca el `id` interno (UUID) como texto
+ * visible. Formato: "<Tipo> <número> — <título o 'Sin título'>", p.ej.
+ * "Pantalla 3 — Bienvenida" o "Pantalla 3 — Sin título".
+ */
+function nodeOptionLabel(node: Node): string {
+  const title = node.title.trim() || 'Sin título'
+  return `${NODE_TYPE_LABEL[node.type]} ${node.number} — ${title}`
+}
+
+/** Respuestas de un nodo decision, siempre en el orden fijo A→B→C→D — el
+ *  array interno conserva el orden de creación, que puede no coincidir con
+ *  el orden de letra tras eliminar y reañadir una intermedia. */
+function sortByLetter(responses: DecisionResponse[]): DecisionResponse[] {
+  return [...responses].sort(
+    (a, b) => RESPONSE_LETTERS.indexOf(a.letter) - RESPONSE_LETTERS.indexOf(b.letter),
+  )
+}
+
+/**
+ * Una fila de respuesta dentro del inspector de un nodo decision: texto
+ * editable ("commit on blur", mismo criterio que título/body) y `<select>`
+ * de destino.
+ *
+ * Se monta con `key={response.id}` desde `DecisionResponsesSection` por el
+ * mismo motivo que `NodeFields` se monta con `key={node.id}`: el estado
+ * local de texto debe arrancar limpio para cada respuesta y no reutilizarse
+ * entre respuestas distintas si la lista se reordena.
+ */
+function ResponseRow({
+  decisionNodeId,
+  response,
+  allNodes,
+}: {
+  decisionNodeId: string
+  response: DecisionResponse
+  allNodes: Node[]
+}) {
+  const updateResponse = useProjectStore((state) => state.updateResponse)
+  const removeResponse = useProjectStore((state) => state.removeResponse)
+  const connect = useProjectStore((state) => state.connect)
+  const disconnect = useProjectStore((state) => state.disconnect)
+
+  const [text, setText] = useState(response.text)
+  const committedRef = useRef(response.text)
+  const latestRef = useRef(text)
+  latestRef.current = text
+
+  useEffect(() => {
+    return () => {
+      commitPending()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  function commitPending() {
+    if (latestRef.current !== committedRef.current) {
+      updateResponse(decisionNodeId, response.id, { text: latestRef.current })
+      committedRef.current = latestRef.current
+    }
+  }
+
+  function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key === 'Enter') {
+      commitPending()
+    }
+  }
+
+  function handleTargetChange(event: ChangeEvent<HTMLSelectElement>) {
+    const value = event.target.value
+    if (value === NO_TARGET_VALUE) {
+      if (response.targetNodeId) {
+        disconnect(decisionNodeId, response.id)
+      }
+    } else {
+      connect(decisionNodeId, value, response.id)
+    }
+  }
+
+  const textFieldId = `inspector-response-text-${response.id}`
+  const targetFieldId = `inspector-response-target-${response.id}`
+
+  return (
+    <div className={styles.responseRow}>
+      <div className={styles.responseRowHeader}>
+        <span className={styles.responseLetter}>{response.letter}</span>
+        <button
+          type="button"
+          className={styles.removeResponseButton}
+          onClick={() => removeResponse(decisionNodeId, response.id)}
+          aria-label={`Eliminar respuesta ${response.letter}`}
+        >
+          Eliminar
+        </button>
+      </div>
+      <div>
+        <label className={styles.label} htmlFor={textFieldId}>
+          Texto de la respuesta {response.letter}
+        </label>
+        <input
+          id={textFieldId}
+          className={styles.input}
+          type="text"
+          value={text}
+          onChange={(event) => setText(event.target.value)}
+          onBlur={commitPending}
+          onKeyDown={handleKeyDown}
+        />
+      </div>
+      <div>
+        <label className={styles.label} htmlFor={targetFieldId}>
+          Destino de la respuesta {response.letter}
+        </label>
+        <select
+          id={targetFieldId}
+          className={styles.select}
+          value={response.targetNodeId ?? NO_TARGET_VALUE}
+          onChange={handleTargetChange}
+        >
+          <option value={NO_TARGET_VALUE}>— Sin destino —</option>
+          {allNodes.map((node) => (
+            <option key={node.id} value={node.id}>
+              {nodeOptionLabel(node)}
+            </option>
+          ))}
+        </select>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Sección de respuestas de un nodo decision (fase 6, "inspector completo").
+ * Explícitamente fuera de alcance en este milestone: imagen/audio/puntos
+ * por respuesta (existen como campos opcionales del dominio pero no se
+ * editan aquí) y el menú "¿qué quieres añadir?" al soltar una conexión en
+ * el vacío (fase siguiente).
+ */
+function DecisionResponsesSection({
+  node,
+  allNodes,
+}: {
+  node: DecisionNode
+  allNodes: Node[]
+}) {
+  const addResponse = useProjectStore((state) => state.addResponse)
+  const canAddResponse = node.responses.length < 4
+  const responses = sortByLetter(node.responses)
+
+  return (
+    <div className={styles.responsesSection}>
+      <div className={styles.responsesSectionHeader}>
+        <h3 className={styles.responsesTitle}>Respuestas</h3>
+        {canAddResponse && (
+          <button
+            type="button"
+            className={styles.addResponseButton}
+            onClick={() => addResponse(node.id)}
+          >
+            + Añadir respuesta
+          </button>
+        )}
+      </div>
+      <div className={styles.responsesList}>
+        {responses.map((response) => (
+          <ResponseRow
+            key={response.id}
+            decisionNodeId={node.id}
+            response={response}
+            allNodes={allNodes}
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Campos de edición de un nodo (título/body), comunes a cualquier tipo, más
+ * — para Decisión — la sección de respuestas (`DecisionResponsesSection`).
  *
  * Se monta con `key={node.id}` desde `Inspector` para que cambiar de nodo
  * seleccionado destruya y vuelva a crear esta instancia en vez de
@@ -63,7 +245,7 @@ function ProjectSummary({ project }: { project: ProjectDocument }) {
  *   no hubiera pasado por `onBlur` — el criterio elegido para "¿qué pasa
  *   si cambias de nodo sin hacer blur?".
  */
-function NodeFields({ node }: { node: Node }) {
+function NodeFields({ node, allNodes }: { node: Node; allNodes: Node[] }) {
   const updateNode = useProjectStore((state) => state.updateNode)
 
   const [title, setTitle] = useState(node.title)
@@ -130,6 +312,7 @@ function NodeFields({ node }: { node: Node }) {
           rows={8}
         />
       </div>
+      {node.type === 'decision' && <DecisionResponsesSection node={node} allNodes={allNodes} />}
     </div>
   )
 }
@@ -151,7 +334,7 @@ export function Inspector() {
   return (
     <aside className={styles.inspector}>
       {selectedNode ? (
-        <NodeFields key={selectedNode.id} node={selectedNode} />
+        <NodeFields key={selectedNode.id} node={selectedNode} allNodes={project.graph.nodes} />
       ) : (
         <ProjectSummary project={project} />
       )}

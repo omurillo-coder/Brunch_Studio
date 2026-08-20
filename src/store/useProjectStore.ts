@@ -10,11 +10,13 @@ import {
   moveNode as domainMoveNode,
   removeResponse as domainRemoveResponse,
   updateNode as domainUpdateNode,
+  updateResponse as domainUpdateResponse,
 } from '../domain'
 import type {
   CreateNodeExtra,
   NodeType,
   UpdateNodePatch,
+  UpdateResponsePatch,
 } from '../domain'
 import type {
   ContextMenuState,
@@ -130,6 +132,7 @@ export interface ProjectStoreActions {
   updateNode: (nodeId: string, patch: UpdateNodePatch) => void
   addResponse: (decisionNodeId: string) => void
   removeResponse: (decisionNodeId: string, responseId: string) => void
+  updateResponse: (decisionNodeId: string, responseId: string, patch: UpdateResponsePatch) => void
   connect: (sourceNodeId: string, targetNodeId: string, responseId?: string) => void
   disconnect: (sourceNodeId: string, responseId?: string) => void
 
@@ -249,6 +252,15 @@ export const useProjectStore = create<ProjectStoreState>()(
 
     removeResponse: (decisionNodeId, responseId) => {
       const next = domainRemoveResponse(get().project, decisionNodeId, responseId)
+      set((state) => {
+        state.history.past.push(state.project as ProjectDocument)
+        state.history.future = []
+        state.project = next
+      })
+    },
+
+    updateResponse: (decisionNodeId, responseId, patch) => {
+      const next = domainUpdateResponse(get().project, decisionNodeId, responseId, patch)
       set((state) => {
         state.history.past.push(state.project as ProjectDocument)
         state.history.future = []

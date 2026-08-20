@@ -52,6 +52,43 @@ export function addResponse(project: ProjectDocument, decisionNodeId: string): P
  * Elimina una respuesta de un nodo decision. Las respuestas restantes
  * conservan su id/letra/orden relativo — no se reindexan letras.
  */
+/** Campos editables de una respuesta ya creada mediante `updateResponse`.
+ *  Por ahora solo el texto: imagen/audio/puntos quedan fuera de alcance de
+ *  este milestone (no se editan en la UI), y el destino (`targetNodeId`)
+ *  tiene su propio mecanismo dedicado vía `connect`/`disconnect`. */
+export interface UpdateResponsePatch {
+  text?: string
+}
+
+/**
+ * Actualiza campos editables básicos de una respuesta ya existente de un
+ * nodo decision (por ahora, solo `text`). Análoga a `updateNode` pero a
+ * nivel de respuesta. Lanza `Error` si el nodo no existe, no es `decision`,
+ * o la respuesta no existe.
+ */
+export function updateResponse(
+  project: ProjectDocument,
+  decisionNodeId: string,
+  responseId: string,
+  patch: UpdateResponsePatch,
+): ProjectDocument {
+  const node = findDecisionNode(project, decisionNodeId)
+  if (!node.responses.some((response) => response.id === responseId)) {
+    throw new Error(`El nodo "${decisionNodeId}" no tiene una respuesta con id "${responseId}".`)
+  }
+
+  return produce(project, (draft) => {
+    const draftNode = draft.graph.nodes.find((candidate) => candidate.id === decisionNodeId)
+    if (draftNode && draftNode.type === 'decision') {
+      const response = draftNode.responses.find((candidate) => candidate.id === responseId)
+      if (response && patch.text !== undefined) {
+        response.text = patch.text
+      }
+    }
+    draft.metadata.updatedAt = new Date().toISOString()
+  })
+}
+
 export function removeResponse(
   project: ProjectDocument,
   decisionNodeId: string,

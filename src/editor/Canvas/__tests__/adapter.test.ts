@@ -52,10 +52,9 @@ describe('toFlowNodes', () => {
 
   it('incluye el resumen de respuestas de un nodo decision, hasta 4', () => {
     let project = createProject('P')
+    // `createNode` ya deja el decision con A y B (ver fix del dominio).
     project = createNode(project, 'decision', { x: 0, y: 0 })
     const decisionId = nodeIdOf(project, 'decision')
-    project = addResponse(project, decisionId)
-    project = addResponse(project, decisionId)
 
     const flowNodes = toFlowNodes(project, [])
     const decision = flowNodes.find((n) => n.id === decisionId)

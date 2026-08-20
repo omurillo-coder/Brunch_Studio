@@ -1,8 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { createNode, createProject } from '../project'
-import { addResponse, removeResponse } from '../responses'
+import { addResponse, removeResponse, updateResponse } from '../responses'
 import type { ProjectDocument } from '../schemas'
 
+/**
+ * `createNode(project, 'decision', ...)` ya deja el nodo con las respuestas
+ * A y B (ver fix de `createNode` en `project.ts`), así que estos tests
+ * parten de 2 respuestas, no de 0.
+ */
 function withDecisionNode(): { project: ProjectDocument; decisionId: string } {
   const project = createNode(createProject('P'), 'decision', { x: 0, y: 0 })
   const decisionId = project.graph.nodes.find((n) => n.type === 'decision')?.id
@@ -11,13 +16,11 @@ function withDecisionNode(): { project: ProjectDocument; decisionId: string } {
 }
 
 describe('addResponse', () => {
-  it('asigna las letras A, B, C, D en orden de creación', () => {
+  it('asigna las letras A, B, C, D en orden de creación (A y B ya existen al nacer el nodo)', () => {
     const { project: initialProject, decisionId } = withDecisionNode()
     let project = initialProject
-    project = addResponse(project, decisionId)
-    project = addResponse(project, decisionId)
-    project = addResponse(project, decisionId)
-    project = addResponse(project, decisionId)
+    project = addResponse(project, decisionId) // C
+    project = addResponse(project, decisionId) // D
 
     const decision = project.graph.nodes.find((n) => n.id === decisionId)
     const letters = decision?.type === 'decision' ? decision.responses.map((r) => r.letter) : []
@@ -27,10 +30,8 @@ describe('addResponse', () => {
   it('no permite una quinta respuesta', () => {
     const { project: initialProject, decisionId } = withDecisionNode()
     let project = initialProject
-    project = addResponse(project, decisionId)
-    project = addResponse(project, decisionId)
-    project = addResponse(project, decisionId)
-    project = addResponse(project, decisionId)
+    project = addResponse(project, decisionId) // C
+    project = addResponse(project, decisionId) // D
 
     expect(() => addResponse(project, decisionId)).toThrow()
   })
@@ -38,9 +39,7 @@ describe('addResponse', () => {
   it('reutiliza la primera letra libre tras eliminar una respuesta intermedia', () => {
     const { project: initialProject, decisionId } = withDecisionNode()
     let project = initialProject
-    project = addResponse(project, decisionId) // A
-    project = addResponse(project, decisionId) // B
-    project = addResponse(project, decisionId) // C
+    project = addResponse(project, decisionId) // C (A, B ya existían)
 
     const decisionBefore = project.graph.nodes.find((n) => n.id === decisionId)
     const responseB =
@@ -63,9 +62,7 @@ describe('removeResponse', () => {
   it('elimina una respuesta intermedia sin afectar el id/letra de las demás', () => {
     const { project: initialProject, decisionId } = withDecisionNode()
     let project = initialProject
-    project = addResponse(project, decisionId) // A
-    project = addResponse(project, decisionId) // B
-    project = addResponse(project, decisionId) // C
+    project = addResponse(project, decisionId) // C (A, B ya existían)
 
     const decisionBefore = project.graph.nodes.find((n) => n.id === decisionId)
     const responses = decisionBefore?.type === 'decision' ? decisionBefore.responses : []
@@ -82,5 +79,44 @@ describe('removeResponse', () => {
     expect(remaining.find((r) => r.id === responseA.id)?.letter).toBe('A')
     expect(remaining.find((r) => r.id === responseC.id)?.letter).toBe('C')
     expect(remaining.some((r) => r.id === responseB.id)).toBe(false)
+  })
+})
+
+describe('updateResponse', () => {
+  it('actualiza el texto de una respuesta existente sin afectar las demás ni mutar el original', () => {
+    const { project: initialProject, decisionId } = withDecisionNode()
+    const decisionBefore = initialProject.graph.nodes.find((n) => n.id === decisionId)
+    const responseA =
+      decisionBefore?.type === 'decision'
+        ? decisionBefore.responses.find((r) => r.letter === 'A')
+        : undefined
+    if (!responseA) throw new Error('setup inválido')
+
+    const updated = updateResponse(initialProject, decisionId, responseA.id, { text: 'Sí' })
+
+    const decisionAfter = updated.graph.nodes.find((n) => n.id === decisionId)
+    const responses = decisionAfter?.type === 'decision' ? decisionAfter.responses : []
+    expect(responses.find((r) => r.id === responseA.id)?.text).toBe('Sí')
+    expect(responses.find((r) => r.letter === 'B')?.text).toBe('')
+    // Inmutabilidad: el proyecto original no se muta.
+    expect(responseA.text).toBe('')
+  })
+
+  it('lanza error si el nodo no existe', () => {
+    const { project } = withDecisionNode()
+    expect(() => updateResponse(project, 'no-existe', 'no-existe', { text: 'x' })).toThrow()
+  })
+
+  it('lanza error si el nodo no es de tipo decision', () => {
+    const { project } = withDecisionNode()
+    const startId = project.graph.nodes.find((n) => n.type === 'start')?.id
+    if (!startId) throw new Error('setup inválido')
+
+    expect(() => updateResponse(project, startId, 'no-existe', { text: 'x' })).toThrow()
+  })
+
+  it('lanza error si la respuesta no existe', () => {
+    const { project, decisionId } = withDecisionNode()
+    expect(() => updateResponse(project, decisionId, 'no-existe', { text: 'x' })).toThrow()
   })
 })
