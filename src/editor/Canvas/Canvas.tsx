@@ -8,6 +8,7 @@ import {
 import type {
   Connection,
   FinalConnectionState,
+  OnBeforeDelete,
   OnSelectionChangeFunc,
   ReactFlowInstance,
   Viewport,
@@ -69,6 +70,7 @@ export function Canvas() {
   const contextMenu = useContextMenu()
 
   const connect = useProjectStore((state) => state.connect)
+  const deleteNode = useProjectStore((state) => state.deleteNode)
   const setSelection = useProjectStore((state) => state.setSelection)
   const setViewport = useProjectStore((state) => state.setViewport)
   const beginNodeDrag = useProjectStore((state) => state.beginNodeDrag)
@@ -97,16 +99,23 @@ export function Canvas() {
   // (`updateNodeDragPosition` muta la posición fuera del historial); por
   // eso no hace falta `onNodesChange` para reflejar la posición mientras se
   // arrastra.
+  //
+  // El TERCER argumento de estos callbacks (`nodes`, no el `node` bajo el
+  // puntero) es el array de TODOS los nodos que participan del gesto —
+  // `@xyflow/react` ya incluye ahí a cualquier nodo seleccionado que se
+  // arrastre junto al que se pulsó. Usarlo (en vez del segundo argumento)
+  // es lo que permite que arrastrar varios nodos seleccionados a la vez
+  // conserve la posición de todos ellos, no solo la del "principal".
   const handleNodeDragStart = useCallback(
-    (_event: unknown, node: CanvasFlowNode) => {
-      beginNodeDrag(node.id)
+    (_event: unknown, _node: CanvasFlowNode, nodes: CanvasFlowNode[]) => {
+      beginNodeDrag(nodes.map((n) => n.id))
     },
     [beginNodeDrag],
   )
 
   const handleNodeDrag = useCallback(
-    (_event: unknown, node: CanvasFlowNode) => {
-      updateNodeDragPosition(node.id, node.position)
+    (_event: unknown, _node: CanvasFlowNode, nodes: CanvasFlowNode[]) => {
+      updateNodeDragPosition(nodes.map((n) => ({ nodeId: n.id, position: n.position })))
     },
     [updateNodeDragPosition],
   )
@@ -114,6 +123,51 @@ export function Canvas() {
   const handleNodeDragStop = useCallback(() => {
     endNodeDrag()
   }, [endNodeDrag])
+
+  // -- Borrado de nodos con Supr/Backspace (ver `deleteKeyCode` más abajo).
+  // `@xyflow/react` gestiona la tecla y decide qué nodos/aristas son
+  // candidatos a borrarse (la selección actual), pero nunca debe mutar el
+  // modelo por su cuenta — este componente sigue siendo un lienzo
+  // "controlado" sobre `project`. `onBeforeDelete` es el punto de veto: si
+  // el nodo `start` está entre los candidatos, se excluye del conjunto
+  // (nunca se puede borrar, ver guarda de dominio en
+  // `src/domain/project.ts`). Si tras excluirlo no queda ningún nodo por
+  // borrar, se devuelve `false` para vetar el borrado por completo — así
+  // "seleccionar solo el Inicio y pulsar Supr" no dispara ningún borrado en
+  // vez de un borrado vacío silencioso. Las aristas candidatas se dejan
+  // pasar tal cual: esta app no tiene un modelo de aristas propio en
+  // `@xyflow/react` (se derivan de `project` en cada render, ver
+  // `adapter.ts`), así que aceptarlas aquí no tiene efecto en el dominio.
+  const handleBeforeDelete: OnBeforeDelete<CanvasFlowNode, CanvasFlowEdge> = useCallback(
+    async ({ nodes: candidateNodes, edges: candidateEdges }) => {
+      const allowedNodes = candidateNodes.filter((node) => node.type !== 'start')
+      if (allowedNodes.length === 0 && candidateNodes.length > 0) {
+        return false
+      }
+      return { nodes: allowedNodes, edges: candidateEdges }
+    },
+    [],
+  )
+
+  // -- Confirmación del borrado: por cada nodo que `onBeforeDelete` dejó
+  // pasar, se pide al store que lo borre de verdad (`store.deleteNode`, que
+  // delega en el dominio y empuja una única entrada de historial por nodo,
+  // ver comentario de diseño en `useProjectStore`). Si `deleteNode` lanzara
+  // por algún motivo inesperado (p.ej. una edición concurrente que ya lo
+  // hubiera borrado), se ignora ese nodo en vez de romper la UI — mismo
+  // criterio que `handleConnect`.
+  const handleNodesDelete = useCallback(
+    (deletedNodes: CanvasFlowNode[]) => {
+      for (const node of deletedNodes) {
+        try {
+          deleteNode(node.id)
+        } catch (error) {
+          console.warn('[Canvas] Borrado de nodo ignorado:', error)
+        }
+      }
+    },
+    [deleteNode],
+  )
 
   // -- Selección: la gestiona `@xyflow/react` (clic, caja, modificadores);
   // aquí solo se escucha el resultado para sincronizar el store. El campo
@@ -252,7 +306,9 @@ export function Canvas() {
         onConnect={handleConnect}
         onConnectEnd={handleConnectEnd}
         onMoveEnd={handleMoveEnd}
-        deleteKeyCode={null}
+        onBeforeDelete={handleBeforeDelete}
+        onNodesDelete={handleNodesDelete}
+        deleteKeyCode={['Backspace', 'Delete']}
         minZoom={0.1}
         maxZoom={2}
       >

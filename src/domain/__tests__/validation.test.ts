@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createNode, createProject, deleteNode } from '../project'
+import { createNode, createProject } from '../project'
 import { connect } from '../graph'
 import { addResponse, removeResponse } from '../responses'
 import { validateProject } from '../validation'
@@ -53,8 +53,17 @@ describe('validateProject', () => {
   it('detecta que falta el nodo start', () => {
     const project = buildValidProject()
     const startId = nodeIdOf(project, 'start')
-    // deleteNode limpia referencias entrantes; el grafo queda sin start.
-    const withoutStart = deleteNode(project, startId)
+    // `deleteNode` de dominio ya no permite borrar el nodo start (guarda de
+    // fase de "cabos sueltos"), así que para probar esta regla de
+    // validación de forma aislada se construye el documento sin start
+    // filtrando `graph.nodes` directamente, sin pasar por `deleteNode`. La
+    // regla de validación debe seguir detectando la ausencia de start en
+    // cualquier documento, independientemente de que la vía interactiva de
+    // borrado ya no pueda producirlo.
+    const withoutStart: ProjectDocument = {
+      ...project,
+      graph: { nodes: project.graph.nodes.filter((node) => node.id !== startId) },
+    }
 
     const issues = validateProject(withoutStart)
     expect(issues.some((issue) => issue.code === 'MISSING_START')).toBe(true)

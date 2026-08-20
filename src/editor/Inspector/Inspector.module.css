@@ -176,3 +176,19 @@
 .removeResponseButton:hover {
   color: var(--bs-color-text);
 }
+
+.deleteNodeButton {
+  align-self: flex-start;
+  padding: var(--bs-space-2) var(--bs-space-3);
+  border: 1px solid var(--bs-color-danger);
+  border-radius: var(--bs-radius-sm);
+  background: var(--bs-color-danger-bg);
+  color: var(--bs-color-danger);
+  font-size: var(--bs-font-size-sm);
+  cursor: pointer;
+}
+
+.deleteNodeButton:hover {
+  background: var(--bs-color-danger);
+  color: var(--bs-color-accent-contrast);
+}

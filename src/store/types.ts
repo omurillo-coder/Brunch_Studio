@@ -81,14 +81,26 @@ export interface HistoryState {
 }
 
 /**
- * Estado transitorio de un arrastre de nodo en curso. `snapshot` es el
- * `ProjectDocument` completo tal y como estaba justo antes de empezar el
- * arrastre: es la base sobre la que `endNodeDrag` aplicará `moveNode` de
- * dominio una única vez.
+ * Un nodo participando en el arrastre en curso, con su posición de origen
+ * (la que tenía justo antes de empezar a arrastrar).
  */
-export interface DragState {
+export interface DragItem {
   nodeId: string
   originPosition: NodePosition
+}
+
+/**
+ * Estado transitorio de un arrastre de nodos en curso. Soporta uno o varios
+ * nodos a la vez (arrastrar una selección múltiple): `items` lleva uno por
+ * cada nodo que participa del gesto (`@xyflow/react` los reporta todos
+ * juntos en el tercer argumento de `onNodeDragStart`/`onNodeDrag`/
+ * `onNodeDragStop`, ver `Canvas`). `snapshot` es el `ProjectDocument`
+ * completo tal y como estaba justo antes de empezar el arrastre: es la base
+ * sobre la que `endNodeDrag` aplicará `moveNodes` de dominio una única vez,
+ * para los nodos cuya posición final difiera de su origen.
+ */
+export interface DragState {
+  items: DragItem[]
   snapshot: ProjectDocument
 }
 

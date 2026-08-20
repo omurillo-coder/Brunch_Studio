@@ -88,12 +88,12 @@ describe('useAutosave — debounce y guardado', () => {
 
     act(() => {
       const store = useProjectStore.getState()
-      store.beginNodeDrag(nodeId)
+      store.beginNodeDrag([nodeId])
       // 20 mutaciones "en caliente" de la posición, cada una separada solo
       // 20ms (400ms en total, por debajo del debounce de 700ms) — simula
       // los frames de un arrastre de nodo.
       for (let frame = 0; frame < 20; frame += 1) {
-        useProjectStore.getState().updateNodeDragPosition(nodeId, { x: frame, y: frame * 2 })
+        useProjectStore.getState().updateNodeDragPosition([{ nodeId, position: { x: frame, y: frame * 2 } }])
         vi.advanceTimersByTime(20)
       }
       store.endNodeDrag()

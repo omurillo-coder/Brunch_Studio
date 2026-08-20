@@ -320,6 +320,67 @@ describe('Inspector — sección de Decisión (fase 6)', () => {
     expect(screen.getByText('Respuestas')).toBeInTheDocument()
   })
 
+  it('el botón de eliminar no aparece para el nodo Inicio', () => {
+    act(() => {
+      useProjectStore.getState().selectNode(startNodeId())
+    })
+    render(<Inspector />)
+
+    expect(screen.queryByRole('button', { name: /^Eliminar /i })).not.toBeInTheDocument()
+  })
+
+  it('el botón de eliminar borra el nodo Pantalla y el Inspector vuelve a "sin selección"', () => {
+    act(() => {
+      useProjectStore.getState().createNode('content', { x: 0, y: 0 }, { title: 'Pantalla 2' })
+      const contentId = useProjectStore
+        .getState()
+        .project.graph.nodes.find((n) => n.type === 'content')?.id
+      if (!contentId) throw new Error('setup inválido')
+      useProjectStore.getState().selectNode(contentId)
+    })
+    render(<Inspector />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Eliminar pantalla' }))
+
+    expect(
+      useProjectStore.getState().project.graph.nodes.some((n) => n.type === 'content'),
+    ).toBe(false)
+    // Vuelve a la vista "sin selección" (resumen del proyecto).
+    expect(screen.getByText('Untitled')).toBeInTheDocument()
+  })
+
+  it('el botón de eliminar borra un nodo Final', () => {
+    act(() => {
+      useProjectStore.getState().createNode('final', { x: 0, y: 0 })
+      const finalId = useProjectStore
+        .getState()
+        .project.graph.nodes.find((n) => n.type === 'final')?.id
+      if (!finalId) throw new Error('setup inválido')
+      useProjectStore.getState().selectNode(finalId)
+    })
+    render(<Inspector />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Eliminar final' }))
+
+    expect(
+      useProjectStore.getState().project.graph.nodes.some((n) => n.type === 'final'),
+    ).toBe(false)
+  })
+
+  it('el botón de eliminar borra un nodo Decisión', () => {
+    act(() => {
+      useProjectStore.getState().createNode('decision', { x: 0, y: 0 })
+      useProjectStore.getState().selectNode(decisionNodeId())
+    })
+    render(<Inspector />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Eliminar decisión' }))
+
+    expect(
+      useProjectStore.getState().project.graph.nodes.some((n) => n.type === 'decision'),
+    ).toBe(false)
+  })
+
   it('conectar vía store.connect directamente se refleja en el select de destino sin trabajo adicional', () => {
     act(() => {
       useProjectStore.getState().createNode('decision', { x: 0, y: 0 })

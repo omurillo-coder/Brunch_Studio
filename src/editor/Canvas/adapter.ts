@@ -30,6 +30,32 @@ export interface CanvasNodeData extends Record<string, unknown> {
   responses?: CanvasResponseSummary[]
 }
 
+/**
+ * Tamaño aproximado que se le declara a `@xyflow/react` ANTES de que su
+ * `ResizeObserver` interno mida el nodo de verdad por primera vez.
+ *
+ * Causa raíz confirmada leyendo `calculateNodePosition` en
+ * `@xyflow/system` (`node_modules/@xyflow/system/dist/esm/index.js`): esa
+ * función, invocada en cada frame de un arrastre, comprueba
+ * `node.measured.width`/`height` y emite el aviso de consola "It seems that
+ * you are trying to drag a node that is not initialized" (`error015`) si
+ * son `undefined` — algo que ocurre para cualquier nodo cuyo primer paso de
+ * medición (asíncrono, vía `ResizeObserver`) todavía no se haya completado,
+ * como un nodo recién creado que se arrastra de inmediato. `initialWidth`/
+ * `initialHeight` le dan a la librería un tamaño de partida coherente con
+ * el que realmente van a pintar las tarjetas (`NodeCard.module.css`:
+ * `.card` tiene `min-width: 160px`/`max-width: 220px`; la cabecera por sí
+ * sola mide bastante menos que un nodo `decision` con respuestas) mientras
+ * llega la medición real, que la sustituye en cuanto el `ResizeObserver` la
+ * reporta — no hace falta que sea exacto, solo evitar el hueco de "sin
+ * medir todavía". Se reutilizan los mismos valores que ya usa `Canvas`
+ * como aproximación para centrar la vista sobre un nodo no medido
+ * (`FALLBACK_NODE_WIDTH`/`FALLBACK_NODE_HEIGHT`), por coherencia entre
+ * ambos usos.
+ */
+const INITIAL_NODE_WIDTH = 180
+const INITIAL_NODE_HEIGHT = 60
+
 export type CanvasFlowNode = XyNode<CanvasNodeData>
 export type CanvasFlowEdge = XyEdge
 
@@ -72,6 +98,8 @@ export function toFlowNodes(
     position: node.position,
     selected: selected.has(node.id),
     data: toNodeData(node),
+    initialWidth: INITIAL_NODE_WIDTH,
+    initialHeight: INITIAL_NODE_HEIGHT,
   }))
 }
 

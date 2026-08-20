@@ -9,6 +9,7 @@ import {
   deleteNode as domainDeleteNode,
   disconnect as domainDisconnect,
   moveNode as domainMoveNode,
+  moveNodes as domainMoveNodes,
   removeResponse as domainRemoveResponse,
   updateNode as domainUpdateNode,
   updateResponse as domainUpdateResponse,
@@ -82,26 +83,38 @@ import type {
  * "la selección no pasa por el historial de undo/redo" (no está en
  * `history`).
  *
- * Drag de nodos en una sola entrada de historial:
- * `beginNodeDrag(nodeId)` guarda un snapshot del documento tal y como
- * estaba justo antes de arrastrar, más la posición de origen del nodo.
- * `updateNodeDragPosition(nodeId, position)` solo actualiza la posición en
- * caliente (mutación directa de `project`, fuera del historial) para
- * feedback visual continuo durante el arrastre. `endNodeDrag()` compara la
- * posición final (la que quedó tras el último `updateNodeDragPosition`)
- * contra la posición de origen guardada en `beginNodeDrag`:
- *   - Si son iguales (mismo `x` e `y`) — incluye el caso de que nunca se
- *     llamara a `updateNodeDragPosition`, p.ej. un click sin arrastre real,
- *     o el usuario "cancela" volviendo el nodo a su sitio — NO se genera
- *     ninguna entrada de historial ni se llama a `moveNode` de dominio.
- *     Criterio elegido: comparar la posición contra el origen, no contar
- *     cuántas veces se llamó a `updateNodeDragPosition`, porque un usuario
- *     puede mover el ratón de un lado a otro y devolver el nodo exactamente
- *     a su sitio — eso tampoco debería generar una entrada vacía.
- *   - Si son distintas, se aplica `moveNode` de dominio sobre el snapshot
- *     guardado en `beginNodeDrag` (no sobre el estado "en caliente"), se
- *     empuja ese snapshot a `history.past` y se vacía `history.future` — una
- *     única entrada, igual que cualquier otra acción de dominio.
+ * Drag de nodos en una sola entrada de historial (uno o varios nodos):
+ * `@xyflow/react` reporta, en el tercer argumento de `onNodeDragStart`/
+ * `onNodeDrag`/`onNodeDragStop`, el array de TODOS los nodos que participan
+ * del gesto (una selección múltiple arrastrada junta incluye a todos los
+ * seleccionados, no solo al que está bajo el puntero). `beginNodeDrag
+ * (nodeIds)` guarda un snapshot del documento tal y como estaba justo antes
+ * de arrastrar, más la posición de origen de CADA nodo de `nodeIds`.
+ * `updateNodeDragPosition(positions)` solo actualiza la posición en caliente
+ * de cada nodo indicado (mutación directa de `project`, fuera del
+ * historial) para feedback visual continuo durante el arrastre. Ambas
+ * acciones ignoran cualquier nodo que no forme parte del arrastre en curso
+ * (`drag.items`), por si `@xyflow/react` reportara un id inesperado.
+ *
+ * `endNodeDrag()` compara, para cada nodo arrastrado, su posición final (la
+ * que quedó tras el último `updateNodeDragPosition`) contra su posición de
+ * origen guardada en `beginNodeDrag`:
+ *   - Si NINGUNO cambió (mismo `x` e `y` en todos) — incluye el caso de que
+ *     nunca se llamara a `updateNodeDragPosition`, p.ej. un click sin
+ *     arrastre real, o el usuario "cancela" devolviendo los nodos a su
+ *     sitio — NO se genera ninguna entrada de historial ni se llama a
+ *     `moveNodes` de dominio. Criterio elegido: comparar la posición contra
+ *     el origen, no contar cuántas veces se llamó a
+ *     `updateNodeDragPosition`, porque un usuario puede mover el ratón de
+ *     un lado a otro y devolver los nodos exactamente a su sitio — eso
+ *     tampoco debería generar una entrada vacía.
+ *   - Si alguno cambió, se aplica `moveNodes` de dominio (una única llamada,
+ *     con las posiciones finales de TODOS los nodos que cambiaron) sobre el
+ *     snapshot guardado en `beginNodeDrag` (no sobre el estado "en
+ *     caliente"), se empuja ese snapshot a `history.past` y se vacía
+ *     `history.future` — una única entrada, igual que cualquier otra acción
+ *     de dominio, y que deshace/rehace el movimiento de todos los nodos a
+ *     la vez, no solo el del nodo "principal" bajo el puntero.
  *
  * Foco de lienzo (`ui.focusRequestNodeId`), fase 5:
  * `LeftPanel` no debe conocer `@xyflow/react` ni la instancia de React Flow,
@@ -166,9 +179,10 @@ export interface ProjectStoreActions {
   // -- lienzo ("¿Qué quieres añadir?", fase 7) --
   createConnectedNodeFromMenu: (type: NodeType, position: NodePosition) => void
 
-  // -- Drag de nodos (una única entrada de historial al finalizar) --
-  beginNodeDrag: (nodeId: string) => void
-  updateNodeDragPosition: (nodeId: string, position: NodePosition) => void
+  // -- Drag de nodos (una única entrada de historial al finalizar; soporta
+  // -- uno o varios nodos a la vez, ver `DragState`) --
+  beginNodeDrag: (nodeIds: string[]) => void
+  updateNodeDragPosition: (positions: { nodeId: string; position: NodePosition }[]) => void
   endNodeDrag: () => void
 
   // -- Historial --
@@ -255,6 +269,12 @@ export const useProjectStore = create<ProjectStoreState>()(
         state.history.past.push(state.project as ProjectDocument)
         state.history.future = []
         state.project = next
+        // Higiene de selección: si el nodo borrado estaba seleccionado, se
+        // quita para no dejar `selection.selectedNodeIds` apuntando a un id
+        // que ya no existe en el documento.
+        state.selection.selectedNodeIds = state.selection.selectedNodeIds.filter(
+          (id) => id !== nodeId,
+        )
       })
     },
 
@@ -348,27 +368,30 @@ export const useProjectStore = create<ProjectStoreState>()(
       })
     },
 
-    beginNodeDrag: (nodeId) => {
+    beginNodeDrag: (nodeIds) => {
       const snapshot = get().project
-      const node = snapshot.graph.nodes.find((candidate) => candidate.id === nodeId)
-      if (!node) return
+      const items = nodeIds.flatMap((nodeId) => {
+        const node = snapshot.graph.nodes.find((candidate) => candidate.id === nodeId)
+        return node ? [{ nodeId, originPosition: { x: node.position.x, y: node.position.y } }] : []
+      })
+      if (items.length === 0) return
       set((state) => {
-        state.drag = {
-          nodeId,
-          originPosition: { x: node.position.x, y: node.position.y },
-          snapshot: snapshot as ProjectDocument,
-        }
+        state.drag = { items, snapshot: snapshot as ProjectDocument }
       })
     },
 
-    updateNodeDragPosition: (nodeId, position) => {
+    updateNodeDragPosition: (positions) => {
       const drag = get().drag
-      if (!drag || drag.nodeId !== nodeId) return
+      if (!drag) return
+      const draggedIds = new Set(drag.items.map((item) => item.nodeId))
       set((state) => {
-        const node = state.project.graph.nodes.find((candidate) => candidate.id === nodeId)
-        if (node) {
-          node.position.x = position.x
-          node.position.y = position.y
+        for (const { nodeId, position } of positions) {
+          if (!draggedIds.has(nodeId)) continue
+          const node = state.project.graph.nodes.find((candidate) => candidate.id === nodeId)
+          if (node) {
+            node.position.x = position.x
+            node.position.y = position.y
+          }
         }
       })
     },
@@ -377,19 +400,24 @@ export const useProjectStore = create<ProjectStoreState>()(
       const drag = get().drag
       if (!drag) return
 
-      const currentNode = get().project.graph.nodes.find(
-        (candidate) => candidate.id === drag.nodeId,
-      )
-      const finalPosition = currentNode?.position ?? drag.originPosition
+      const currentNodes = get().project.graph.nodes
+      const moves = drag.items
+        .map((item) => {
+          const currentNode = currentNodes.find((candidate) => candidate.id === item.nodeId)
+          const finalPosition = currentNode?.position ?? item.originPosition
+          return { nodeId: item.nodeId, position: finalPosition, changed: !samePosition(finalPosition, item.originPosition) }
+        })
+        .filter((move) => move.changed)
+        .map(({ nodeId, position }) => ({ nodeId, position }))
 
-      if (samePosition(finalPosition, drag.originPosition)) {
+      if (moves.length === 0) {
         set((state) => {
           state.drag = null
         })
         return
       }
 
-      const next = domainMoveNode(drag.snapshot, drag.nodeId, finalPosition)
+      const next = domainMoveNodes(drag.snapshot, moves)
       set((state) => {
         state.history.past.push(drag.snapshot)
         state.history.future = []

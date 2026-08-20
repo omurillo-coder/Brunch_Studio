@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { createConnectedNode, createNode, createProject, deleteNode, moveNode, updateNode } from '../project'
+import {
+  createConnectedNode,
+  createNode,
+  createProject,
+  deleteNode,
+  moveNode,
+  moveNodes,
+  updateNode,
+} from '../project'
 import { connect } from '../graph'
 import { addResponse } from '../responses'
 
@@ -98,6 +106,16 @@ describe('deleteNode', () => {
     const project = createProject('P')
     expect(() => deleteNode(project, 'no-existe')).toThrow()
   })
+
+  it('no permite eliminar el nodo start', () => {
+    const project = createProject('P')
+    const startId = project.graph.nodes[0]?.id
+    if (!startId) throw new Error('setup inválido')
+
+    expect(() => deleteNode(project, startId)).toThrow()
+    // No debe haber mutado nada aunque haya lanzado.
+    expect(project.graph.nodes).toHaveLength(1)
+  })
 })
 
 describe('moveNode', () => {
@@ -109,6 +127,41 @@ describe('moveNode', () => {
     const updated = moveNode(project, startId, { x: 42, y: 7 })
     expect(updated.graph.nodes[0]?.position).toEqual({ x: 42, y: 7 })
     expect(project.graph.nodes[0]?.position).toEqual({ x: 0, y: 0 })
+  })
+})
+
+describe('moveNodes', () => {
+  it('mueve varios nodos a la vez en una sola operación', () => {
+    let project = createProject('P')
+    project = createNode(project, 'content', { x: 100, y: 0 })
+    const startId = project.graph.nodes.find((n) => n.type === 'start')?.id
+    const contentId = project.graph.nodes.find((n) => n.type === 'content')?.id
+    if (!startId || !contentId) throw new Error('setup inválido')
+
+    const updated = moveNodes(project, [
+      { nodeId: startId, position: { x: 10, y: 20 } },
+      { nodeId: contentId, position: { x: 30, y: 40 } },
+    ])
+
+    expect(updated.graph.nodes.find((n) => n.id === startId)?.position).toEqual({ x: 10, y: 20 })
+    expect(updated.graph.nodes.find((n) => n.id === contentId)?.position).toEqual({ x: 30, y: 40 })
+    // Inmutabilidad: el proyecto original no se toca.
+    expect(project.graph.nodes.find((n) => n.id === startId)?.position).toEqual({ x: 0, y: 0 })
+    expect(project.graph.nodes.find((n) => n.id === contentId)?.position).toEqual({ x: 100, y: 0 })
+  })
+
+  it('lanza error y no muta nada si alguno de los ids no existe', () => {
+    let project = createProject('P')
+    const startId = project.graph.nodes[0]?.id
+    if (!startId) throw new Error('setup inválido')
+
+    expect(() =>
+      moveNodes(project, [
+        { nodeId: startId, position: { x: 1, y: 1 } },
+        { nodeId: 'no-existe', position: { x: 2, y: 2 } },
+      ]),
+    ).toThrow()
+    expect(project.graph.nodes.find((n) => n.id === startId)?.position).toEqual({ x: 0, y: 0 })
   })
 })
 

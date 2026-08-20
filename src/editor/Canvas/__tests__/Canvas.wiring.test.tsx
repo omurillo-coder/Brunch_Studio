@@ -158,10 +158,18 @@ describe('Canvas — cableado con @xyflow/react (ReactFlow stub)', () => {
     const historyBefore = useProjectStore.getState().history.past.length
 
     act(() => {
-      capturedProps?.onNodeDragStart?.(undefined as never, { id: start.id, position: { x: 0, y: 0 } } as never, [])
-      capturedProps?.onNodeDrag?.(undefined as never, { id: start.id, position: { x: 40, y: 10 } } as never, [])
-      capturedProps?.onNodeDrag?.(undefined as never, { id: start.id, position: { x: 123, y: 456 } } as never, [])
-      capturedProps?.onNodeDragStop?.(undefined as never, { id: start.id, position: { x: 123, y: 456 } } as never, [])
+      capturedProps?.onNodeDragStart?.(undefined as never, undefined as never, [
+        { id: start.id, position: { x: 0, y: 0 } } as never,
+      ])
+      capturedProps?.onNodeDrag?.(undefined as never, undefined as never, [
+        { id: start.id, position: { x: 40, y: 10 } } as never,
+      ])
+      capturedProps?.onNodeDrag?.(undefined as never, undefined as never, [
+        { id: start.id, position: { x: 123, y: 456 } } as never,
+      ])
+      capturedProps?.onNodeDragStop?.(undefined as never, undefined as never, [
+        { id: start.id, position: { x: 123, y: 456 } } as never,
+      ])
     })
 
     expect(useProjectStore.getState().history.past.length).toBe(historyBefore + 1)
@@ -178,13 +186,62 @@ describe('Canvas — cableado con @xyflow/react (ReactFlow stub)', () => {
     const historyBefore = useProjectStore.getState().history.past.length
 
     act(() => {
-      capturedProps?.onNodeDragStart?.(undefined as never, { id: start.id, position: { x: 0, y: 0 } } as never, [])
-      capturedProps?.onNodeDrag?.(undefined as never, { id: start.id, position: { x: 40, y: 10 } } as never, [])
-      capturedProps?.onNodeDrag?.(undefined as never, { id: start.id, position: { x: 0, y: 0 } } as never, [])
-      capturedProps?.onNodeDragStop?.(undefined as never, { id: start.id, position: { x: 0, y: 0 } } as never, [])
+      capturedProps?.onNodeDragStart?.(undefined as never, undefined as never, [
+        { id: start.id, position: { x: 0, y: 0 } } as never,
+      ])
+      capturedProps?.onNodeDrag?.(undefined as never, undefined as never, [
+        { id: start.id, position: { x: 40, y: 10 } } as never,
+      ])
+      capturedProps?.onNodeDrag?.(undefined as never, undefined as never, [
+        { id: start.id, position: { x: 0, y: 0 } } as never,
+      ])
+      capturedProps?.onNodeDragStop?.(undefined as never, undefined as never, [
+        { id: start.id, position: { x: 0, y: 0 } } as never,
+      ])
     })
 
     expect(useProjectStore.getState().history.past.length).toBe(historyBefore)
+  })
+
+  it('arrastrar varios nodos seleccionados a la vez conserva la posición final de TODOS (no solo el "principal")', () => {
+    render(<Canvas />)
+    const start = firstNodeOfType('start')
+    act(() => {
+      useProjectStore.getState().createNode('content', { x: 100, y: 0 })
+    })
+    const content = firstNodeOfType('content')
+    const historyBefore = useProjectStore.getState().history.past.length
+
+    act(() => {
+      capturedProps?.onNodeDragStart?.(undefined as never, undefined as never, [
+        { id: start.id, position: { x: 0, y: 0 } } as never,
+        { id: content.id, position: { x: 100, y: 0 } } as never,
+      ])
+      capturedProps?.onNodeDrag?.(undefined as never, undefined as never, [
+        { id: start.id, position: { x: 50, y: 50 } } as never,
+        { id: content.id, position: { x: 150, y: 50 } } as never,
+      ])
+      capturedProps?.onNodeDragStop?.(undefined as never, undefined as never, [
+        { id: start.id, position: { x: 50, y: 50 } } as never,
+        { id: content.id, position: { x: 150, y: 50 } } as never,
+      ])
+    })
+
+    expect(useProjectStore.getState().history.past.length).toBe(historyBefore + 1)
+    const flowNodes = toFlowNodes(
+      useProjectStore.getState().project,
+      useProjectStore.getState().selection.selectedNodeIds,
+    )
+    expect(flowNodes.find((n) => n.id === start.id)?.position).toEqual({ x: 50, y: 50 })
+    expect(flowNodes.find((n) => n.id === content.id)?.position).toEqual({ x: 150, y: 50 })
+
+    useProjectStore.getState().undo()
+    const reverted = toFlowNodes(
+      useProjectStore.getState().project,
+      useProjectStore.getState().selection.selectedNodeIds,
+    )
+    expect(reverted.find((n) => n.id === start.id)?.position).toEqual({ x: 0, y: 0 })
+    expect(reverted.find((n) => n.id === content.id)?.position).toEqual({ x: 100, y: 0 })
   })
 
   it('focusNode centra la vista (setCenter) y limpia focusRequestNodeId tras procesarse', () => {
@@ -398,5 +455,73 @@ describe('Canvas — elegir una opción del menú crea, conecta, selecciona y ci
 
     expect(useProjectStore.getState().ui.contextMenu.open).toBe(false)
     expect(useProjectStore.getState().project.graph.nodes.length).toBe(nodesBefore)
+  })
+})
+
+/**
+ * Tests de borrado con Supr/Backspace (cabo suelto A): `onBeforeDelete` veta
+ * el nodo start entre los candidatos y `onNodesDelete` llama a
+ * `store.deleteNode` por cada nodo que quedó permitido.
+ */
+describe('Canvas — borrado de nodos (onBeforeDelete / onNodesDelete)', () => {
+  it('onBeforeDelete veta el nodo start y deja pasar los demás candidatos', async () => {
+    render(<Canvas />)
+    const start = firstNodeOfType('start')
+    act(() => {
+      useProjectStore.getState().createNode('content', { x: 0, y: 0 })
+    })
+    const content = firstNodeOfType('content')
+
+    const result = await capturedProps?.onBeforeDelete?.({
+      nodes: [
+        { id: start.id, type: 'start' } as never,
+        { id: content.id, type: 'content' } as never,
+      ],
+      edges: [],
+    })
+
+    expect(result).toEqual({ nodes: [{ id: content.id, type: 'content' }], edges: [] })
+  })
+
+  it('onBeforeDelete veta el borrado por completo si el único candidato es el nodo start', async () => {
+    render(<Canvas />)
+    const start = firstNodeOfType('start')
+
+    const result = await capturedProps?.onBeforeDelete?.({
+      nodes: [{ id: start.id, type: 'start' } as never],
+      edges: [],
+    })
+
+    expect(result).toBe(false)
+  })
+
+  it('onNodesDelete llama a store.deleteNode con los ids de los nodos borrados', () => {
+    render(<Canvas />)
+    act(() => {
+      useProjectStore.getState().createNode('content', { x: 0, y: 0 })
+      useProjectStore.getState().createNode('final', { x: 100, y: 0 })
+    })
+    const content = firstNodeOfType('content')
+    const final = firstNodeOfType('final')
+
+    act(() => {
+      capturedProps?.onNodesDelete?.([
+        { id: content.id } as never,
+        { id: final.id } as never,
+      ])
+    })
+
+    const nodes = useProjectStore.getState().project.graph.nodes
+    expect(nodes.some((n) => n.id === content.id)).toBe(false)
+    expect(nodes.some((n) => n.id === final.id)).toBe(false)
+  })
+
+  it('onNodesDelete de un nodo que ya no existe se ignora sin lanzar', () => {
+    render(<Canvas />)
+    expect(() => {
+      act(() => {
+        capturedProps?.onNodesDelete?.([{ id: 'no-existe' } as never])
+      })
+    }).not.toThrow()
   })
 })

@@ -252,6 +252,7 @@ function DecisionResponsesSection({
  */
 function NodeFields({ node, allNodes }: { node: Node; allNodes: Node[] }) {
   const updateNode = useProjectStore((state) => state.updateNode)
+  const deleteNode = useProjectStore((state) => state.deleteNode)
   const titleFocusRequestNodeId = useTitleFocusRequestNodeId()
   const clearTitleFocusRequest = useProjectStore((state) => state.clearTitleFocusRequest)
   const titleInputRef = useRef<HTMLInputElement>(null)
@@ -337,6 +338,20 @@ function NodeFields({ node, allNodes }: { node: Node; allNodes: Node[] }) {
         />
       </div>
       {node.type === 'decision' && <DecisionResponsesSection node={node} allNodes={allNodes} />}
+      {/* Acción de borrado descubrible sin depender de la tecla Supr/Backspace
+          del lienzo (ver `Canvas`). Nunca se muestra para el nodo Inicio —
+          `store.deleteNode` (dominio) lanza si se intentara. Sin diálogo de
+          confirmación: el propio undo (Ctrl/Cmd+Z) cubre el "deshacer por
+          error", mismo criterio que "Eliminar respuesta" más arriba. */}
+      {node.type !== 'start' && (
+        <button
+          type="button"
+          className={styles.deleteNodeButton}
+          onClick={() => deleteNode(node.id)}
+        >
+          Eliminar {NODE_TYPE_LABEL[node.type].toLowerCase()}
+        </button>
+      )}
     </div>
   )
 }

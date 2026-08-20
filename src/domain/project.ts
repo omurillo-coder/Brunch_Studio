@@ -138,10 +138,21 @@ export function createNode(
  * `targetNodeId` de nodos start/content, y el `targetNodeId` de cualquier
  * respuesta de nodos decision que apuntara al nodo borrado, quedan en
  * `undefined`. Lanza `Error` si el nodo no existe.
+ *
+ * Guarda de dominio: nunca se puede eliminar el nodo `start`. Solo puede
+ * existir un Inicio por proyecto (ver `createNode`) y no hay forma de crear
+ * uno nuevo una vez borrado el único existente, así que permitirlo dejaría
+ * el proyecto en un estado del que no se puede salir por la vía interactiva
+ * normal. Lanza `Error` en vez de ignorar la petición en silencio, mismo
+ * criterio que el resto de guardas de esta función.
  */
 export function deleteNode(project: ProjectDocument, nodeId: string): ProjectDocument {
-  if (findNodeIndex(project, nodeId) === -1) {
+  const index = findNodeIndex(project, nodeId)
+  if (index === -1) {
     throw new Error(`No existe un nodo con id "${nodeId}".`)
+  }
+  if (project.graph.nodes[index]?.type === 'start') {
+    throw new Error('No se puede eliminar el nodo de tipo "start" de un proyecto.')
   }
 
   return produce(project, (draft) => {
@@ -180,6 +191,41 @@ export function moveNode(
     const node = draft.graph.nodes[index]
     if (node) {
       node.position = position
+    }
+    touchUpdatedAt(draft)
+  })
+}
+
+/** Un movimiento individual dentro de un `moveNodes`. */
+export interface NodeMove {
+  nodeId: string
+  position: NodePosition
+}
+
+/**
+ * Mueve varios nodos a la vez en una única operación de dominio (un único
+ * `produce` de immer). Pensada para el arrastre de una selección múltiple en
+ * el lienzo: llamar a `moveNode` una vez por nodo generaría una entrada de
+ * historial por nodo en el store, deshaciendo el gesto "arrastrar N nodos
+ * seleccionados" en N pasos de `undo` en vez de uno.
+ *
+ * Valida que todos los ids existan ANTES de mutar nada (así, si alguno no
+ * existe, no se aplica ningún movimiento parcial) y lanza `Error` si falta
+ * alguno — mismo criterio que `moveNode`.
+ */
+export function moveNodes(project: ProjectDocument, moves: NodeMove[]): ProjectDocument {
+  for (const move of moves) {
+    if (findNodeIndex(project, move.nodeId) === -1) {
+      throw new Error(`No existe un nodo con id "${move.nodeId}".`)
+    }
+  }
+
+  return produce(project, (draft) => {
+    for (const move of moves) {
+      const node = draft.graph.nodes.find((candidate) => candidate.id === move.nodeId)
+      if (node) {
+        node.position = move.position
+      }
     }
     touchUpdatedAt(draft)
   })

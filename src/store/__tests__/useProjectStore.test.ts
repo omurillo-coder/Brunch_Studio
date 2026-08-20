@@ -172,10 +172,10 @@ describe('drag de nodos', () => {
     const startId = nodeIdOf('start')
     const historyBefore = useProjectStore.getState().history.past.length
 
-    useProjectStore.getState().beginNodeDrag(startId)
-    useProjectStore.getState().updateNodeDragPosition(startId, { x: 10, y: 10 })
-    useProjectStore.getState().updateNodeDragPosition(startId, { x: 55, y: 5 })
-    useProjectStore.getState().updateNodeDragPosition(startId, { x: 123, y: 456 })
+    useProjectStore.getState().beginNodeDrag([startId])
+    useProjectStore.getState().updateNodeDragPosition([{ nodeId: startId, position: { x: 10, y: 10 } }])
+    useProjectStore.getState().updateNodeDragPosition([{ nodeId: startId, position: { x: 55, y: 5 } }])
+    useProjectStore.getState().updateNodeDragPosition([{ nodeId: startId, position: { x: 123, y: 456 } }])
     useProjectStore.getState().endNodeDrag()
 
     expect(useProjectStore.getState().history.past.length).toBe(historyBefore + 1)
@@ -191,9 +191,9 @@ describe('drag de nodos', () => {
     const startId = nodeIdOf('start')
     const historyBefore = useProjectStore.getState().history.past.length
 
-    useProjectStore.getState().beginNodeDrag(startId)
-    useProjectStore.getState().updateNodeDragPosition(startId, { x: 999, y: 999 })
-    useProjectStore.getState().updateNodeDragPosition(startId, { x: 0, y: 0 }) // vuelve al origen
+    useProjectStore.getState().beginNodeDrag([startId])
+    useProjectStore.getState().updateNodeDragPosition([{ nodeId: startId, position: { x: 999, y: 999 } }])
+    useProjectStore.getState().updateNodeDragPosition([{ nodeId: startId, position: { x: 0, y: 0 } }]) // vuelve al origen
     useProjectStore.getState().endNodeDrag()
 
     expect(useProjectStore.getState().history.past.length).toBe(historyBefore)
@@ -204,11 +204,101 @@ describe('drag de nodos', () => {
     const startId = nodeIdOf('start')
     const historyBefore = useProjectStore.getState().history.past.length
 
-    useProjectStore.getState().beginNodeDrag(startId)
+    useProjectStore.getState().beginNodeDrag([startId])
     useProjectStore.getState().endNodeDrag()
 
     expect(useProjectStore.getState().history.past.length).toBe(historyBefore)
     expect(useProjectStore.getState().drag).toBeNull()
+  })
+
+  it('arrastrar varios nodos a la vez produce UNA sola entrada y undo devuelve a TODOS a su posición previa', () => {
+    useProjectStore.getState().createNode('content', { x: 100, y: 0 })
+    useProjectStore.getState().createNode('final', { x: 200, y: 0 })
+    const startId = nodeIdOf('start')
+    const contentId = nodeIdOf('content')
+    const finalId = nodeIdOf('final')
+    const historyBefore = useProjectStore.getState().history.past.length
+
+    useProjectStore.getState().beginNodeDrag([startId, contentId, finalId])
+    useProjectStore.getState().updateNodeDragPosition([
+      { nodeId: startId, position: { x: 10, y: 10 } },
+      { nodeId: contentId, position: { x: 110, y: 10 } },
+      { nodeId: finalId, position: { x: 210, y: 10 } },
+    ])
+    useProjectStore.getState().updateNodeDragPosition([
+      { nodeId: startId, position: { x: 50, y: 50 } },
+      { nodeId: contentId, position: { x: 150, y: 50 } },
+      { nodeId: finalId, position: { x: 250, y: 50 } },
+    ])
+    useProjectStore.getState().endNodeDrag()
+
+    expect(useProjectStore.getState().history.past.length).toBe(historyBefore + 1)
+    const nodes = useProjectStore.getState().project.graph.nodes
+    expect(nodes.find((n) => n.id === startId)?.position).toEqual({ x: 50, y: 50 })
+    expect(nodes.find((n) => n.id === contentId)?.position).toEqual({ x: 150, y: 50 })
+    expect(nodes.find((n) => n.id === finalId)?.position).toEqual({ x: 250, y: 50 })
+
+    useProjectStore.getState().undo()
+    const reverted = useProjectStore.getState().project.graph.nodes
+    expect(reverted.find((n) => n.id === startId)?.position).toEqual({ x: 0, y: 0 })
+    expect(reverted.find((n) => n.id === contentId)?.position).toEqual({ x: 100, y: 0 })
+    expect(reverted.find((n) => n.id === finalId)?.position).toEqual({ x: 200, y: 0 })
+  })
+
+  it('arrastrar varios nodos donde solo alguno cambia de posición sigue produciendo una sola entrada, solo con los cambiados', () => {
+    useProjectStore.getState().createNode('content', { x: 100, y: 0 })
+    const startId = nodeIdOf('start')
+    const contentId = nodeIdOf('content')
+    const historyBefore = useProjectStore.getState().history.past.length
+
+    useProjectStore.getState().beginNodeDrag([startId, contentId])
+    // Solo se mueve `contentId`; `startId` vuelve/se queda en su origen.
+    useProjectStore.getState().updateNodeDragPosition([
+      { nodeId: startId, position: { x: 0, y: 0 } },
+      { nodeId: contentId, position: { x: 300, y: 300 } },
+    ])
+    useProjectStore.getState().endNodeDrag()
+
+    expect(useProjectStore.getState().history.past.length).toBe(historyBefore + 1)
+    const nodes = useProjectStore.getState().project.graph.nodes
+    expect(nodes.find((n) => n.id === startId)?.position).toEqual({ x: 0, y: 0 })
+    expect(nodes.find((n) => n.id === contentId)?.position).toEqual({ x: 300, y: 300 })
+  })
+})
+
+describe('deleteNode: higiene de selección y guarda del nodo start', () => {
+  it('borrar el nodo seleccionado lo quita de selection.selectedNodeIds', () => {
+    useProjectStore.getState().createNode('final', { x: 0, y: 0 })
+    const finalId = nodeIdOf('final')
+    useProjectStore.getState().selectNode(finalId)
+    expect(useProjectStore.getState().selection.selectedNodeIds).toEqual([finalId])
+
+    useProjectStore.getState().deleteNode(finalId)
+
+    expect(useProjectStore.getState().selection.selectedNodeIds).toEqual([])
+  })
+
+  it('borrar un nodo no seleccionado no toca la selección actual', () => {
+    useProjectStore.getState().createNode('final', { x: 0, y: 0 })
+    useProjectStore.getState().createNode('content', { x: 0, y: 0 })
+    const finalId = nodeIdOf('final')
+    const contentId = nodeIdOf('content')
+    useProjectStore.getState().selectNode(contentId)
+
+    useProjectStore.getState().deleteNode(finalId)
+
+    expect(useProjectStore.getState().selection.selectedNodeIds).toEqual([contentId])
+  })
+
+  it('lanza al intentar borrar el nodo start, sin mutar el proyecto ni la selección', () => {
+    const startId = nodeIdOf('start')
+    useProjectStore.getState().selectNode(startId)
+    const projectBefore = useProjectStore.getState().project
+
+    expect(() => useProjectStore.getState().deleteNode(startId)).toThrow()
+
+    expect(useProjectStore.getState().project).toBe(projectBefore)
+    expect(useProjectStore.getState().selection.selectedNodeIds).toEqual([startId])
   })
 })
 
