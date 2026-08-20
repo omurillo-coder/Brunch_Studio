@@ -1,0 +1,40 @@
+name: Build Windows installer
+
+# Compila Brunch Studio en un runner real de Windows (necesario: WebView2 y
+# el resto del stack nativo de Tauri no se pueden compilar de forma fiable
+# en macOS). Se dispara manualmente (botón "Run workflow" en la pestaña
+# Actions de GitHub) o en cada push a `main`.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout del repositorio
+        uses: actions/checkout@v4
+
+      - name: Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Instalar dependencias del frontend
+        run: npm ci
+
+      - name: Compilar el instalador de Windows
+        uses: tauri-apps/tauri-action@v0
+
+      - name: Subir el instalador como artefacto descargable
+        uses: actions/upload-artifact@v4
+        with:
+          name: brunch-studio-windows
+          path: |
+            src-tauri/target/release/bundle/msi/*.msi
+            src-tauri/target/release/bundle/nsis/*.exe
+          if-no-files-found: error
