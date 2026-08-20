@@ -5,7 +5,7 @@ import { TauriProjectRepository } from '../persistence'
 import type { AppServices } from './AppServices'
 
 /** Único filtro de extensión de archivo que reconoce este editor. */
-const BRANCH_FILE_FILTERS = [{ name: 'Proyecto Brunch Studio', extensions: ['branch'] }]
+const BRUNCH_FILE_FILTERS = [{ name: 'Proyecto Brunch Studio', extensions: ['brunch'] }]
 
 /** Caracteres no válidos en un nombre de archivo en Windows/macOS. */
 const INVALID_FILENAME_CHARS = /[/\\:*?"<>|]/g
@@ -27,13 +27,13 @@ export function sanitizeFileName(name: string): string {
 }
 
 async function pickSaveProjectPathWithNativeDialog(suggestedName?: string): Promise<string | null> {
-  const defaultPath = suggestedName ? `${sanitizeFileName(suggestedName)}.branch` : undefined
-  const path = await save({ filters: BRANCH_FILE_FILTERS, defaultPath })
+  const defaultPath = suggestedName ? `${sanitizeFileName(suggestedName)}.brunch` : undefined
+  const path = await save({ filters: BRUNCH_FILE_FILTERS, defaultPath })
   return path ?? null
 }
 
 async function pickOpenProjectPathWithNativeDialog(): Promise<string | null> {
-  const selected = await open({ filters: BRANCH_FILE_FILTERS, multiple: false, directory: false })
+  const selected = await open({ filters: BRUNCH_FILE_FILTERS, multiple: false, directory: false })
   return typeof selected === 'string' ? selected : null
 }
 
@@ -56,7 +56,7 @@ const AppServicesContext = createContext<AppServices>(defaultAppServices)
 export interface AppServicesProviderProps {
   /**
    * Sustituye una o varias dependencias por defecto. Pensado para tests:
-   * p.ej. pasar `{ repository: new MemoryProjectRepository(), pickOpenProjectPath: async () => '/fake.branch' }`
+   * p.ej. pasar `{ repository: new MemoryProjectRepository(), pickOpenProjectPath: async () => '/fake.brunch' }`
    * sin depender del plugin de diálogo ni de un backend Tauri real.
    */
   services?: Partial<AppServices>

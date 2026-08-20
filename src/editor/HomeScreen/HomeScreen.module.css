@@ -31,6 +31,13 @@
   }
 }
 
+.tagline {
+  margin: 0 0 var(--bs-space-4);
+  font-size: var(--bs-font-size-md);
+  line-height: 1.5;
+  color: var(--bs-color-text);
+}
+
 .subtitle {
   margin: 0 0 var(--bs-space-5);
   font-size: var(--bs-font-size-sm);

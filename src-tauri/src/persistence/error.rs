@@ -10,11 +10,11 @@ use std::fmt;
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
 #[serde(tag = "kind", content = "content")]
 pub enum PersistenceError {
-    /// La ruta indicada no existe (al abrir o guardar un `.branch`).
+    /// La ruta indicada no existe (al abrir o guardar un `.brunch`).
     NotFound(String),
-    /// Se intentó crear un `.branch` en una ruta que ya existe.
+    /// Se intentó crear un `.brunch` en una ruta que ya existe.
     AlreadyExists(String),
-    /// El archivo existe pero no es un `.branch` válido (no es SQLite, o le
+    /// El archivo existe pero no es un `.brunch` válido (no es SQLite, o le
     /// faltan las tablas mínimas esperadas).
     InvalidFile(String),
     /// El `schema_version` del documento/contenedor no es el soportado por
@@ -37,7 +37,7 @@ impl fmt::Display for PersistenceError {
                 write!(f, "ya existe un archivo en la ruta: {path}")
             }
             PersistenceError::InvalidFile(reason) => {
-                write!(f, "el archivo no es un .branch válido: {reason}")
+                write!(f, "el archivo no es un .brunch válido: {reason}")
             }
             PersistenceError::UnsupportedSchemaVersion { found, supported } => write!(
                 f,
@@ -64,7 +64,7 @@ impl From<rusqlite::Error> for PersistenceError {
     fn from(err: rusqlite::Error) -> Self {
         // Caso frecuente y significativo: el archivo no es una base de
         // datos SQLite (p.ej. el usuario apuntó a un archivo cualquiera con
-        // extensión `.branch`). Lo mapeamos a `InvalidFile` en vez de dejar
+        // extensión `.brunch`). Lo mapeamos a `InvalidFile` en vez de dejar
         // el mensaje genérico de SQLite.
         if let rusqlite::Error::SqliteFailure(sqlite_err, _) = &err {
             if sqlite_err.code == rusqlite::ErrorCode::NotADatabase {

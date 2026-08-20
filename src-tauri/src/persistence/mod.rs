@@ -1,10 +1,10 @@
-//! Persistencia en disco del fichero `.branch`.
+//! Persistencia en disco del fichero `.brunch`.
 //!
-//! El `.branch` es, internamente, un fichero SQLite abierto directamente
+//! El `.brunch` es, internamente, un fichero SQLite abierto directamente
 //! desde Rust con `rusqlite` (feature `bundled`, sin depender de una
 //! libsqlite3 del sistema) — no se usa `@tauri-apps/plugin-sql` como
 //! sistema principal de persistencia del documento, precisamente para poder
-//! abrir un `.branch` en cualquier ruta arbitraria que elija el usuario.
+//! abrir un `.brunch` en cualquier ruta arbitraria que elija el usuario.
 //!
 //! El `ProjectDocument` completo se guarda como una única fila de texto JSON
 //! (`project_document.json`); Rust no conoce ni valida su forma completa

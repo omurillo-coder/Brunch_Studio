@@ -8,7 +8,7 @@ import { useAutosave } from './useAutosave'
 import styles from './EditorScreen.module.css'
 
 export interface EditorScreenProps {
-  /** Ruta absoluta del `.branch` abierto; destino del autoguardado (fase 9). */
+  /** Ruta absoluta del `.brunch` abierto; destino del autoguardado (fase 9). */
   filePath: string
 }
 

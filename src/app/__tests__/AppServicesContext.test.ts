@@ -3,7 +3,7 @@ import { save } from '@tauri-apps/plugin-dialog'
 import { defaultAppServices, sanitizeFileName } from '../AppServicesContext'
 
 vi.mock('@tauri-apps/plugin-dialog', () => ({
-  save: vi.fn().mockResolvedValue('/tmp/elegido.branch'),
+  save: vi.fn().mockResolvedValue('/tmp/elegido.brunch'),
   open: vi.fn().mockResolvedValue(null),
 }))
 
@@ -31,11 +31,11 @@ describe('sanitizeFileName', () => {
 })
 
 describe('pickSaveProjectPath (diálogo nativo)', () => {
-  it('propone el nombre saneado + extensión .branch como defaultPath', async () => {
+  it('propone el nombre saneado + extensión .brunch como defaultPath', async () => {
     await defaultAppServices.pickSaveProjectPath('Mi: escenario')
 
     expect(save).toHaveBeenCalledWith(
-      expect.objectContaining({ defaultPath: 'Mi escenario.branch' }),
+      expect.objectContaining({ defaultPath: 'Mi escenario.brunch' }),
     )
   })
 

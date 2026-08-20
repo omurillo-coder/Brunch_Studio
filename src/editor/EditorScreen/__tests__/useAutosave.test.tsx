@@ -26,7 +26,7 @@ function Harness({ filePath }: { filePath: string }) {
   return null
 }
 
-function renderHarness(repository: ProjectRepository, filePath = '/tmp/autosave-test.branch') {
+function renderHarness(repository: ProjectRepository, filePath = '/tmp/autosave-test.brunch') {
   return render(
     <AppServicesProvider services={{ repository }}>
       <Harness filePath={filePath} />
@@ -73,7 +73,7 @@ describe('useAutosave — debounce y guardado', () => {
 
     expect(repository.saveProject).toHaveBeenCalledTimes(1)
     expect(repository.saveProject).toHaveBeenCalledWith(
-      '/tmp/autosave-test.branch',
+      '/tmp/autosave-test.brunch',
       useProjectStore.getState().project,
     )
     expect(useProjectStore.getState().saveStatus).toBe('saved')
@@ -200,7 +200,7 @@ describe('useAutosave — debounce y guardado', () => {
 describe('useAutosave — fidelidad de reapertura (criterio de aceptación del milestone)', () => {
   it('editar, autoguardar y reabrir desde el repositorio devuelve un documento estructuralmente idéntico', async () => {
     const repository = new MemoryProjectRepository()
-    const filePath = '/tmp/fidelidad-reapertura.branch'
+    const filePath = '/tmp/fidelidad-reapertura.brunch'
 
     const initial = createProject('Proyecto de fidelidad')
     await repository.createProject(filePath, initial)
@@ -254,7 +254,7 @@ describe('useAutosave — fidelidad de reapertura (criterio de aceptación del m
     expect(useProjectStore.getState().saveStatus).toBe('saved')
 
     // 4. Reabre desde el repositorio, como haría `HomeScreen` al volver a
-    // abrir el mismo `.branch` en una sesión nueva.
+    // abrir el mismo `.brunch` en una sesión nueva.
     const reopened = await repository.openProject(filePath)
     const inMemory = useProjectStore.getState().project
 

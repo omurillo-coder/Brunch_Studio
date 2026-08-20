@@ -12,7 +12,7 @@ beforeEach(() => {
 describe('App: navegación HomeScreen -> EditorScreen', () => {
   it('"Nuevo proyecto" lleva a EditorScreen con el nodo de Inicio creado', async () => {
     const repository = new MemoryProjectRepository()
-    const pickSaveProjectPath = vi.fn().mockResolvedValue('/tmp/proyecto-nuevo.branch')
+    const pickSaveProjectPath = vi.fn().mockResolvedValue('/tmp/proyecto-nuevo.brunch')
     const pickOpenProjectPath = vi.fn().mockResolvedValue(null)
 
     render(<App services={{ repository, pickSaveProjectPath, pickOpenProjectPath }} />)
@@ -39,10 +39,10 @@ describe('App: navegación HomeScreen -> EditorScreen', () => {
   it('"Abrir proyecto" con un documento existente lleva a EditorScreen con esos datos', async () => {
     const repository = new MemoryProjectRepository()
     const existing = createProject('Proyecto ya guardado')
-    await repository.createProject('/tmp/existente.branch', existing)
+    await repository.createProject('/tmp/existente.brunch', existing)
 
     const pickSaveProjectPath = vi.fn().mockResolvedValue(null)
-    const pickOpenProjectPath = vi.fn().mockResolvedValue('/tmp/existente.branch')
+    const pickOpenProjectPath = vi.fn().mockResolvedValue('/tmp/existente.brunch')
 
     render(<App services={{ repository, pickSaveProjectPath, pickOpenProjectPath }} />)
 

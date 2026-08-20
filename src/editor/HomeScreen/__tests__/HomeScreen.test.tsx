@@ -24,7 +24,7 @@ function renderHomeScreen(services: Partial<AppServices>, onProjectOpened = vi.f
 describe('HomeScreen', () => {
   it('el flujo "Nuevo proyecto" crea el documento y notifica la ruta elegida', async () => {
     const repository = new MemoryProjectRepository()
-    const pickSaveProjectPath = vi.fn().mockResolvedValue('/tmp/nuevo.branch')
+    const pickSaveProjectPath = vi.fn().mockResolvedValue('/tmp/nuevo.brunch')
     const onProjectOpened = renderHomeScreen({ repository, pickSaveProjectPath })
 
     fireEvent.click(screen.getByText('Nuevo proyecto'))
@@ -33,12 +33,12 @@ describe('HomeScreen', () => {
     })
     fireEvent.click(screen.getByText('Crear'))
 
-    await vi.waitFor(() => expect(onProjectOpened).toHaveBeenCalledWith('/tmp/nuevo.branch'))
+    await vi.waitFor(() => expect(onProjectOpened).toHaveBeenCalledWith('/tmp/nuevo.brunch'))
     // El nombre escrito en el formulario se propone como nombre de archivo
     // en el propio diálogo nativo de guardar (el usuario puede cambiarlo).
     expect(pickSaveProjectPath).toHaveBeenCalledWith('Mi escenario')
 
-    const stored = await repository.openProject('/tmp/nuevo.branch')
+    const stored = await repository.openProject('/tmp/nuevo.brunch')
     expect(stored.metadata.name).toBe('Mi escenario')
     expect(useProjectStore.getState().project.metadata.name).toBe('Mi escenario')
   })
@@ -65,13 +65,13 @@ describe('HomeScreen', () => {
   it('el flujo "Abrir proyecto" carga el documento existente y notifica la ruta', async () => {
     const repository = new MemoryProjectRepository()
     const existing = createProject('Proyecto existente')
-    await repository.createProject('/tmp/existente.branch', existing)
-    const pickOpenProjectPath = vi.fn().mockResolvedValue('/tmp/existente.branch')
+    await repository.createProject('/tmp/existente.brunch', existing)
+    const pickOpenProjectPath = vi.fn().mockResolvedValue('/tmp/existente.brunch')
     const onProjectOpened = renderHomeScreen({ repository, pickOpenProjectPath })
 
     fireEvent.click(screen.getByText('Abrir proyecto'))
 
-    await vi.waitFor(() => expect(onProjectOpened).toHaveBeenCalledWith('/tmp/existente.branch'))
+    await vi.waitFor(() => expect(onProjectOpened).toHaveBeenCalledWith('/tmp/existente.brunch'))
     expect(useProjectStore.getState().project.metadata.name).toBe('Proyecto existente')
   })
 
@@ -91,7 +91,7 @@ describe('HomeScreen', () => {
 
   it('un fallo al abrir muestra un mensaje de error comprensible, sin jerga técnica', async () => {
     const repository = new MemoryProjectRepository()
-    const pickOpenProjectPath = vi.fn().mockResolvedValue('/tmp/invalido.branch')
+    const pickOpenProjectPath = vi.fn().mockResolvedValue('/tmp/invalido.brunch')
     const onProjectOpened = renderHomeScreen({ repository, pickOpenProjectPath })
 
     fireEvent.click(screen.getByText('Abrir proyecto'))

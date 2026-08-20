@@ -7,8 +7,8 @@ describe('MemoryProjectRepository', () => {
     const repo = new MemoryProjectRepository()
     const document = createProject('Mi escenario')
 
-    await repo.createProject('/fake/path/proyecto.branch', document)
-    const reopened = await repo.openProject('/fake/path/proyecto.branch')
+    await repo.createProject('/fake/path/proyecto.brunch', document)
+    const reopened = await repo.openProject('/fake/path/proyecto.brunch')
 
     expect(reopened).toEqual(document)
   })
@@ -16,43 +16,43 @@ describe('MemoryProjectRepository', () => {
   it('guardar sobrescribe el documento y abrir devuelve la versión nueva', async () => {
     const repo = new MemoryProjectRepository()
     const document = createProject('Mi escenario')
-    await repo.createProject('/fake/path/proyecto.branch', document)
+    await repo.createProject('/fake/path/proyecto.brunch', document)
 
     const updated = { ...document, metadata: { ...document.metadata, name: 'Otro nombre' } }
-    await repo.saveProject('/fake/path/proyecto.branch', updated)
+    await repo.saveProject('/fake/path/proyecto.brunch', updated)
 
-    const reopened = await repo.openProject('/fake/path/proyecto.branch')
+    const reopened = await repo.openProject('/fake/path/proyecto.brunch')
     expect(reopened.metadata.name).toBe('Otro nombre')
   })
 
   it('abrir una ruta inexistente rechaza la promesa', async () => {
     const repo = new MemoryProjectRepository()
-    await expect(repo.openProject('/no/existe.branch')).rejects.toThrow()
+    await expect(repo.openProject('/no/existe.brunch')).rejects.toThrow()
   })
 
   it('guardar en una ruta inexistente rechaza la promesa', async () => {
     const repo = new MemoryProjectRepository()
     const document = createProject('Mi escenario')
-    await expect(repo.saveProject('/no/existe.branch', document)).rejects.toThrow()
+    await expect(repo.saveProject('/no/existe.brunch', document)).rejects.toThrow()
   })
 
   it('crear dos veces en la misma ruta rechaza la promesa', async () => {
     const repo = new MemoryProjectRepository()
     const document = createProject('Mi escenario')
-    await repo.createProject('/fake/path/proyecto.branch', document)
+    await repo.createProject('/fake/path/proyecto.brunch', document)
 
-    await expect(repo.createProject('/fake/path/proyecto.branch', document)).rejects.toThrow()
+    await expect(repo.createProject('/fake/path/proyecto.brunch', document)).rejects.toThrow()
   })
 
   it('mutar el documento devuelto por openProject no afecta al estado interno', async () => {
     const repo = new MemoryProjectRepository()
     const document = createProject('Mi escenario')
-    await repo.createProject('/fake/path/proyecto.branch', document)
+    await repo.createProject('/fake/path/proyecto.brunch', document)
 
-    const reopened = await repo.openProject('/fake/path/proyecto.branch')
+    const reopened = await repo.openProject('/fake/path/proyecto.brunch')
     reopened.metadata.name = 'Mutado localmente'
 
-    const reopenedAgain = await repo.openProject('/fake/path/proyecto.branch')
+    const reopenedAgain = await repo.openProject('/fake/path/proyecto.brunch')
     expect(reopenedAgain.metadata.name).toBe('Mi escenario')
   })
 })

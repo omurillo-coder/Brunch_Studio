@@ -79,7 +79,7 @@ import type {
  * Selección/UI fuera del documento y fuera del historial:
  * `selection` y `ui` son slices propios del store, nunca parte de
  * `project`, y ninguna acción de undo/redo los toca. Así se cumple a la vez
- * "la selección no se persiste en el `.branch`" (no está en `project`) y
+ * "la selección no se persiste en el `.brunch`" (no está en `project`) y
  * "la selección no pasa por el historial de undo/redo" (no está en
  * `history`).
  *

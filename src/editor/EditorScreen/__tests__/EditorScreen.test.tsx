@@ -18,7 +18,7 @@ import { resetProjectStore } from '../../../store/testHelpers'
  * Tauri inexistentes en este entorno de test.
  */
 
-const TEST_FILE_PATH = '/tmp/editor-screen-test.branch'
+const TEST_FILE_PATH = '/tmp/editor-screen-test.brunch'
 
 function renderEditorScreen() {
   return render(

@@ -7,7 +7,7 @@ import logo from '../../assets/logo.png'
 import styles from './HomeScreen.module.css'
 
 export interface HomeScreenProps {
-  /** Se llama con la ruta del archivo `.branch` en cuanto queda listo (recién creado o recién abierto). */
+  /** Se llama con la ruta del archivo `.brunch` en cuanto queda listo (recién creado o recién abierto). */
   onProjectOpened: (path: string) => void
 }
 
@@ -79,6 +79,11 @@ export function HomeScreen({ onProjectOpened }: HomeScreenProps) {
     <div className={styles.screen}>
       <div className={styles.panel}>
         <img className={styles.logo} src={logo} alt="Brunch Studio" />
+        <p className={styles.tagline}>
+          Crea experiencias ramificadas de forma visual.
+          <br />
+          Diseña pantallas, decisiones y recorridos, y publica la experiencia lista para usar.
+        </p>
         <p className={styles.subtitle}>Crea un proyecto nuevo o abre uno existente para empezar.</p>
 
         {mode === 'idle' && (

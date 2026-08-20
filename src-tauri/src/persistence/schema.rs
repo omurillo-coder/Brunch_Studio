@@ -1,4 +1,4 @@
-//! Esquema SQLite del contenedor `.branch` y mecanismo mínimo de migración.
+//! Esquema SQLite del contenedor `.brunch` y mecanismo mínimo de migración.
 //!
 //! El "esquema del contenedor" (las 3 tablas: `metadata`, `project_document`,
 //! `assets`) se versiona con `PRAGMA user_version` y es independiente del
@@ -13,7 +13,7 @@ use rusqlite::Connection;
 use super::error::PersistenceError;
 
 /// Versión del `schemaVersion` del `ProjectDocument` soportada por este
-/// binario. Si un `.branch` declara una versión distinta (mayor, por un
+/// binario. Si un `.brunch` declara una versión distinta (mayor, por un
 /// binario más nuevo que lo escribió, o menor, si en el futuro dejamos de
 /// soportar versiones antiguas sin migrarlas), `open_project_file` /
 /// `save_project_file` devuelven `UnsupportedSchemaVersion`.
@@ -53,7 +53,7 @@ const MIGRATIONS: &[(i64, &str)] = &[(
 
 /// Aplica, dentro de una transacción, todas las migraciones de contenedor
 /// pendientes (con `versión > user_version` actual). Idempotente: se puede
-/// llamar tanto al crear un `.branch` nuevo como al abrir uno existente.
+/// llamar tanto al crear un `.brunch` nuevo como al abrir uno existente.
 pub fn run_migrations(conn: &Connection) -> Result<(), PersistenceError> {
     let current_version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
 
@@ -73,7 +73,7 @@ pub fn run_migrations(conn: &Connection) -> Result<(), PersistenceError> {
 }
 
 /// Fija explícitamente `journal_mode = DELETE` (nunca WAL) para los
-/// ficheros `.branch`: el producto es un único archivo editado en el sitio
+/// ficheros `.brunch`: el producto es un único archivo editado en el sitio
 /// que el usuario elija, y WAL puede dejar ficheros auxiliares `-wal`/`-shm`
 /// junto a él, lo que no queremos para este formato.
 pub fn ensure_delete_journal_mode(conn: &Connection) -> Result<(), PersistenceError> {
@@ -87,8 +87,8 @@ pub fn ensure_delete_journal_mode(conn: &Connection) -> Result<(), PersistenceEr
 }
 
 /// Comprueba que las tablas mínimas del contenedor existen. Se usa al abrir
-/// o guardar un `.branch` ya existente para distinguir "SQLite válido pero
-/// no es un `.branch`" de un fallo genérico.
+/// o guardar un `.brunch` ya existente para distinguir "SQLite válido pero
+/// no es un `.brunch`" de un fallo genérico.
 pub fn verify_container_tables(conn: &Connection) -> Result<(), PersistenceError> {
     let mut stmt = conn.prepare(
         "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN \

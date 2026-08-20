@@ -1,4 +1,4 @@
-//! Operaciones de alto nivel sobre un fichero `.branch`: crear, abrir y
+//! Operaciones de alto nivel sobre un fichero `.brunch`: crear, abrir y
 //! guardar. Rust trata el JSON del `ProjectDocument` como texto opaco (la
 //! forma completa la valida TS/Zod); aquí solo se lee el campo
 //! `schemaVersion` de ese JSON para poder decidir si este binario sabe
@@ -41,7 +41,7 @@ fn check_supported_version(found: i64) -> Result<(), PersistenceError> {
     Ok(())
 }
 
-/// Crea un `.branch` nuevo en `path`, inicializa el esquema SQLite y guarda
+/// Crea un `.brunch` nuevo en `path`, inicializa el esquema SQLite y guarda
 /// `document_json` como el `ProjectDocument` inicial.
 ///
 /// Falla con `AlreadyExists` si ya hay un archivo en esa ruta, para no
@@ -80,7 +80,7 @@ pub fn create_project_file(path: &Path, document_json: &str) -> Result<(), Persi
     Ok(())
 }
 
-/// Abre un `.branch` existente en `path` y devuelve el JSON del
+/// Abre un `.brunch` existente en `path` y devuelve el JSON del
 /// `ProjectDocument` guardado, tal cual se escribió (round-trip exacto).
 pub fn open_project_file(path: &Path) -> Result<String, PersistenceError> {
     if !path.exists() {
@@ -119,7 +119,7 @@ pub fn open_project_file(path: &Path) -> Result<String, PersistenceError> {
 }
 
 /// Sobrescribe, dentro de una transacción, el `ProjectDocument` de un
-/// `.branch` ya existente en `path`.
+/// `.brunch` ya existente en `path`.
 pub fn save_project_file(path: &Path, document_json: &str) -> Result<(), PersistenceError> {
     if !path.exists() {
         return Err(PersistenceError::NotFound(path.display().to_string()));
@@ -156,7 +156,7 @@ mod tests {
     /// se borra solo al salir de scope (Drop) — así no hace falta limpiar
     /// manualmente ni preocuparse por colisiones de nombre entre tests.
     fn temp_branch_path(dir: &TempDir, name: &str) -> std::path::PathBuf {
-        dir.path().join(format!("{name}.branch"))
+        dir.path().join(format!("{name}.brunch"))
     }
 
     fn sample_document_json() -> String {
@@ -195,7 +195,7 @@ mod tests {
         let json = sample_document_json();
         create_project_file(&path, &json).expect("crear proyecto debe funcionar");
 
-        assert!(path.exists(), "el archivo .branch debe existir");
+        assert!(path.exists(), "el archivo .brunch debe existir");
 
         let conn = Connection::open(&path).unwrap();
         let mut stmt = conn
@@ -343,7 +343,7 @@ mod tests {
         value["schemaVersion"] = Value::from(1);
         create_project_file(&path, &value.to_string()).unwrap();
 
-        // Simula un .branch escrito por un binario futuro con una versión
+        // Simula un .brunch escrito por un binario futuro con una versión
         // de esquema desconocida para este binario.
         let conn = Connection::open(&path).unwrap();
         conn.execute(
