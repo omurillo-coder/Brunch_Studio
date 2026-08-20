@@ -28,6 +28,11 @@ describe('Topbar', () => {
       useProjectStore.setState({ saveStatus: 'saved' })
     })
     expect(screen.getByText('Guardado')).toBeInTheDocument()
+
+    act(() => {
+      useProjectStore.setState({ saveStatus: 'error' })
+    })
+    expect(screen.getByText('Error al guardar')).toBeInTheDocument()
   })
 
   it('deshabilita Deshacer/Rehacer cuando no hay historial', () => {

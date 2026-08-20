@@ -23,10 +23,10 @@ export interface AppProps {
  * necesita historial de navegador, deep-linking ni URLs — añadir un router
  * sería complejidad sin beneficio real en este punto.
  *
- * La ruta del archivo abierto no se pasa a `EditorScreen` en esta fase: no
- * hay todavía autoguardado (fase posterior) que necesite saber dónde
- * escribir. Se guarda aquí porque es un detalle de la sesión de la app, no
- * del documento en sí (por eso no vive en `useProjectStore`).
+ * La ruta del archivo abierto se pasa a `EditorScreen` (fase 9): el
+ * autoguardado necesita saber dónde escribir. Se guarda aquí porque es un
+ * detalle de la sesión de la app, no del documento en sí (por eso no vive
+ * en `useProjectStore`).
  */
 function AppShell() {
   const [openProjectPath, setOpenProjectPath] = useState<string | null>(null)
@@ -35,7 +35,7 @@ function AppShell() {
     return <HomeScreen onProjectOpened={setOpenProjectPath} />
   }
 
-  return <EditorScreen />
+  return <EditorScreen filePath={openProjectPath} />
 }
 
 function App({ services }: AppProps) {

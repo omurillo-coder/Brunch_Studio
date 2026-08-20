@@ -1,6 +1,8 @@
 import { act, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { EditorScreen } from '../EditorScreen'
+import { AppServicesProvider } from '../../../app/AppServicesContext'
+import { MemoryProjectRepository } from '../../../persistence'
 import { useProjectStore } from '../../../store'
 import { resetProjectStore } from '../../../store/testHelpers'
 
@@ -8,7 +10,23 @@ import { resetProjectStore } from '../../../store/testHelpers'
  * Integración mínima fase 8: `EditorScreen` conmuta entre el shell de
  * edición normal (Topbar/LeftPanel/Canvas/Inspector) y el Player según
  * `previewMode`, sin que ambos convivan nunca en pantalla.
+ *
+ * A partir de fase 9, `EditorScreen` requiere `filePath` (lo usa
+ * `useAutosave`) y estos tests se envuelven en `AppServicesProvider` con un
+ * `MemoryProjectRepository` en vez del `TauriProjectRepository` real por
+ * defecto, para que el autoguardado de fondo no intente invocar comandos
+ * Tauri inexistentes en este entorno de test.
  */
+
+const TEST_FILE_PATH = '/tmp/editor-screen-test.branch'
+
+function renderEditorScreen() {
+  return render(
+    <AppServicesProvider services={{ repository: new MemoryProjectRepository() }}>
+      <EditorScreen filePath={TEST_FILE_PATH} />
+    </AppServicesProvider>,
+  )
+}
 
 beforeEach(() => {
   resetProjectStore()
@@ -16,7 +34,7 @@ beforeEach(() => {
 
 describe('EditorScreen — conmutación shell/Player (previewMode)', () => {
   it('con previewMode en false, muestra el shell normal y no el Player', () => {
-    render(<EditorScreen />)
+    renderEditorScreen()
 
     // Rastro inequívoco del shell normal: el botón "▶ Probar" de Topbar.
     expect(screen.getByText('▶ Probar')).toBeInTheDocument()
@@ -29,7 +47,7 @@ describe('EditorScreen — conmutación shell/Player (previewMode)', () => {
     act(() => {
       useProjectStore.getState().setPreviewMode(true)
     })
-    render(<EditorScreen />)
+    renderEditorScreen()
 
     expect(screen.getByText('← Volver al editor')).toBeInTheDocument()
     expect(screen.getByText('↺ Reiniciar experiencia')).toBeInTheDocument()
@@ -38,7 +56,7 @@ describe('EditorScreen — conmutación shell/Player (previewMode)', () => {
   })
 
   it('"▶ Probar" seguido de "Volver al editor" hace ida y vuelta entre shell y Player', () => {
-    render(<EditorScreen />)
+    renderEditorScreen()
     expect(screen.getByText('▶ Probar')).toBeInTheDocument()
 
     act(() => {

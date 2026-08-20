@@ -5,17 +5,20 @@ import styles from './Topbar.module.css'
 
 /**
  * Texto mostrado para cada `saveStatus` del store. El autoguardado real
- * (debounce, escritura efectiva a disco) es de una fase posterior; aquí
- * solo se traduce el estado tal cual esté en el store. `idle` se muestra
- * igual que `saved` ("Guardado") porque en esta fase no hay manera de que
- * el documento esté "sin guardar" sin que exista lógica de guardado que lo
- * marque como tal — mostrar algo distinto a "Guardado" sin haber guardado
- * nunca nada sería confuso.
+ * (debounce, escritura efectiva a disco) vive en
+ * `src/editor/EditorScreen/useAutosave.ts` (fase 9); aquí solo se traduce
+ * el estado tal cual esté en el store. `idle` se muestra igual que `saved`
+ * ("Guardado") porque representa un documento recién creado/abierto que ya
+ * coincide con el disco (ver comentario de diseño de `SaveStatus` en
+ * `store/types.ts`) — mostrar algo distinto a "Guardado" ahí sería confuso.
+ * `error` se traduce a un texto honesto: el último guardado falló de
+ * verdad, no debe fingirse "Guardado".
  */
 const SAVE_STATUS_LABEL: Record<SaveStatus, string> = {
   idle: 'Guardado',
   saving: 'Guardando…',
   saved: 'Guardado',
+  error: 'Error al guardar',
 }
 
 function isEditableTarget(target: EventTarget | null): boolean {

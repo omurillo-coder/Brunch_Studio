@@ -50,8 +50,25 @@ export interface UiState {
   titleFocusRequestNodeId: string | null
 }
 
-/** Estado de guardado expuesto para una futura fase de autoguardado. */
-export type SaveStatus = 'idle' | 'saving' | 'saved'
+/**
+ * Estado de guardado, consumido por `Topbar` y gestionado por el
+ * autoguardado (fase 9, ver `src/editor/EditorScreen/useAutosave.ts`).
+ *
+ * - `idle`: estado "de fábrica" (bootstrap inicial o justo tras
+ *   `loadProject`) — el contenido en memoria coincide con el disco pero
+ *   todavía no ha pasado por el ciclo de autoguardado. `useAutosave` lo
+ *   consume una única vez (lo pasa a `saved`) al detectar el primer cambio
+ *   posterior a un montaje/carga, precisamente para no disparar un guardado
+ *   redundante en ese momento — ver comentario de diseño en `useAutosave`.
+ * - `saving`: hay cambios pendientes de escribir a disco (debounce en
+ *   marcha o escritura en curso).
+ * - `saved`: el último guardado (o la última carga) se completó con éxito.
+ * - `error`: el último intento de guardado falló. Se añade en esta fase
+ *   para no fingir un "Guardado" que no ocurrió — ver la decisión de diseño
+ *   documentada en `useAutosave`. No es un estado terminal: el siguiente
+ *   cambio del documento vuelve a intentar guardar con normalidad.
+ */
+export type SaveStatus = 'idle' | 'saving' | 'saved' | 'error'
 
 /**
  * Pilas de deshacer/rehacer. Cada entrada es un snapshot completo del
