@@ -55,8 +55,7 @@
   letter-spacing: 0.04em;
 }
 
-.input,
-.textarea {
+.input {
   width: 100%;
   padding: var(--bs-space-2);
   border: 1px solid var(--bs-color-border);
@@ -66,15 +65,8 @@
   font-size: var(--bs-font-size-md);
 }
 
-.input:focus,
-.textarea:focus {
+.input:focus {
   border-color: var(--bs-color-accent);
-}
-
-.textarea {
-  resize: vertical;
-  min-height: 140px;
-  font-family: var(--bs-font-sans);
 }
 
 .select {

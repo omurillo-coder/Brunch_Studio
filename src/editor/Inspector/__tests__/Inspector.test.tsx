@@ -67,7 +67,7 @@ describe('Inspector', () => {
     expect(startRow).toHaveTextContent('1')
   })
 
-  it('con un nodo seleccionado muestra su título y contenido actuales', () => {
+  it('con un nodo seleccionado muestra su título y contenido actuales', async () => {
     act(() => {
       useProjectStore.getState().updateNode(startNodeId(), { title: 'Bienvenida', body: 'Hola' })
       useProjectStore.getState().selectNode(startNodeId())
@@ -76,7 +76,12 @@ describe('Inspector', () => {
     render(<Inspector filePath={TEST_FILE_PATH} />)
 
     expect(screen.getByLabelText('Título')).toHaveValue('Bienvenida')
-    expect(screen.getByLabelText('Contenido')).toHaveValue('Hola')
+    // El campo "Contenido" es ahora el editor de texto enriquecido
+    // (`RichTextEditor`, fase 4 Milestone 2): un `<div contenteditable>`, no
+    // un `<textarea>` con `.value` — se comprueba el texto renderizado.
+    await waitFor(() => {
+      expect(screen.getByLabelText('Contenido')).toHaveTextContent('Hola')
+    })
   })
 
   it('editar y hacer blur produce exactamente una llamada efectiva a updateNode', () => {
@@ -647,5 +652,125 @@ describe('Inspector — adjuntos de imagen/audio por respuesta (fase 3, Mileston
     expect(
       screen.getByRole('button', { name: 'Adjuntar imagen de la respuesta A' }),
     ).toBeInTheDocument()
+  })
+})
+
+describe('Inspector — editor de texto enriquecido del campo "Contenido" (fase 4, Milestone 2)', () => {
+  /** Espera al `requestAnimationFrame` que `editor.chain().focus()` programa
+   *  internamente antes de mover el foco real al DOM (ver
+   *  `RichTextEditor.test.tsx` para el detalle). */
+  function waitOneFrame() {
+    return new Promise<void>((resolve) => requestAnimationFrame(() => setTimeout(resolve, 0)))
+  }
+
+  async function blurByMovingFocusAway() {
+    const elsewhere = document.createElement('button')
+    document.body.appendChild(elsewhere)
+    elsewhere.focus()
+    await waitOneFrame()
+  }
+
+  it(
+    'compatibilidad hacia atrás: un nodo con body en texto plano histórico (Milestone 1) se ' +
+      'muestra como párrafo normal, no como JSON en crudo',
+    async () => {
+      act(() => {
+        // Simula un proyecto creado antes de esta fase: `body` es
+        // literalmente el texto del usuario, nunca un documento Tiptap
+        // serializado.
+        useProjectStore.getState().updateNode(startNodeId(), { body: 'Texto plano histórico' })
+        useProjectStore.getState().selectNode(startNodeId())
+      })
+
+      render(<Inspector filePath={TEST_FILE_PATH} />)
+
+      const contentField = await screen.findByLabelText('Contenido')
+      await waitFor(() => {
+        expect(contentField).toHaveTextContent('Texto plano histórico')
+      })
+      // Nunca se muestra el JSON en crudo ni llaves de objeto.
+      expect(contentField.textContent).not.toMatch(/[{}]/)
+    },
+  )
+
+  it('escribir en el editor enriquecido y perder el foco confirma exactamente una vez en el store', async () => {
+    act(() => {
+      useProjectStore.getState().updateNode(startNodeId(), { body: 'Hola' })
+      useProjectStore.getState().selectNode(startNodeId())
+    })
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    const historyBefore = useProjectStore.getState().history.past.length
+    const editable = document.querySelector('[contenteditable="true"]') as HTMLElement
+    editable.focus()
+    await waitOneFrame()
+
+    // `toggleBulletList` es el comando fiable en jsdom para mutar el
+    // documento sin depender de una selección de texto real (ver nota en
+    // `RichTextEditor.test.tsx`); prueba el mismo circuito de commit on
+    // blur que negrita/cursiva usarían con una selección real.
+    fireEvent.mouseDown(screen.getByRole('button', { name: 'Lista con viñetas' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Lista con viñetas' }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Lista con viñetas' })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      )
+    })
+    // Ninguna pulsación debe haber tocado el store todavía.
+    expect(useProjectStore.getState().history.past.length).toBe(historyBefore)
+
+    await blurByMovingFocusAway()
+
+    expect(useProjectStore.getState().history.past.length).toBe(historyBefore + 1)
+    const node = useProjectStore.getState().project.graph.nodes.find((n) => n.id === startNodeId())
+    const bodyDoc = JSON.parse(node?.body ?? '{}')
+    expect(bodyDoc.content[0].type).toBe('bulletList')
+
+    // Un segundo blur sin más cambios no debe generar otra entrada.
+    await blurByMovingFocusAway()
+    expect(useProjectStore.getState().history.past.length).toBe(historyBefore + 1)
+  })
+
+  it('cambiar de nodo seleccionado sin hacer blur en el editor enriquecido confirma la edición pendiente', async () => {
+    act(() => {
+      useProjectStore.getState().createNode('content', { x: 0, y: 0 })
+      useProjectStore.getState().updateNode(startNodeId(), { body: 'Hola' })
+      useProjectStore.getState().selectNode(startNodeId())
+    })
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    const historyBefore = useProjectStore.getState().history.past.length
+    const editable = document.querySelector('[contenteditable="true"]') as HTMLElement
+    editable.focus()
+    await waitOneFrame()
+
+    fireEvent.mouseDown(screen.getByRole('button', { name: 'Lista con viñetas' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Lista con viñetas' }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Lista con viñetas' })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      )
+    })
+
+    const otherNode = useProjectStore
+      .getState()
+      .project.graph.nodes.find((n) => n.type === 'content')
+    if (!otherNode) throw new Error('No hay nodo content')
+
+    // Cambia de selección sin haber perdido el foco del editor antes —
+    // `NodeFields` remonta con `key={node.id}`, así que `RichTextEditor` se
+    // desmonta sin blur previo.
+    act(() => {
+      useProjectStore.getState().selectNode(otherNode.id)
+    })
+
+    expect(useProjectStore.getState().history.past.length).toBe(historyBefore + 1)
+    const startNode = useProjectStore.getState().project.graph.nodes.find((n) => n.id === startNodeId())
+    const bodyDoc = JSON.parse(startNode?.body ?? '{}')
+    expect(bodyDoc.content[0].type).toBe('bulletList')
   })
 })

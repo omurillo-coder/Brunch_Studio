@@ -1,0 +1,74 @@
+.editorWrapper {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--bs-color-border);
+  border-radius: var(--bs-radius-sm);
+  background: var(--bs-color-bg);
+  overflow: hidden;
+}
+
+.editorWrapper:focus-within {
+  border-color: var(--bs-color-accent);
+}
+
+.toolbar {
+  display: flex;
+  gap: var(--bs-space-1);
+  padding: var(--bs-space-1);
+  border-bottom: 1px solid var(--bs-color-border);
+  background: var(--bs-color-surface);
+}
+
+.toolbarButton,
+.toolbarButtonActive {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 var(--bs-space-1);
+  border: 1px solid transparent;
+  border-radius: var(--bs-radius-sm);
+  background: none;
+  color: var(--bs-color-text);
+  font-size: var(--bs-font-size-xs);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.toolbarButton:hover {
+  border-color: var(--bs-color-border);
+}
+
+.toolbarButtonActive {
+  border-color: var(--bs-color-accent);
+  background: color-mix(in srgb, var(--bs-color-accent) 16%, transparent);
+  color: var(--bs-color-accent);
+}
+
+.editorContent {
+  min-height: 140px;
+}
+
+.editorContent :global(.tiptap) {
+  min-height: 140px;
+  padding: var(--bs-space-2);
+  font-family: var(--bs-font-sans);
+  font-size: var(--bs-font-size-md);
+  color: var(--bs-color-text);
+  outline: none;
+}
+
+.editorContent :global(.tiptap p) {
+  margin: 0 0 var(--bs-space-2);
+}
+
+.editorContent :global(.tiptap p:last-child) {
+  margin-bottom: 0;
+}
+
+.editorContent :global(.tiptap ul),
+.editorContent :global(.tiptap ol) {
+  margin: 0 0 var(--bs-space-2);
+  padding-left: var(--bs-space-4);
+}

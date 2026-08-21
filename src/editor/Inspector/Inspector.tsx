@@ -16,6 +16,7 @@ import type {
   ProjectDocument,
 } from '../../domain'
 import { useAppServices } from '../../app/AppServicesContext'
+import { RichTextEditor } from '../richText/RichTextEditor'
 import styles from './Inspector.module.css'
 
 const NODE_TYPE_LABEL: Record<NodeType, string> = {
@@ -593,18 +594,22 @@ function NodeFields({
   const clearTitleFocusRequest = useProjectStore((state) => state.clearTitleFocusRequest)
   const titleInputRef = useRef<HTMLInputElement>(null)
 
+  // El campo `body` (fase 4, Milestone 2: editor de texto enriquecido) ya no
+  // se gestiona aquí como estado local de texto — `RichTextEditor` confirma
+  // sus propios cambios en el store vía su prop `onCommit`, con el mismo
+  // criterio "commit on blur" (ver `RichTextEditor.tsx`). Este componente
+  // solo sigue gestionando el título.
   const [title, setTitle] = useState(node.title)
-  const [body, setBody] = useState(node.body)
 
   // Snapshot de lo último confirmado contra el store, para no repetir un
   // `updateNode` si el valor local coincide con lo ya guardado (evita una
   // entrada de historial vacía, p.ej. blur sin haber tecleado nada, o un
   // segundo blur tras un commit ya hecho con Enter).
-  const committedRef = useRef({ title: node.title, body: node.body })
+  const committedRef = useRef({ title: node.title })
   // Siempre el valor local más reciente, para poder leerlo desde el
   // cleanup del efecto de desmontaje sin depender de closures obsoletas.
-  const latestRef = useRef({ title, body })
-  latestRef.current = { title, body }
+  const latestRef = useRef({ title })
+  latestRef.current = { title }
 
   useEffect(() => {
     return () => {
@@ -631,9 +636,9 @@ function NodeFields({
   function commitPending() {
     const pending = latestRef.current
     const committed = committedRef.current
-    if (pending.title !== committed.title || pending.body !== committed.body) {
-      updateNode(node.id, { title: pending.title, body: pending.body })
-      committedRef.current = { title: pending.title, body: pending.body }
+    if (pending.title !== committed.title) {
+      updateNode(node.id, { title: pending.title })
+      committedRef.current = { title: pending.title }
     }
   }
 
@@ -661,16 +666,13 @@ function NodeFields({
         />
       </div>
       <div>
-        <label className={styles.label} htmlFor="inspector-node-body">
+        <span id="inspector-node-body-label" className={styles.label}>
           Contenido
-        </label>
-        <textarea
-          id="inspector-node-body"
-          className={styles.textarea}
-          value={body}
-          onChange={(event) => setBody(event.target.value)}
-          onBlur={commitPending}
-          rows={8}
+        </span>
+        <RichTextEditor
+          body={node.body}
+          onCommit={(nextBody) => updateNode(node.id, { body: nextBody })}
+          ariaLabelledBy="inspector-node-body-label"
         />
       </div>
       {(node.type === 'content' || node.type === 'decision') && (

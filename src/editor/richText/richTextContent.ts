@@ -1,0 +1,88 @@
+import type { JSONContent } from '@tiptap/core'
+
+/**
+ * Serialización del campo `body` de un nodo (fase 4, Milestone 2).
+ *
+ * `body` sigue siendo `z.string()` en `src/domain` — el dominio no sabe nada
+ * de Tiptap, sigue viendo una cadena opaca. Lo que cambia es lo que esa
+ * cadena contiene: a partir de esta fase, un documento Tiptap serializado
+ * como JSON (`JSON.stringify(editor.getJSON())`) en vez de texto plano. Ese
+ * parseo/serialización vive aquí, fuera del dominio, precisamente para no
+ * acoplarlo a Tiptap.
+ *
+ * Compatibilidad hacia atrás (crítico): un proyecto creado en el Milestone 1
+ * tiene `body` en texto plano literal (p.ej. `"Hola, bienvenido"`). Esa
+ * cadena no es JSON válido, así que `parseRichBody` cae al caso "texto
+ * plano histórico" y la envuelve en un documento de un único párrafo — el
+ * editor la muestra como contenido normal, nunca como JSON en crudo.
+ */
+
+/** Forma mínima que debe tener un valor para considerarlo un documento
+ *  Tiptap ya serializado, en vez de texto plano histórico. */
+function looksLikeTiptapDoc(value: unknown): value is JSONContent {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value) &&
+    (value as { type?: unknown }).type === 'doc' &&
+    Array.isArray((value as { content?: unknown }).content)
+  )
+}
+
+/** Documento Tiptap de un único párrafo con `text` como único contenido (o
+ *  un párrafo vacío si `text` es la cadena vacía). */
+function wrapPlainText(text: string): JSONContent {
+  return {
+    type: 'doc',
+    content: [
+      {
+        type: 'paragraph',
+        content: text ? [{ type: 'text', text }] : [],
+      },
+    ],
+  }
+}
+
+/**
+ * Interpreta el `body` (string) de un nodo como documento Tiptap.
+ *
+ * - `raw` vacío -> documento válido con un único párrafo vacío (no lanza).
+ * - `raw` es JSON con forma de documento Tiptap (`{ type: 'doc', content:
+ *   [...] }`) -> se devuelve tal cual (parseado).
+ * - Cualquier otro caso (JSON.parse falla, o el JSON parseado no tiene esa
+ *   forma) -> se trata `raw` como texto plano histórico y se envuelve en un
+ *   párrafo único.
+ *
+ * Caso límite documentado: un `raw` que sea JSON válido pero no reconocible
+ * como documento Tiptap (p.ej. `"42"`, `"{\"a\":1}"`) se trata igual que
+ * texto plano — se envuelve tal cual como el texto del párrafo, JSON en
+ * crudo incluido, porque a ojos de esta función no es distinguible de texto
+ * plano "raro". No es un problema en la práctica: esta función solo ve
+ * cadenas que vinieron de `serializeRichBody` (documentos Tiptap reales) o
+ * de texto plano histórico anterior a esta fase; nunca JSON arbitrario de
+ * otro origen.
+ */
+export function parseRichBody(raw: string): JSONContent {
+  if (raw === '') {
+    return wrapPlainText('')
+  }
+
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(raw)
+  } catch {
+    return wrapPlainText(raw)
+  }
+
+  if (!looksLikeTiptapDoc(parsed)) {
+    return wrapPlainText(raw)
+  }
+
+  return parsed
+}
+
+/** Inverso de `parseRichBody`: serializa un documento Tiptap a la cadena que
+ *  se guarda en `body`. */
+export function serializeRichBody(doc: JSONContent): string {
+  return JSON.stringify(doc)
+}

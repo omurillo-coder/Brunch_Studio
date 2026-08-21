@@ -71,3 +71,37 @@ Element.prototype.getBoundingClientRect = function getBoundingClientRect(): DOMR
     },
   }
 }
+
+/**
+ * Polyfills necesarios para poder montar `@tiptap/react` (fase 4, Milestone
+ * 2, editor de texto enriquecido) en jsdom. jsdom no implementa ningún
+ * método de medición de layout real en `Range` (`getClientRects`,
+ * `getBoundingClientRect`): sin ellos, `EditorView.scrollToSelection` de
+ * ProseMirror lanza un `TypeError` cada vez que el editor despacha una
+ * transacción con una nueva selección (p.ej. al enfocar o alternar un
+ * formato desde la barra de herramientas). Un rectángulo vacío basta porque
+ * los tests de este proyecto no dependen de coordenadas de layout reales.
+ */
+const emptyDOMRect = (): DOMRect => ({
+  x: 0,
+  y: 0,
+  width: 0,
+  height: 0,
+  top: 0,
+  left: 0,
+  right: 0,
+  bottom: 0,
+  toJSON() {
+    return this
+  },
+})
+
+if (typeof Range.prototype.getClientRects === 'undefined') {
+  Range.prototype.getClientRects = function getClientRects(): DOMRectList {
+    return { length: 0, item: () => null, [Symbol.iterator]: [][Symbol.iterator] } as unknown as DOMRectList
+  }
+}
+
+if (typeof Range.prototype.getBoundingClientRect === 'undefined') {
+  Range.prototype.getBoundingClientRect = emptyDOMRect
+}
