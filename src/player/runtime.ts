@@ -45,14 +45,25 @@ export type PlayerView =
   | { kind: 'dead-end'; node: Node | null }
 
 /**
- * Estado mínimo del recorrido: solo el id del nodo en el que se encuentra
- * ahora mismo. Deliberadamente no vive en `useProjectStore` ni pasa por su
- * historial de undo/redo — no es parte del documento, es una simulación
- * efímera de lectura sobre él (ver `PlayerScreen`).
+ * Estado mínimo del recorrido: el id del nodo en el que se encuentra ahora
+ * mismo, más la puntuación acumulada durante ese recorrido. Deliberadamente
+ * no vive en `useProjectStore` ni pasa por su historial de undo/redo — no es
+ * parte del documento, es una simulación efímera de lectura sobre él (ver
+ * `PlayerScreen`).
  */
 export interface PlayerState {
   /** `null` únicamente cuando el documento no tiene ningún nodo `start`. */
   currentNodeId: string | null
+  /**
+   * Puntuación acumulada a lo largo del recorrido (fase 5, Milestone 2).
+   * `null` mientras ninguna respuesta elegida haya definido `points` —
+   * deliberadamente distinto de `0`: un escenario que no usa puntuación en
+   * absoluto no debe mostrar "0 puntos" en su Final, sería confuso. Pasa a
+   * ser un número en cuanto se elige la primera respuesta con `points`
+   * definido, y a partir de ahí solo puede crecer o decrecer (nunca vuelve a
+   * `null` salvo por `restart`/`getInitialState`).
+   */
+  totalPoints: number | null
 }
 
 function findStartNode(project: ProjectDocument): StartNode | null {
@@ -74,8 +85,8 @@ function findNode(project: ProjectDocument, nodeId: string): Node | null {
  */
 export function getInitialState(project: ProjectDocument): PlayerState {
   const start = findStartNode(project)
-  if (!start) return { currentNodeId: null }
-  return { currentNodeId: start.targetNodeId ?? start.id }
+  if (!start) return { currentNodeId: null, totalPoints: null }
+  return { currentNodeId: start.targetNodeId ?? start.id, totalPoints: null }
 }
 
 /**
@@ -134,14 +145,21 @@ export function advance(project: ProjectDocument, state: PlayerState): PlayerSta
   if (state.currentNodeId === null) return state
   const node = findNode(project, state.currentNodeId)
   if (!node || node.type !== 'content' || !node.targetNodeId) return state
-  return { currentNodeId: node.targetNodeId }
+  return { ...state, currentNodeId: node.targetNodeId }
 }
 
 /**
- * Elige una respuesta desde una Decisión y avanza a su `targetNodeId`. Si
- * la respuesta no existe, no pertenece al nodo actual, o no tiene destino
+ * Elige una respuesta desde una Decisión y avanza a su `targetNodeId`,
+ * acumulando su `points` (si los define) en `state.totalPoints`. Si la
+ * respuesta no existe, no pertenece al nodo actual, o no tiene destino
  * configurado, no hace nada y devuelve el mismo estado — la UI solo debería
  * ofrecer como pulsables las respuestas que sí tienen destino.
+ *
+ * Semántica de puntuación: `response.points === undefined` (respuesta sin
+ * puntuación configurada) deja `totalPoints` intacto, tal cual estaba antes
+ * de elegir esta respuesta. `response.points` definido se suma al total
+ * actual, arrancando en `0` si `totalPoints` era todavía `null` (primera
+ * respuesta con puntuación de todo el recorrido).
  */
 export function choose(
   project: ProjectDocument,
@@ -153,5 +171,7 @@ export function choose(
   if (!node || node.type !== 'decision') return state
   const response = node.responses.find((candidate) => candidate.id === responseId)
   if (!response || !response.targetNodeId) return state
-  return { currentNodeId: response.targetNodeId }
+  const totalPoints =
+    response.points === undefined ? state.totalPoints : (state.totalPoints ?? 0) + response.points
+  return { currentNodeId: response.targetNodeId, totalPoints }
 }

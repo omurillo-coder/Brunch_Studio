@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addResponse, connect, createNode, createProject } from '../../domain'
+import { addResponse, connect, createNode, createProject, updateResponse } from '../../domain'
 import type { ProjectDocument } from '../../domain'
 import { advance, choose, getInitialState, getView, restart } from '../runtime'
 
@@ -170,6 +170,108 @@ describe('runtime del Player', () => {
     let state = getInitialState(project)
     state = advance(project, state) // ahora en decisionId
     const advancedAgain = advance(project, state)
-    expect(advancedAgain).toEqual({ currentNodeId: decisionId })
+    expect(advancedAgain).toEqual({ currentNodeId: decisionId, totalPoints: null })
+  })
+})
+
+/**
+ * Construye: start -> decisión 1 -[A, points=5]-> decisión 2 -[B, sin points]-> final
+ *                    -[B, sin points]                      -[A, points=-2]
+ * Dos decisiones consecutivas para poder comprobar que `choose` acumula a
+ * través de varias elecciones seguidas, no solo una.
+ */
+function buildTwoDecisionsGraph() {
+  let project = createProject('P')
+  project = createNode(project, 'decision', { x: 100, y: 0 })
+  project = createNode(project, 'decision', { x: 200, y: 0 })
+  project = createNode(project, 'final', { x: 300, y: 0 })
+
+  const startId = nodeIdOf(project, 'start')
+  const decisionIds = project.graph.nodes.filter((node) => node.type === 'decision').map((n) => n.id)
+  const [decision1Id, decision2Id] = decisionIds as [string, string]
+  const finalId = nodeIdOf(project, 'final')
+
+  project = connect(project, startId, decision1Id)
+  project = addResponse(project, decision1Id) // A
+  project = addResponse(project, decision1Id) // B
+  project = addResponse(project, decision2Id) // A
+  project = addResponse(project, decision2Id) // B
+
+  const decision1 = project.graph.nodes.find((n) => n.id === decision1Id)
+  const responses1 = decision1?.type === 'decision' ? decision1.responses : []
+  const response1A = responses1.find((r) => r.letter === 'A')
+  const response1B = responses1.find((r) => r.letter === 'B')
+  if (!response1A || !response1B) throw new Error('setup inválido')
+
+  // A1 tiene puntuación (5), B1 no define puntuación en absoluto.
+  project = updateResponse(project, decision1Id, response1A.id, { points: 5 })
+  project = connect(project, decision1Id, decision2Id, response1A.id)
+  project = connect(project, decision1Id, decision2Id, response1B.id)
+
+  const decision2 = project.graph.nodes.find((n) => n.id === decision2Id)
+  const responses2 = decision2?.type === 'decision' ? decision2.responses : []
+  const response2A = responses2.find((r) => r.letter === 'A')
+  const response2B = responses2.find((r) => r.letter === 'B')
+  if (!response2A || !response2B) throw new Error('setup inválido')
+
+  // A2 tiene puntuación negativa (-2), B2 no define puntuación.
+  project = updateResponse(project, decision2Id, response2A.id, { points: -2 })
+  project = connect(project, decision2Id, finalId, response2A.id)
+  project = connect(project, decision2Id, finalId, response2B.id)
+
+  return { project, decision1Id, decision2Id, finalId, response1A, response1B, response2A, response2B }
+}
+
+describe('runtime del Player: puntuación acumulada (totalPoints)', () => {
+  it('getInitialState/restart arrancan con totalPoints en null', () => {
+    const { project } = buildTwoDecisionsGraph()
+    expect(getInitialState(project).totalPoints).toBeNull()
+    expect(restart(project).totalPoints).toBeNull()
+  })
+
+  it('choose acumula puntos a través de varias decisiones consecutivas', () => {
+    const { project, response1A, response2A } = buildTwoDecisionsGraph()
+
+    let state = getInitialState(project)
+    expect(state.totalPoints).toBeNull()
+
+    state = choose(project, state, response1A.id)
+    expect(state.totalPoints).toBe(5)
+
+    state = choose(project, state, response2A.id)
+    expect(state.totalPoints).toBe(3) // 5 + (-2)
+  })
+
+  it('una respuesta sin "points" definido no altera el total acumulado', () => {
+    const { project, response1A, response2B } = buildTwoDecisionsGraph()
+
+    let state = getInitialState(project)
+    state = choose(project, state, response1A.id) // +5
+    expect(state.totalPoints).toBe(5)
+
+    state = choose(project, state, response2B.id) // sin points: no cambia
+    expect(state.totalPoints).toBe(5)
+  })
+
+  it('totalPoints permanece en null si ninguna respuesta elegida en el camino define "points"', () => {
+    const { project, response1B, response2B } = buildTwoDecisionsGraph()
+
+    let state = getInitialState(project)
+    state = choose(project, state, response1B.id)
+    expect(state.totalPoints).toBeNull()
+
+    state = choose(project, state, response2B.id)
+    expect(state.totalPoints).toBeNull()
+  })
+
+  it('restart reinicia totalPoints a null tras haber acumulado puntuación', () => {
+    const { project, response1A } = buildTwoDecisionsGraph()
+
+    let state = getInitialState(project)
+    state = choose(project, state, response1A.id)
+    expect(state.totalPoints).toBe(5)
+
+    const restarted = restart(project)
+    expect(restarted.totalPoints).toBeNull()
   })
 })

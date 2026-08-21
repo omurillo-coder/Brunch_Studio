@@ -37,7 +37,7 @@ export function EditorScreen({ filePath }: EditorScreenProps) {
   useAutosave(filePath)
 
   if (previewMode) {
-    return <PlayerScreen />
+    return <PlayerScreen filePath={filePath} />
   }
 
   return (

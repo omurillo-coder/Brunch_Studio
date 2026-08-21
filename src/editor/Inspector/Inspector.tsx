@@ -16,6 +16,7 @@ import type {
   ProjectDocument,
 } from '../../domain'
 import { useAppServices } from '../../app/AppServicesContext'
+import { useAssetDataUri } from '../../hooks/useAssetDataUri'
 import { RichTextEditor } from '../richText/RichTextEditor'
 import styles from './Inspector.module.css'
 
@@ -120,11 +121,11 @@ interface MediaAttachmentProps {
  * desde sus padres: cuando el `assetId` mostrado cambia (adjuntar el
  * primero, o "Reemplazar" uno ya existente), React destruye esta instancia
  * y crea una nueva en vez de reutilizarla, así que el estado de vista previa
- * siempre arranca limpio para el asset nuevo sin necesitar un `setState`
- * síncrono de "reseteo" al principio del efecto. El flag `cancelled` en el
- * cleanup sigue siendo necesario aparte: cubre el caso de que esta misma
- * instancia se desmonte (cambio de asset, o de nodo/respuesta seleccionado)
- * mientras la promesa de `getAsset` todavía está en vuelo.
+ * siempre arranca limpio para el asset nuevo. La carga en sí (y su guarda
+ * contra respuestas obsoletas si esta instancia se desmontara con la
+ * promesa todavía en vuelo) vive en `useAssetDataUri`, compartido con
+ * `PlayerScreen` — aquí solo se decide cómo renderizar el resultado y qué
+ * mostrar ante un error.
  */
 function AssetPreview({
   kind,
@@ -138,42 +139,24 @@ function AssetPreview({
   suffix: string
 }) {
   const { assetRepository } = useAppServices()
-  const [previewDataUri, setPreviewDataUri] = useState<string | null>(null)
-  const [previewError, setPreviewError] = useState<string | null>(null)
-
-  useEffect(() => {
-    let cancelled = false
-    assetRepository
-      .getAsset(filePath, assetId)
-      .then((data) => {
-        if (cancelled) return
-        setPreviewDataUri(`data:${data.mimeType};base64,${data.dataBase64}`)
-      })
-      .catch(() => {
-        if (cancelled) return
-        setPreviewError('No se ha podido cargar la vista previa.')
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [assetId, filePath, assetRepository])
+  const { dataUri, error } = useAssetDataUri(filePath, assetId, assetRepository)
 
   return (
     <>
-      {previewDataUri && kind === 'image' && (
+      {dataUri && kind === 'image' && (
         <img
           className={styles.mediaThumbnail}
-          src={previewDataUri}
+          src={dataUri}
           alt={`Vista previa de la imagen adjunta${suffix}`}
         />
       )}
-      {previewDataUri && kind === 'audio' && (
+      {dataUri && kind === 'audio' && (
         // eslint-disable-next-line jsx-a11y/media-has-caption
-        <audio className={styles.audioPreview} controls src={previewDataUri} />
+        <audio className={styles.audioPreview} controls src={dataUri} />
       )}
-      {previewError && (
+      {error && (
         <p role="alert" className={styles.mediaError}>
-          {previewError}
+          No se ha podido cargar la vista previa.
         </p>
       )}
     </>
