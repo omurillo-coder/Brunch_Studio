@@ -73,6 +73,60 @@ describe('acciones de dominio: una entrada de historial por acción', () => {
     expect(redone?.title).toBe('Inicio')
   })
 
+  it('updateNode propaga imageAssetId/audioAssetId de un nodo content (fijar y borrar con null)', () => {
+    useProjectStore.getState().createNode('content', { x: 0, y: 0 })
+    const contentId = nodeIdOf('content')
+
+    useProjectStore.getState().updateNode(contentId, {
+      imageAssetId: 'asset-imagen-1',
+      audioAssetId: 'asset-audio-1',
+    })
+    const withMedia = useProjectStore.getState().project.graph.nodes.find((n) => n.id === contentId)
+    expect(withMedia?.type === 'content' && withMedia.imageAssetId).toBe('asset-imagen-1')
+    expect(withMedia?.type === 'content' && withMedia.audioAssetId).toBe('asset-audio-1')
+
+    useProjectStore.getState().updateNode(contentId, { imageAssetId: null })
+    const afterClearImage = useProjectStore
+      .getState()
+      .project.graph.nodes.find((n) => n.id === contentId)
+    expect(afterClearImage?.type === 'content' && afterClearImage.imageAssetId).toBeUndefined()
+    expect(afterClearImage?.type === 'content' && afterClearImage.audioAssetId).toBe('asset-audio-1')
+  })
+
+  it('updateResponse propaga points/imageAssetId/audioAssetId de una respuesta (fijar y borrar con null)', () => {
+    useProjectStore.getState().createNode('decision', { x: 0, y: 0 })
+    const decisionId = nodeIdOf('decision')
+    const decisionNode = useProjectStore
+      .getState()
+      .project.graph.nodes.find((n) => n.id === decisionId) as DecisionNode
+    const responseId = decisionNode.responses[0]?.id
+    if (!responseId) throw new Error('responseId inesperadamente ausente')
+
+    useProjectStore.getState().updateResponse(decisionId, responseId, {
+      points: 10,
+      imageAssetId: 'asset-imagen-2',
+      audioAssetId: 'asset-audio-2',
+    })
+    const withMedia = (
+      useProjectStore.getState().project.graph.nodes.find((n) => n.id === decisionId) as DecisionNode
+    ).responses.find((r) => r.id === responseId)
+    expect(withMedia?.points).toBe(10)
+    expect(withMedia?.imageAssetId).toBe('asset-imagen-2')
+    expect(withMedia?.audioAssetId).toBe('asset-audio-2')
+
+    useProjectStore.getState().updateResponse(decisionId, responseId, {
+      points: null,
+      audioAssetId: null,
+    })
+    const afterClear = (
+      useProjectStore.getState().project.graph.nodes.find((n) => n.id === decisionId) as DecisionNode
+    ).responses.find((r) => r.id === responseId)
+    expect(afterClear?.points).toBeUndefined()
+    expect(afterClear?.audioAssetId).toBeUndefined()
+    // imageAssetId no estaba en el segundo patch (undefined = no tocar): sigue fijado.
+    expect(afterClear?.imageAssetId).toBe('asset-imagen-2')
+  })
+
   it('addResponse y removeResponse producen una entrada cada una', () => {
     useProjectStore.getState().createNode('decision', { x: 0, y: 0 })
     const decisionId = nodeIdOf('decision')

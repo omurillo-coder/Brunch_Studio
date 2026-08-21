@@ -46,7 +46,7 @@ export function EditorScreen({ filePath }: EditorScreenProps) {
       <div className={styles.body}>
         <LeftPanel />
         <Canvas />
-        <Inspector />
+        <Inspector filePath={filePath} />
       </div>
     </div>
   )

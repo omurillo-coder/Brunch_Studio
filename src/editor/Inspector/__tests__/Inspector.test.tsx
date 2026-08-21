@@ -1,9 +1,14 @@
-import { act, fireEvent, render, screen } from '@testing-library/react'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { Inspector } from '../Inspector'
 import { useProjectStore } from '../../../store'
 import { resetProjectStore } from '../../../store/testHelpers'
-import type { DecisionNode } from '../../../domain'
+import type { ContentNode, DecisionNode } from '../../../domain'
+import { AppServicesProvider } from '../../../app/AppServicesContext'
+import type { AppServices } from '../../../app/AppServices'
+import { MemoryAssetRepository } from '../../../persistence'
+
+const TEST_FILE_PATH = '/tmp/inspector-test.brunch'
 
 beforeEach(() => {
   resetProjectStore()
@@ -27,9 +32,31 @@ function decisionNode(id: string): DecisionNode {
   return node
 }
 
+function contentNodeId(): string {
+  const node = useProjectStore.getState().project.graph.nodes.find((n) => n.type === 'content')
+  if (!node) throw new Error('No hay nodo content')
+  return node.id
+}
+
+function contentNode(id: string): ContentNode {
+  const node = useProjectStore.getState().project.graph.nodes.find((n) => n.id === id)
+  if (!node || node.type !== 'content') throw new Error('No es un nodo content')
+  return node
+}
+
+/** Servicios de test con un `pickImportAssetPath` fijo y un `MemoryAssetRepository`
+ *  real (mismo criterio que los tests de `HomeScreen`: nada de Tauri real). */
+function renderInspectorWithServices(services: Partial<AppServices>) {
+  return render(
+    <AppServicesProvider services={services}>
+      <Inspector filePath={TEST_FILE_PATH} />
+    </AppServicesProvider>,
+  )
+}
+
 describe('Inspector', () => {
   it('sin selección muestra información del proyecto', () => {
-    render(<Inspector />)
+    render(<Inspector filePath={TEST_FILE_PATH} />)
 
     expect(screen.getByText('Untitled')).toBeInTheDocument()
     // Un proyecto recién creado tiene exactamente 1 nodo (el Inicio) y el
@@ -46,7 +73,7 @@ describe('Inspector', () => {
       useProjectStore.getState().selectNode(startNodeId())
     })
 
-    render(<Inspector />)
+    render(<Inspector filePath={TEST_FILE_PATH} />)
 
     expect(screen.getByLabelText('Título')).toHaveValue('Bienvenida')
     expect(screen.getByLabelText('Contenido')).toHaveValue('Hola')
@@ -56,7 +83,7 @@ describe('Inspector', () => {
     act(() => {
       useProjectStore.getState().selectNode(startNodeId())
     })
-    render(<Inspector />)
+    render(<Inspector filePath={TEST_FILE_PATH} />)
 
     const historyBefore = useProjectStore.getState().history.past.length
     const titleInput = screen.getByLabelText('Título')
@@ -83,7 +110,7 @@ describe('Inspector', () => {
     act(() => {
       useProjectStore.getState().selectNode(startNodeId())
     })
-    render(<Inspector />)
+    render(<Inspector filePath={TEST_FILE_PATH} />)
 
     const historyBefore = useProjectStore.getState().history.past.length
     const titleInput = screen.getByLabelText('Título')
@@ -100,7 +127,7 @@ describe('Inspector', () => {
       useProjectStore.getState().createNode('content', { x: 0, y: 0 }, { title: 'Pantalla 2' })
       useProjectStore.getState().selectNode(startNodeId())
     })
-    render(<Inspector />)
+    render(<Inspector filePath={TEST_FILE_PATH} />)
 
     expect(screen.getByLabelText('Título')).toHaveValue('Inicio')
 
@@ -121,7 +148,7 @@ describe('Inspector', () => {
       useProjectStore.getState().createNode('content', { x: 0, y: 0 })
       useProjectStore.getState().selectNode(startNodeId())
     })
-    render(<Inspector />)
+    render(<Inspector filePath={TEST_FILE_PATH} />)
 
     const historyBefore = useProjectStore.getState().history.past.length
     const titleInput = screen.getByLabelText('Título')
@@ -156,7 +183,7 @@ describe('Inspector — foco de título tras crear desde el menú contextual (fa
     if (!createdId) throw new Error('setup inválido')
     expect(useProjectStore.getState().ui.titleFocusRequestNodeId).toBe(createdId)
 
-    render(<Inspector />)
+    render(<Inspector filePath={TEST_FILE_PATH} />)
 
     expect(screen.getByLabelText('Título')).toHaveFocus()
     expect(useProjectStore.getState().ui.titleFocusRequestNodeId).toBeNull()
@@ -168,7 +195,7 @@ describe('Inspector — foco de título tras crear desde el menú contextual (fa
       useProjectStore.getState().selectNode(startNodeId())
     })
 
-    render(<Inspector />)
+    render(<Inspector filePath={TEST_FILE_PATH} />)
 
     expect(screen.getByLabelText('Título')).not.toHaveFocus()
     expect(useProjectStore.getState().ui.titleFocusRequestNodeId).toBeNull()
@@ -181,7 +208,7 @@ describe('Inspector — sección de Decisión (fase 6)', () => {
       useProjectStore.getState().createNode('decision', { x: 0, y: 0 })
       useProjectStore.getState().selectNode(decisionNodeId())
     })
-    render(<Inspector />)
+    render(<Inspector filePath={TEST_FILE_PATH} />)
 
     expect(screen.getByLabelText('Texto de la respuesta A')).toHaveValue('')
     expect(screen.getByLabelText('Texto de la respuesta B')).toHaveValue('')
@@ -193,7 +220,7 @@ describe('Inspector — sección de Decisión (fase 6)', () => {
       useProjectStore.getState().createNode('decision', { x: 0, y: 0 })
       useProjectStore.getState().selectNode(decisionNodeId())
     })
-    render(<Inspector />)
+    render(<Inspector filePath={TEST_FILE_PATH} />)
 
     const historyBefore = useProjectStore.getState().history.past.length
     const responseInput = screen.getByLabelText('Texto de la respuesta A')
@@ -218,7 +245,7 @@ describe('Inspector — sección de Decisión (fase 6)', () => {
       useProjectStore.getState().createNode('decision', { x: 0, y: 0 })
       useProjectStore.getState().selectNode(decisionNodeId())
     })
-    render(<Inspector />)
+    render(<Inspector filePath={TEST_FILE_PATH} />)
 
     // Recién creado: A, B -> el botón de añadir sigue visible (quedan 2 libres).
     expect(screen.getByRole('button', { name: '+ Añadir respuesta' })).toBeInTheDocument()
@@ -242,7 +269,7 @@ describe('Inspector — sección de Decisión (fase 6)', () => {
       useProjectStore.getState().createNode('decision', { x: 0, y: 0 })
       useProjectStore.getState().selectNode(decisionNodeId())
     })
-    render(<Inspector />)
+    render(<Inspector filePath={TEST_FILE_PATH} />)
 
     expect(screen.getByLabelText('Texto de la respuesta B')).toBeInTheDocument()
 
@@ -258,7 +285,7 @@ describe('Inspector — sección de Decisión (fase 6)', () => {
       useProjectStore.getState().createNode('final', { x: 100, y: 0 })
       useProjectStore.getState().selectNode(decisionNodeId())
     })
-    render(<Inspector />)
+    render(<Inspector filePath={TEST_FILE_PATH} />)
 
     const finalId = useProjectStore.getState().project.graph.nodes.find((n) => n.type === 'final')?.id
     if (!finalId) throw new Error('setup inválido')
@@ -283,7 +310,7 @@ describe('Inspector — sección de Decisión (fase 6)', () => {
       useProjectStore.getState().createNode('content', { x: 100, y: 0 }, { title: 'Bienvenida' })
       useProjectStore.getState().selectNode(decisionNodeId())
     })
-    render(<Inspector />)
+    render(<Inspector filePath={TEST_FILE_PATH} />)
 
     const select = screen.getByLabelText('Destino de la respuesta A') as HTMLSelectElement
     const optionTexts = Array.from(select.options).map((option) => option.textContent ?? '')
@@ -302,7 +329,7 @@ describe('Inspector — sección de Decisión (fase 6)', () => {
       useProjectStore.getState().createNode('content', { x: 100, y: 0 })
       useProjectStore.getState().selectNode(decisionNodeId())
     })
-    render(<Inspector />)
+    render(<Inspector filePath={TEST_FILE_PATH} />)
 
     expect(screen.getByText('Respuestas')).toBeInTheDocument()
 
@@ -324,7 +351,7 @@ describe('Inspector — sección de Decisión (fase 6)', () => {
     act(() => {
       useProjectStore.getState().selectNode(startNodeId())
     })
-    render(<Inspector />)
+    render(<Inspector filePath={TEST_FILE_PATH} />)
 
     expect(screen.queryByRole('button', { name: /^Eliminar /i })).not.toBeInTheDocument()
   })
@@ -338,7 +365,7 @@ describe('Inspector — sección de Decisión (fase 6)', () => {
       if (!contentId) throw new Error('setup inválido')
       useProjectStore.getState().selectNode(contentId)
     })
-    render(<Inspector />)
+    render(<Inspector filePath={TEST_FILE_PATH} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Eliminar pantalla' }))
 
@@ -358,7 +385,7 @@ describe('Inspector — sección de Decisión (fase 6)', () => {
       if (!finalId) throw new Error('setup inválido')
       useProjectStore.getState().selectNode(finalId)
     })
-    render(<Inspector />)
+    render(<Inspector filePath={TEST_FILE_PATH} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Eliminar final' }))
 
@@ -372,7 +399,7 @@ describe('Inspector — sección de Decisión (fase 6)', () => {
       useProjectStore.getState().createNode('decision', { x: 0, y: 0 })
       useProjectStore.getState().selectNode(decisionNodeId())
     })
-    render(<Inspector />)
+    render(<Inspector filePath={TEST_FILE_PATH} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Eliminar decisión' }))
 
@@ -387,7 +414,7 @@ describe('Inspector — sección de Decisión (fase 6)', () => {
       useProjectStore.getState().createNode('final', { x: 100, y: 0 })
       useProjectStore.getState().selectNode(decisionNodeId())
     })
-    render(<Inspector />)
+    render(<Inspector filePath={TEST_FILE_PATH} />)
 
     const responseA = decisionNode(decisionNodeId()).responses.find((r) => r.letter === 'A')
     const finalId = useProjectStore.getState().project.graph.nodes.find((n) => n.type === 'final')?.id
@@ -399,5 +426,226 @@ describe('Inspector — sección de Decisión (fase 6)', () => {
 
     const select = screen.getByLabelText('Destino de la respuesta A') as HTMLSelectElement
     expect(select.value).toBe(finalId)
+  })
+})
+
+describe('Inspector — adjuntos de imagen/audio a nivel de nodo (fase 3, Milestone 2)', () => {
+  function setupAssetRepository() {
+    const assetRepository = new MemoryAssetRepository()
+    assetRepository.registerSourceFile('/tmp/foto.png', new Uint8Array([1, 2, 3]), 'image/png')
+    assetRepository.registerSourceFile('/tmp/audio.mp3', new Uint8Array([4, 5, 6]), 'audio/mpeg')
+    return assetRepository
+  }
+
+  it('adjuntar una imagen a un nodo Pantalla actualiza imageAssetId y muestra la vista previa', async () => {
+    act(() => {
+      useProjectStore.getState().createNode('content', { x: 0, y: 0 })
+      useProjectStore.getState().selectNode(contentNodeId())
+    })
+    const assetRepository = setupAssetRepository()
+    const pickImportAssetPath = vi.fn().mockResolvedValue('/tmp/foto.png')
+
+    renderInspectorWithServices({ assetRepository, pickImportAssetPath })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Adjuntar imagen' }))
+
+    await waitFor(() => {
+      expect(contentNode(contentNodeId()).imageAssetId).toBeDefined()
+    })
+    expect(pickImportAssetPath).toHaveBeenCalledWith('image')
+
+    const preview = (await screen.findByAltText(
+      'Vista previa de la imagen adjunta',
+    )) as HTMLImageElement
+    expect(preview.getAttribute('src')).toContain('data:image/png;base64,')
+  })
+
+  it('adjuntar un audio a un nodo Decisión actualiza audioAssetId y muestra el reproductor', async () => {
+    act(() => {
+      useProjectStore.getState().createNode('decision', { x: 0, y: 0 })
+      useProjectStore.getState().selectNode(decisionNodeId())
+    })
+    const assetRepository = setupAssetRepository()
+    const pickImportAssetPath = vi.fn().mockResolvedValue('/tmp/audio.mp3')
+
+    const { container } = renderInspectorWithServices({ assetRepository, pickImportAssetPath })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Adjuntar audio' }))
+
+    await waitFor(() => {
+      expect(decisionNode(decisionNodeId()).audioAssetId).toBeDefined()
+    })
+    expect(pickImportAssetPath).toHaveBeenCalledWith('audio')
+
+    await waitFor(() => {
+      const audioEl = container.querySelector('audio')
+      expect(audioEl).toBeTruthy()
+      expect(audioEl?.getAttribute('src')).toContain('data:audio/mpeg;base64,')
+    })
+  })
+
+  it('quitar la imagen limpia imageAssetId y vuelve a mostrarse "Adjuntar imagen"', async () => {
+    act(() => {
+      useProjectStore.getState().createNode('content', { x: 0, y: 0 })
+      useProjectStore.getState().selectNode(contentNodeId())
+    })
+    const assetRepository = setupAssetRepository()
+    const pickImportAssetPath = vi.fn().mockResolvedValue('/tmp/foto.png')
+
+    renderInspectorWithServices({ assetRepository, pickImportAssetPath })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Adjuntar imagen' }))
+    await waitFor(() => expect(contentNode(contentNodeId()).imageAssetId).toBeDefined())
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Quitar imagen' }))
+
+    expect(contentNode(contentNodeId()).imageAssetId).toBeUndefined()
+    expect(screen.getByRole('button', { name: 'Adjuntar imagen' })).toBeInTheDocument()
+  })
+
+  it('cancelar el diálogo de importar no cambia nada ni muestra error', async () => {
+    act(() => {
+      useProjectStore.getState().createNode('content', { x: 0, y: 0 })
+      useProjectStore.getState().selectNode(contentNodeId())
+    })
+    const assetRepository = setupAssetRepository()
+    const pickImportAssetPath = vi.fn().mockResolvedValue(null)
+
+    renderInspectorWithServices({ assetRepository, pickImportAssetPath })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Adjuntar imagen' }))
+
+    await waitFor(() => expect(pickImportAssetPath).toHaveBeenCalled())
+
+    expect(contentNode(contentNodeId()).imageAssetId).toBeUndefined()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Adjuntar imagen' })).toBeInTheDocument()
+  })
+
+  it('un fallo de importAsset muestra un mensaje de error breve sin romper el resto del Inspector', async () => {
+    act(() => {
+      useProjectStore.getState().createNode('content', { x: 0, y: 0 })
+      useProjectStore.getState().selectNode(contentNodeId())
+    })
+    const pickImportAssetPath = vi.fn().mockResolvedValue('/tmp/foto.png')
+    const assetRepository = {
+      importAsset: vi.fn().mockRejectedValue(new Error('boom')),
+      getAsset: vi.fn(),
+    }
+
+    renderInspectorWithServices({ assetRepository, pickImportAssetPath })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Adjuntar imagen' }))
+
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).not.toMatch(/error|stack|undefined|NaN|\[object/i)
+    // El resto del Inspector sigue funcionando (el título se puede seguir editando).
+    expect(screen.getByLabelText('Título')).toBeInTheDocument()
+    expect(contentNode(contentNodeId()).imageAssetId).toBeUndefined()
+  })
+
+  it('un fallo de getAsset al cargar la vista previa muestra un mensaje de error sin romper los controles', async () => {
+    act(() => {
+      useProjectStore.getState().createNode('content', { x: 0, y: 0 })
+      useProjectStore.getState().updateNode(contentNodeId(), { imageAssetId: 'asset-ya-adjunto' })
+      useProjectStore.getState().selectNode(contentNodeId())
+    })
+    const assetRepository = {
+      importAsset: vi.fn(),
+      getAsset: vi.fn().mockRejectedValue(new Error('boom')),
+    }
+
+    renderInspectorWithServices({ assetRepository })
+
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).not.toMatch(/error|stack|undefined|NaN|\[object/i)
+    // Los controles de reemplazar/quitar siguen disponibles a pesar del fallo de vista previa.
+    expect(screen.getByRole('button', { name: 'Quitar imagen' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Reemplazar imagen' })).toBeInTheDocument()
+  })
+})
+
+describe('Inspector — puntuación por respuesta (fase 3, Milestone 2)', () => {
+  it('escribir una puntuación y hacer blur produce exactamente una llamada efectiva', () => {
+    act(() => {
+      useProjectStore.getState().createNode('decision', { x: 0, y: 0 })
+      useProjectStore.getState().selectNode(decisionNodeId())
+    })
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    const historyBefore = useProjectStore.getState().history.past.length
+    const pointsInput = screen.getByLabelText('Puntuación de la respuesta A')
+
+    fireEvent.change(pointsInput, { target: { value: '1' } })
+    fireEvent.change(pointsInput, { target: { value: '10' } })
+    expect(useProjectStore.getState().history.past.length).toBe(historyBefore)
+
+    fireEvent.blur(pointsInput)
+
+    expect(useProjectStore.getState().history.past.length).toBe(historyBefore + 1)
+    expect(decisionNode(decisionNodeId()).responses.find((r) => r.letter === 'A')?.points).toBe(10)
+
+    // Un segundo blur sin más cambios no genera otra entrada.
+    fireEvent.blur(pointsInput)
+    expect(useProjectStore.getState().history.past.length).toBe(historyBefore + 1)
+  })
+
+  it('vaciar explícitamente la puntuación y hacer blur la borra (null -> undefined en el documento)', () => {
+    act(() => {
+      useProjectStore.getState().createNode('decision', { x: 0, y: 0 })
+      const decisionId = decisionNodeId()
+      const responseId = decisionNode(decisionId).responses[0]?.id
+      if (!responseId) throw new Error('setup inválido')
+      useProjectStore.getState().updateResponse(decisionId, responseId, { points: 5 })
+      useProjectStore.getState().selectNode(decisionId)
+    })
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    const pointsInput = screen.getByLabelText('Puntuación de la respuesta A')
+    expect(pointsInput).toHaveValue(5)
+
+    fireEvent.change(pointsInput, { target: { value: '' } })
+    fireEvent.blur(pointsInput)
+
+    expect(
+      decisionNode(decisionNodeId()).responses.find((r) => r.letter === 'A')?.points,
+    ).toBeUndefined()
+  })
+})
+
+describe('Inspector — adjuntos de imagen/audio por respuesta (fase 3, Milestone 2)', () => {
+  it('adjuntar/quitar imagen y audio en la respuesta A no afecta a la respuesta B ni al nodo', async () => {
+    act(() => {
+      useProjectStore.getState().createNode('decision', { x: 0, y: 0 })
+      useProjectStore.getState().selectNode(decisionNodeId())
+    })
+    const assetRepository = new MemoryAssetRepository()
+    assetRepository.registerSourceFile('/tmp/foto.png', new Uint8Array([1, 2, 3]), 'image/png')
+    const pickImportAssetPath = vi.fn().mockResolvedValue('/tmp/foto.png')
+
+    renderInspectorWithServices({ assetRepository, pickImportAssetPath })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Adjuntar imagen de la respuesta A' }))
+
+    await waitFor(() => {
+      const responseA = decisionNode(decisionNodeId()).responses.find((r) => r.letter === 'A')
+      expect(responseA?.imageAssetId).toBeDefined()
+    })
+
+    const node = decisionNode(decisionNodeId())
+    const responseB = node.responses.find((r) => r.letter === 'B')
+    expect(responseB?.imageAssetId).toBeUndefined()
+    expect(node.imageAssetId).toBeUndefined()
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Quitar imagen de la respuesta A' }),
+    )
+
+    expect(
+      decisionNode(decisionNodeId()).responses.find((r) => r.letter === 'A')?.imageAssetId,
+    ).toBeUndefined()
+    expect(
+      screen.getByRole('button', { name: 'Adjuntar imagen de la respuesta A' }),
+    ).toBeInTheDocument()
   })
 })
