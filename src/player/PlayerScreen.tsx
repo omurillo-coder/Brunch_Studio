@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useProject, useProjectStore } from '../store'
-import { RESPONSE_LETTERS } from '../domain'
-import type { ContentNode, DecisionNode, DecisionResponse } from '../domain'
+import { DEFAULT_CONTINUE_LABEL, RESPONSE_LETTERS } from '../domain'
+import type { DecisionResponse, SlideNode } from '../domain'
 import { advance, choose, getInitialState, getView } from './runtime'
 import type { PlayerState } from './runtime'
 import { useAppServices } from '../app/AppServicesContext'
@@ -10,8 +10,9 @@ import type { AssetRepository } from '../persistence'
 import { RichTextView } from '../editor/richText/RichTextView'
 import styles from './PlayerScreen.module.css'
 
-/** Mismo criterio de orden que `Inspector`: A→B→C→D fijo, independiente del
- *  orden interno de creación/borrado del array. */
+/** Mismo criterio de orden que `Inspector`: por letra (A→B→C→D) fijo,
+ *  independiente del orden interno de creación/borrado del array. La letra
+ *  solo ordena: nunca se muestra al usuario. */
 function sortByLetter(responses: DecisionResponse[]): DecisionResponse[] {
   return [...responses].sort(
     (a, b) => RESPONSE_LETTERS.indexOf(a.letter) - RESPONSE_LETTERS.indexOf(b.letter),
@@ -63,14 +64,14 @@ function PlayerAudio({
   return <audio className={styles.audio} controls src={dataUri} />
 }
 
-/** Imagen/audio a nivel de nodo (Pantalla o Decisión), justo debajo del
- *  cuerpo de texto. `null` si el nodo no tiene ningún adjunto. */
+/** Imagen/audio a nivel de nodo (Diapositiva), justo debajo del cuerpo de
+ *  texto. `null` si el nodo no tiene ningún adjunto. */
 function NodeMedia({
   node,
   filePath,
   assetRepository,
 }: {
-  node: ContentNode | DecisionNode
+  node: SlideNode
   filePath: string
   assetRepository: AssetRepository
 }) {
@@ -101,20 +102,26 @@ function NodeMedia({
 }
 
 /**
- * Una opción de Decisión: el botón de elegirla (letra + texto) más su
- * imagen/audio adjuntos, si tiene. La imagen/audio se colocan FUERA del
- * `<button>` (contenido interactivo, como los controles de `<audio>`, no
- * puede anidarse dentro de un elemento interactivo) para que reproducir el
- * audio de una opción no cuente como elegirla.
+ * Una opción de una diapositiva con respuestas: el botón de elegirla (un
+ * punto + su texto, nunca una letra) más su imagen/audio adjuntos, si tiene.
+ * La imagen/audio se colocan FUERA del `<button>` (contenido interactivo,
+ * como los controles de `<audio>`, no puede anidarse dentro de un elemento
+ * interactivo) para que reproducir el audio de una opción no cuente como
+ * elegirla.
+ *
+ * `index` es la posición 1-based de la opción, usada solo para el texto
+ * alternativo de su imagen (donde antes se usaba la letra).
  */
 function ResponseOption({
   response,
+  index,
   disabled,
   filePath,
   assetRepository,
   onChoose,
 }: {
   response: DecisionResponse
+  index: number
   disabled: boolean
   filePath: string
   assetRepository: AssetRepository
@@ -128,7 +135,7 @@ function ResponseOption({
         disabled={disabled}
         onClick={onChoose}
       >
-        <span className={styles.optionLetter}>{response.letter}</span>
+        <span className={styles.optionBullet} aria-hidden="true" />
         <span>{response.text.trim() || 'Opción sin texto configurado'}</span>
       </button>
       {(response.imageAssetId || response.audioAssetId) && (
@@ -139,7 +146,7 @@ function ResponseOption({
               assetId={response.imageAssetId}
               filePath={filePath}
               assetRepository={assetRepository}
-              alt={`Imagen de la respuesta ${response.letter}`}
+              alt={`Imagen de la respuesta ${index}`}
             />
           )}
           {response.audioAssetId && (
@@ -169,12 +176,14 @@ export interface PlayerScreenProps {
 }
 
 /**
- * Player / modo "Probar" (fase 8, ampliado en la fase 5 del Milestone 2 con
- * texto enriquecido, imagen/audio y puntuación): vista de lectura sobre el
- * mismo `ProjectDocument` del store — nunca una copia — que reproduce el
- * documento como lo vería quien lo juega: Pantalla con botón Continuar,
- * Decisión con sus respuestas como opciones, Final, o un aviso breve si el
- * recorrido llega a un punto sin continuación configurada.
+ * Player / modo "Probar": vista de lectura sobre el mismo `ProjectDocument`
+ * del store — nunca una copia — que reproduce el documento como lo vería
+ * quien lo juega: una diapositiva sin respuestas con su botón de continuar,
+ * una diapositiva con respuestas como opciones elegibles, un Final (con
+ * botón "Reintentar"), o un aviso breve si el recorrido llega a un punto sin
+ * continuación configurada. El recorrido empieza directamente en
+ * `graph.startNodeId`: ya no hay ningún nodo "Inicio" invisible del que
+ * saltar.
  *
  * El recorrido (qué nodo toca mostrar ahora, y la puntuación acumulada) vive
  * en un `useState` local, inicializado con `getInitialState` (runtime puro
@@ -215,21 +224,23 @@ export function PlayerScreen({ filePath }: PlayerScreenProps) {
       </header>
 
       <main className={styles.stage}>
-        {view.kind === 'content' && (
+        {view.kind === 'continue' && (
           <div key={view.node.id} className={styles.card}>
             {view.node.title.trim() && <h1 className={styles.title}>{view.node.title}</h1>}
             {view.node.body.trim() ? (
               <RichTextView body={view.node.body} className={styles.body} />
             ) : (
-              <p className={styles.body}>Esta pantalla todavía no tiene contenido.</p>
+              <p className={styles.body}>Esta diapositiva todavía no tiene contenido.</p>
             )}
             <NodeMedia node={view.node} filePath={filePath} assetRepository={assetRepository} />
+            {/* Texto personalizable del botón de continuar; "Continuar" si la
+                diapositiva no define uno propio (ver `continueLabel`). */}
             <button
               type="button"
               className={styles.primaryButton}
               onClick={() => setPlayerState((current) => advance(project, current))}
             >
-              Continuar
+              {view.node.continueLabel?.trim() || DEFAULT_CONTINUE_LABEL}
             </button>
           </div>
         )}
@@ -240,10 +251,11 @@ export function PlayerScreen({ filePath }: PlayerScreenProps) {
             {view.node.body.trim() && <RichTextView body={view.node.body} className={styles.body} />}
             <NodeMedia node={view.node} filePath={filePath} assetRepository={assetRepository} />
             <div className={styles.options}>
-              {sortByLetter(view.node.responses).map((response) => (
+              {sortByLetter(view.node.responses).map((response, index) => (
                 <ResponseOption
                   key={response.id}
                   response={response}
+                  index={index + 1}
                   disabled={!response.targetNodeId}
                   filePath={filePath}
                   assetRepository={assetRepository}
@@ -269,13 +281,21 @@ export function PlayerScreen({ filePath }: PlayerScreenProps) {
             {playerState.totalPoints !== null && (
               <p className={styles.points}>Puntuación final: {playerState.totalPoints} puntos</p>
             )}
+            {/* Reintentar: mismo efecto que "↺ Reiniciar experiencia" de la
+                cabecera, pero dentro de la propia tarjeta de Final, que es
+                donde el usuario está mirando al terminar el recorrido. En
+                color de peligro porque descarta el recorrido en curso (y su
+                puntuación) para empezar de cero. */}
+            <button type="button" className={styles.dangerButton} onClick={handleRestart}>
+              Reintentar
+            </button>
           </div>
         )}
 
         {view.kind === 'dead-end' && (
           <div className={styles.card}>
             <p className={styles.body}>
-              Esta pantalla todavía no tiene una continuación configurada. Vuelve al editor para
+              Esta diapositiva todavía no tiene una continuación configurada. Vuelve al editor para
               conectarla con el resto de la experiencia.
             </p>
           </div>

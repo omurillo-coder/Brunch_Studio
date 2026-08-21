@@ -1,39 +1,37 @@
 import { describe, expect, it } from 'vitest'
 import { addResponse, connect, createNode, createProject, updateResponse } from '../../domain'
-import type { ProjectDocument } from '../../domain'
+import type { DecisionResponse, ProjectDocument } from '../../domain'
 import { advance, choose, getInitialState, getView, restart } from '../runtime'
 
-function nodeIdOf(project: ProjectDocument, type: 'start' | 'content' | 'decision' | 'final'): string {
-  const ids = project.graph.nodes.filter((node) => node.type === type).map((node) => node.id)
-  const id = ids[ids.length - 1]
-  if (!id) throw new Error(`No hay nodo de tipo ${type} en el setup`)
-  return id
+/** Ids de los nodos del tipo pedido, en orden de aparición en el documento. */
+function idsOf(project: ProjectDocument, type: 'slide' | 'final'): string[] {
+  return project.graph.nodes.filter((node) => node.type === type).map((node) => node.id)
+}
+
+function responsesOf(project: ProjectDocument, nodeId: string): DecisionResponse[] {
+  const node = project.graph.nodes.find((candidate) => candidate.id === nodeId)
+  return node?.type === 'slide' ? node.responses : []
 }
 
 /**
- * Construye: start -> pantalla -> decisión -[A]-> final A
- *                                          -[B]-> final B
+ * Construye: inicio (continuar) -> diapositiva con respuestas -[A]-> final A
+ *                                                            -[B]-> final B
  */
 function buildFullGraph() {
   let project = createProject('P')
-  project = createNode(project, 'content', { x: 100, y: 0 }, { title: 'Bienvenida', body: 'Hola' })
-  project = createNode(project, 'decision', { x: 200, y: 0 }, { title: '¿Qué eliges?' })
+  project = createNode(project, 'slide', { x: 200, y: 0 }, { title: '¿Qué eliges?' })
   project = createNode(project, 'final', { x: 300, y: -50 }, { title: 'Final A', body: 'Llegaste a A' })
   project = createNode(project, 'final', { x: 300, y: 50 }, { title: 'Final B', body: 'Llegaste a B' })
 
-  const startId = nodeIdOf(project, 'start')
-  const contentId = nodeIdOf(project, 'content')
-  const decisionId = nodeIdOf(project, 'decision')
-  const finalIds = project.graph.nodes.filter((node) => node.type === 'final').map((n) => n.id)
-  const [finalAId, finalBId] = finalIds as [string, string]
+  const startId = project.graph.startNodeId
+  const decisionId = idsOf(project, 'slide').filter((id) => id !== startId)[0] as string
+  const [finalAId, finalBId] = idsOf(project, 'final') as [string, string]
 
-  project = connect(project, startId, contentId)
-  project = connect(project, contentId, decisionId)
+  project = connect(project, startId, decisionId)
   project = addResponse(project, decisionId) // A
   project = addResponse(project, decisionId) // B
 
-  const decisionNode = project.graph.nodes.find((n) => n.id === decisionId)
-  const responses = decisionNode?.type === 'decision' ? decisionNode.responses : []
+  const responses = responsesOf(project, decisionId)
   const responseA = responses.find((r) => r.letter === 'A')
   const responseB = responses.find((r) => r.letter === 'B')
   if (!responseA || !responseB) throw new Error('setup inválido')
@@ -41,25 +39,25 @@ function buildFullGraph() {
   project = connect(project, decisionId, finalAId, responseA.id)
   project = connect(project, decisionId, finalBId, responseB.id)
 
-  return { project, startId, contentId, decisionId, finalAId, finalBId, responseA, responseB }
+  return { project, startId, decisionId, finalAId, finalBId, responseA, responseB }
 }
 
 describe('runtime del Player', () => {
-  it('salta automáticamente desde start sin mostrarlo nunca', () => {
-    const { project, contentId } = buildFullGraph()
+  it('el recorrido empieza en la diapositiva de inicio (ya no hay salto automático)', () => {
+    const { project, startId } = buildFullGraph()
 
     const state = getInitialState(project)
-    expect(state.currentNodeId).toBe(contentId)
+    expect(state.currentNodeId).toBe(startId)
 
     const view = getView(project, state)
-    expect(view.kind).toBe('content')
+    expect(view.kind).toBe('continue')
   })
 
-  it('recorrido completo: Inicio -> Pantalla -> Decisión -> (elige A) -> Final', () => {
+  it('recorrido completo: inicio -> diapositiva con respuestas -> (elige A) -> Final', () => {
     const { project, decisionId, finalAId, responseA } = buildFullGraph()
 
     let state = getInitialState(project)
-    expect(getView(project, state).kind).toBe('content')
+    expect(getView(project, state).kind).toBe('continue')
 
     state = advance(project, state)
     expect(state.currentNodeId).toBe(decisionId)
@@ -75,7 +73,7 @@ describe('runtime del Player', () => {
   })
 
   it('reiniciar y elegir la otra respuesta lleva a otro Final', () => {
-    const { project, finalBId, responseB } = buildFullGraph()
+    const { project, startId, finalBId, responseB } = buildFullGraph()
 
     let state = getInitialState(project)
     state = advance(project, state)
@@ -83,122 +81,113 @@ describe('runtime del Player', () => {
 
     expect(state.currentNodeId).toBe(finalBId)
 
-    // Reiniciar vuelve exactamente al punto de partida, incluyendo el salto
-    // automático inicial desde start.
     const restarted = restart(project)
     expect(restarted).toEqual(getInitialState(project))
-    expect(getView(project, restarted).kind).toBe('content')
+    expect(restarted.currentNodeId).toBe(startId)
+    expect(getView(project, restarted).kind).toBe('continue')
   })
 
-  it('dead-end: una Pantalla sin destino configurado', () => {
-    let project = createProject('P')
-    project = createNode(project, 'content', { x: 100, y: 0 })
-    const startId = nodeIdOf(project, 'start')
-    const contentId = nodeIdOf(project, 'content')
-    project = connect(project, startId, contentId)
-    // El contenido no se conecta a ningún destino: queda sin salida.
+  it('dead-end: una diapositiva sin respuestas y sin destino', () => {
+    const project = createProject('P') // inicio recién creado, sin target
 
     const state = getInitialState(project)
-    expect(state.currentNodeId).toBe(contentId)
+    expect(state.currentNodeId).toBe(project.graph.startNodeId)
     const view = getView(project, state)
+    expect(view.kind).toBe('dead-end')
+    expect(view.node?.id).toBe(project.graph.startNodeId)
+  })
+
+  it('dead-end: una diapositiva con respuestas pero ninguna con destino', () => {
+    let project = createProject('P')
+    const startId = project.graph.startNodeId
+    project = addResponse(project, startId) // A, sin destino
+    project = addResponse(project, startId) // B, sin destino
+
+    const view = getView(project, getInitialState(project))
     expect(view.kind).toBe('dead-end')
   })
 
-  it('dead-end: una Decisión sin ninguna respuesta con destino', () => {
-    let project = createProject('P')
-    project = createNode(project, 'decision', { x: 100, y: 0 })
-    const startId = nodeIdOf(project, 'start')
-    const decisionId = nodeIdOf(project, 'decision')
-    project = connect(project, startId, decisionId)
-    project = addResponse(project, decisionId) // A, sin destino
-    project = addResponse(project, decisionId) // B, sin destino
-
-    const state = getInitialState(project)
-    const view = getView(project, state)
-    expect(view.kind).toBe('dead-end')
-  })
-
-  it('dead-end: el propio start sin destino no se muestra como "Inicio"', () => {
-    const project = createProject('P') // start recién creado, sin target
-
-    const state = getInitialState(project)
-    const view = getView(project, state)
-    expect(view.kind).toBe('dead-end')
-    // El nodo referenciado es el start (para que la UI no necesite lógica
-    // extra), pero `getView` nunca devuelve `kind: 'start'`.
-    expect(view.node?.type).toBe('start')
-  })
-
-  it('dead-end: ausencia total de un nodo start', () => {
-    let project = createProject('P')
-    const startId = nodeIdOf(project, 'start')
-    project = {
-      ...project,
-      graph: { nodes: project.graph.nodes.filter((node) => node.id !== startId) },
+  it('dead-end: startNodeId que no apunta a ningún nodo', () => {
+    const base = createProject('P')
+    const project: ProjectDocument = {
+      ...base,
+      graph: { ...base.graph, startNodeId: '00000000-0000-4000-8000-000000000000' },
     }
 
     const state = getInitialState(project)
     expect(state.currentNodeId).toBeNull()
-    const view = getView(project, state)
-    expect(view).toEqual({ kind: 'dead-end', node: null })
+    expect(getView(project, state)).toEqual({ kind: 'dead-end', node: null })
+  })
+
+  it('una diapositiva con respuestas ignora su targetNodeId dormido', () => {
+    let project = createNode(createProject('P'), 'final', { x: 200, y: 0 })
+    const startId = project.graph.startNodeId
+    const finalId = idsOf(project, 'final')[0] as string
+    project = connect(project, startId, finalId) // destino de "continuar"
+    project = addResponse(project, startId) // pasa a modo decisión, sin destinos
+
+    // Con respuestas, el destino de continuar no se usa: es un dead-end.
+    expect(getView(project, getInitialState(project)).kind).toBe('dead-end')
+    // Y `advance` tampoco lo sigue.
+    const state = getInitialState(project)
+    expect(advance(project, state)).toEqual(state)
   })
 
   it('elegir una respuesta sin destino no avanza (no-op)', () => {
-    let project = createProject('P')
-    project = createNode(project, 'decision', { x: 100, y: 0 })
-    project = createNode(project, 'final', { x: 200, y: 0 })
-    const startId = nodeIdOf(project, 'start')
-    const decisionId = nodeIdOf(project, 'decision')
-    const finalId = nodeIdOf(project, 'final')
-    project = connect(project, startId, decisionId)
-    project = addResponse(project, decisionId) // A, sin destino
-    project = addResponse(project, decisionId) // B
-    const decisionNode = project.graph.nodes.find((n) => n.id === decisionId)
-    const responses = decisionNode?.type === 'decision' ? decisionNode.responses : []
+    let project = createNode(createProject('P'), 'final', { x: 200, y: 0 })
+    const startId = project.graph.startNodeId
+    const finalId = idsOf(project, 'final')[0] as string
+    project = addResponse(project, startId) // A, sin destino
+    project = addResponse(project, startId) // B
+
+    const responses = responsesOf(project, startId)
     const responseA = responses.find((r) => r.letter === 'A')
     const responseB = responses.find((r) => r.letter === 'B')
     if (!responseA || !responseB) throw new Error('setup inválido')
-    project = connect(project, decisionId, finalId, responseB.id)
+    project = connect(project, startId, finalId, responseB.id)
 
     const state = getInitialState(project)
-    const afterChoosingA = choose(project, state, responseA.id)
-    expect(afterChoosingA).toEqual(state)
+    expect(choose(project, state, responseA.id)).toEqual(state)
   })
 
-  it('advance es un no-op si el nodo actual no es una Pantalla', () => {
+  it('advance es un no-op si el nodo actual tiene respuestas', () => {
     const { project, decisionId } = buildFullGraph()
     let state = getInitialState(project)
     state = advance(project, state) // ahora en decisionId
-    const advancedAgain = advance(project, state)
-    expect(advancedAgain).toEqual({ currentNodeId: decisionId, totalPoints: null })
+    expect(advance(project, state)).toEqual({ currentNodeId: decisionId, totalPoints: null })
+  })
+
+  it('advance es un no-op sobre un nodo final', () => {
+    const { project, finalAId, responseA } = buildFullGraph()
+    let state = getInitialState(project)
+    state = advance(project, state)
+    state = choose(project, state, responseA.id)
+    expect(state.currentNodeId).toBe(finalAId)
+    expect(advance(project, state)).toEqual(state)
   })
 })
 
 /**
- * Construye: start -> decisión 1 -[A, points=5]-> decisión 2 -[B, sin points]-> final
- *                    -[B, sin points]                      -[A, points=-2]
- * Dos decisiones consecutivas para poder comprobar que `choose` acumula a
- * través de varias elecciones seguidas, no solo una.
+ * Construye: inicio -[A, points=5]-> diapositiva 2 -[A, points=-2]-> final
+ *                   -[B, sin points]               -[B, sin points]
+ * Dos diapositivas con respuestas consecutivas para comprobar que `choose`
+ * acumula a través de varias elecciones seguidas, no solo una.
  */
 function buildTwoDecisionsGraph() {
   let project = createProject('P')
-  project = createNode(project, 'decision', { x: 100, y: 0 })
-  project = createNode(project, 'decision', { x: 200, y: 0 })
+  project = createNode(project, 'slide', { x: 200, y: 0 })
   project = createNode(project, 'final', { x: 300, y: 0 })
 
-  const startId = nodeIdOf(project, 'start')
-  const decisionIds = project.graph.nodes.filter((node) => node.type === 'decision').map((n) => n.id)
-  const [decision1Id, decision2Id] = decisionIds as [string, string]
-  const finalId = nodeIdOf(project, 'final')
+  const decision1Id = project.graph.startNodeId
+  const decision2Id = idsOf(project, 'slide').filter((id) => id !== decision1Id)[0] as string
+  const finalId = idsOf(project, 'final')[0] as string
 
-  project = connect(project, startId, decision1Id)
   project = addResponse(project, decision1Id) // A
   project = addResponse(project, decision1Id) // B
   project = addResponse(project, decision2Id) // A
   project = addResponse(project, decision2Id) // B
 
-  const decision1 = project.graph.nodes.find((n) => n.id === decision1Id)
-  const responses1 = decision1?.type === 'decision' ? decision1.responses : []
+  const responses1 = responsesOf(project, decision1Id)
   const response1A = responses1.find((r) => r.letter === 'A')
   const response1B = responses1.find((r) => r.letter === 'B')
   if (!response1A || !response1B) throw new Error('setup inválido')
@@ -208,8 +197,7 @@ function buildTwoDecisionsGraph() {
   project = connect(project, decision1Id, decision2Id, response1A.id)
   project = connect(project, decision1Id, decision2Id, response1B.id)
 
-  const decision2 = project.graph.nodes.find((n) => n.id === decision2Id)
-  const responses2 = decision2?.type === 'decision' ? decision2.responses : []
+  const responses2 = responsesOf(project, decision2Id)
   const response2A = responses2.find((r) => r.letter === 'A')
   const response2B = responses2.find((r) => r.letter === 'B')
   if (!response2A || !response2B) throw new Error('setup inválido')
@@ -271,7 +259,6 @@ describe('runtime del Player: puntuación acumulada (totalPoints)', () => {
     state = choose(project, state, response1A.id)
     expect(state.totalPoints).toBe(5)
 
-    const restarted = restart(project)
-    expect(restarted.totalPoints).toBeNull()
+    expect(restart(project).totalPoints).toBeNull()
   })
 })

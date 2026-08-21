@@ -1,32 +1,42 @@
 import { produce } from 'immer'
 import { createId } from './id'
 import { RESPONSE_LETTERS } from './schemas'
-import type { DecisionResponse, ProjectDocument } from './schemas'
+import type { DecisionResponse, ProjectDocument, SlideNode } from './schemas'
 
-function findDecisionNode(project: ProjectDocument, nodeId: string) {
+/**
+ * Localiza la diapositiva sobre la que operan las funciones de respuesta.
+ * Lanza `Error` si el nodo no existe o no es una diapositiva (un `final` no
+ * puede tener respuestas).
+ */
+function findSlideNode(project: ProjectDocument, nodeId: string): SlideNode {
   const node = project.graph.nodes.find((candidate) => candidate.id === nodeId)
   if (!node) {
     throw new Error(`No existe un nodo con id "${nodeId}".`)
   }
-  if (node.type !== 'decision') {
-    throw new Error(`El nodo "${nodeId}" no es de tipo "decision".`)
+  if (node.type !== 'slide') {
+    throw new Error(`El nodo "${nodeId}" no es de tipo "slide".`)
   }
   return node
 }
 
 /**
- * Añade una respuesta nueva a un nodo decision, usando la siguiente letra
+ * Añade una respuesta nueva a una diapositiva, usando la siguiente letra
  * libre en orden A → B → C → D (si se borró una letra intermedia, se
- * reutiliza antes de continuar con letras posteriores). Lanza `Error` si el
- * nodo ya tiene 4 respuestas.
+ * reutiliza antes de continuar con letras posteriores). Lanza `Error` si la
+ * diapositiva ya tiene 4 respuestas.
+ *
+ * Añadir la primera respuesta es lo que convierte una diapositiva "de
+ * continuar" en una de decisión. Deliberadamente NO se borra su
+ * `targetNodeId`/`continueLabel`: quedan dormidos y vuelven a tener efecto
+ * si más tarde se eliminan todas las respuestas.
  */
-export function addResponse(project: ProjectDocument, decisionNodeId: string): ProjectDocument {
-  const node = findDecisionNode(project, decisionNodeId)
+export function addResponse(project: ProjectDocument, slideNodeId: string): ProjectDocument {
+  const node = findSlideNode(project, slideNodeId)
 
   const usedLetters = new Set(node.responses.map((response) => response.letter))
   const freeLetter = RESPONSE_LETTERS.find((letter) => !usedLetters.has(letter))
   if (!freeLetter) {
-    throw new Error('Un nodo decision no puede tener más de 4 respuestas.')
+    throw new Error('Una diapositiva no puede tener más de 4 respuestas.')
   }
 
   const newResponse: DecisionResponse = {
@@ -40,18 +50,14 @@ export function addResponse(project: ProjectDocument, decisionNodeId: string): P
   }
 
   return produce(project, (draft) => {
-    const draftNode = draft.graph.nodes.find((candidate) => candidate.id === decisionNodeId)
-    if (draftNode && draftNode.type === 'decision') {
+    const draftNode = draft.graph.nodes.find((candidate) => candidate.id === slideNodeId)
+    if (draftNode && draftNode.type === 'slide') {
       draftNode.responses.push(newResponse)
     }
     draft.metadata.updatedAt = new Date().toISOString()
   })
 }
 
-/**
- * Elimina una respuesta de un nodo decision. Las respuestas restantes
- * conservan su id/letra/orden relativo — no se reindexan letras.
- */
 /**
  * Campos editables de una respuesta ya creada mediante `updateResponse`. El
  * destino (`targetNodeId`) tiene su propio mecanismo dedicado vía
@@ -70,25 +76,25 @@ export interface UpdateResponsePatch {
 }
 
 /**
- * Actualiza campos editables básicos de una respuesta ya existente de un
- * nodo decision (texto, puntuación, imagen/audio adjuntos). Análoga a
+ * Actualiza campos editables básicos de una respuesta ya existente de una
+ * diapositiva (texto, puntuación, imagen/audio adjuntos). Análoga a
  * `updateNode` pero a nivel de respuesta. Lanza `Error` si el nodo no
- * existe, no es `decision`, o la respuesta no existe.
+ * existe, no es `slide`, o la respuesta no existe.
  */
 export function updateResponse(
   project: ProjectDocument,
-  decisionNodeId: string,
+  slideNodeId: string,
   responseId: string,
   patch: UpdateResponsePatch,
 ): ProjectDocument {
-  const node = findDecisionNode(project, decisionNodeId)
+  const node = findSlideNode(project, slideNodeId)
   if (!node.responses.some((response) => response.id === responseId)) {
-    throw new Error(`El nodo "${decisionNodeId}" no tiene una respuesta con id "${responseId}".`)
+    throw new Error(`El nodo "${slideNodeId}" no tiene una respuesta con id "${responseId}".`)
   }
 
   return produce(project, (draft) => {
-    const draftNode = draft.graph.nodes.find((candidate) => candidate.id === decisionNodeId)
-    if (draftNode && draftNode.type === 'decision') {
+    const draftNode = draft.graph.nodes.find((candidate) => candidate.id === slideNodeId)
+    if (draftNode && draftNode.type === 'slide') {
       const response = draftNode.responses.find((candidate) => candidate.id === responseId)
       if (response) {
         if (patch.text !== undefined) {
@@ -109,19 +115,25 @@ export function updateResponse(
   })
 }
 
+/**
+ * Elimina una respuesta de una diapositiva. Las respuestas restantes
+ * conservan su id/letra/orden relativo — no se reindexan letras. Si era la
+ * última, la diapositiva vuelve a comportarse como "de continuar" usando el
+ * `targetNodeId` que ya tuviera (ver `addResponse`).
+ */
 export function removeResponse(
   project: ProjectDocument,
-  decisionNodeId: string,
+  slideNodeId: string,
   responseId: string,
 ): ProjectDocument {
-  const node = findDecisionNode(project, decisionNodeId)
+  const node = findSlideNode(project, slideNodeId)
   if (!node.responses.some((response) => response.id === responseId)) {
-    throw new Error(`El nodo "${decisionNodeId}" no tiene una respuesta con id "${responseId}".`)
+    throw new Error(`El nodo "${slideNodeId}" no tiene una respuesta con id "${responseId}".`)
   }
 
   return produce(project, (draft) => {
-    const draftNode = draft.graph.nodes.find((candidate) => candidate.id === decisionNodeId)
-    if (draftNode && draftNode.type === 'decision') {
+    const draftNode = draft.graph.nodes.find((candidate) => candidate.id === slideNodeId)
+    if (draftNode && draftNode.type === 'slide') {
       draftNode.responses = draftNode.responses.filter((response) => response.id !== responseId)
     }
     draft.metadata.updatedAt = new Date().toISOString()

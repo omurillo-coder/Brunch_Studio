@@ -1,44 +1,41 @@
 import { describe, expect, it } from 'vitest'
 import { createNode, createProject } from '../project'
 import { connect } from '../graph'
-import { addResponse, removeResponse } from '../responses'
+import { addResponse } from '../responses'
 import { validateProject } from '../validation'
 import type { ProjectDocument } from '../schemas'
 
-function nodeIdOf(project: ProjectDocument, type: 'start' | 'content' | 'decision' | 'final'): string {
-  const id = project.graph.nodes.find((n) => n.type === type)?.id
-  if (!id) throw new Error(`No hay nodo de tipo ${type} en el setup`)
-  return id
+function otherNodeIdOf(project: ProjectDocument, type: 'slide' | 'final'): string {
+  const node = project.graph.nodes.find(
+    (candidate) => candidate.type === type && candidate.id !== project.graph.startNodeId,
+  )
+  if (!node) throw new Error(`No hay un nodo "${type}" distinto del inicio en el setup`)
+  return node.id
+}
+
+function responseIdsOf(project: ProjectDocument, nodeId: string): string[] {
+  const node = project.graph.nodes.find((candidate) => candidate.id === nodeId)
+  return node?.type === 'slide' ? node.responses.map((response) => response.id) : []
 }
 
 /**
- * Construye un grafo mínimo válido: start -> content -> decision -A,B-> final.
- *
- * `createNode(project, 'decision', ...)` ya deja el nodo con dos respuestas
- * iniciales (A y B); para que el grafo sea válido (sin
- * `DECISION_RESPONSE_WITHOUT_TARGET`) hay que conectar todas las respuestas
- * existentes, no solo la primera.
+ * Construye un grafo mínimo válido:
+ * inicio (continuar) -> diapositiva con 2 respuestas -> final.
  */
 function buildValidProject(): ProjectDocument {
   let project = createProject('P')
-  project = createNode(project, 'content', { x: 100, y: 0 })
-  project = createNode(project, 'decision', { x: 200, y: 0 })
+  project = createNode(project, 'slide', { x: 200, y: 0 })
   project = createNode(project, 'final', { x: 300, y: 0 })
 
-  const startId = nodeIdOf(project, 'start')
-  const contentId = nodeIdOf(project, 'content')
-  const decisionId = nodeIdOf(project, 'decision')
-  const finalId = nodeIdOf(project, 'final')
+  const startId = project.graph.startNodeId
+  const slideId = otherNodeIdOf(project, 'slide')
+  const finalId = otherNodeIdOf(project, 'final')
 
-  project = connect(project, startId, contentId)
-  project = connect(project, contentId, decisionId)
-
-  const decisionNode = project.graph.nodes.find((n) => n.id === decisionId)
-  const responseIds =
-    decisionNode?.type === 'decision' ? decisionNode.responses.map((r) => r.id) : []
-  if (responseIds.length === 0) throw new Error('setup inválido')
-  for (const responseId of responseIds) {
-    project = connect(project, decisionId, finalId, responseId)
+  project = connect(project, startId, slideId)
+  project = addResponse(project, slideId)
+  project = addResponse(project, slideId)
+  for (const responseId of responseIdsOf(project, slideId)) {
+    project = connect(project, slideId, finalId, responseId)
   }
 
   return project
@@ -46,110 +43,72 @@ function buildValidProject(): ProjectDocument {
 
 describe('validateProject', () => {
   it('un grafo válido no tiene issues', () => {
-    const project = buildValidProject()
-    expect(validateProject(project)).toEqual([])
+    expect(validateProject(buildValidProject())).toEqual([])
   })
 
-  it('detecta que falta el nodo start', () => {
+  it('detecta que la diapositiva de inicio no existe', () => {
     const project = buildValidProject()
-    const startId = nodeIdOf(project, 'start')
-    // `deleteNode` de dominio ya no permite borrar el nodo start (guarda de
-    // fase de "cabos sueltos"), así que para probar esta regla de
-    // validación de forma aislada se construye el documento sin start
-    // filtrando `graph.nodes` directamente, sin pasar por `deleteNode`. La
-    // regla de validación debe seguir detectando la ausencia de start en
-    // cualquier documento, independientemente de que la vía interactiva de
-    // borrado ya no pueda producirlo.
-    const withoutStart: ProjectDocument = {
+    // `deleteNode` de dominio no permite borrar la diapositiva de inicio, así
+    // que para probar esta regla de forma aislada se construye el documento
+    // con un `startNodeId` colgado directamente.
+    const broken: ProjectDocument = {
       ...project,
-      graph: { nodes: project.graph.nodes.filter((node) => node.id !== startId) },
+      graph: { ...project.graph, startNodeId: '00000000-0000-4000-8000-000000000000' },
     }
 
-    const issues = validateProject(withoutStart)
+    const issues = validateProject(broken)
     expect(issues.some((issue) => issue.code === 'MISSING_START')).toBe(true)
   })
 
-  it('detecta más de un nodo start', () => {
+  it('detecta una respuesta sin destino', () => {
+    let project = createProject('P')
+    project = addResponse(project, project.graph.startNodeId)
+
+    const issues = validateProject(project)
+    expect(issues.some((issue) => issue.code === 'RESPONSE_WITHOUT_TARGET')).toBe(true)
+  })
+
+  it('detecta una diapositiva sin respuestas y sin destino de continuar', () => {
     const project = createProject('P')
-    const firstStart = project.graph.nodes.find((n) => n.type === 'start')
-    if (!firstStart || firstStart.type !== 'start') throw new Error('setup inválido')
-
-    // Se fuerza un segundo start directamente en el documento (createNode lo
-    // impide), para poder probar la regla de validación de forma aislada.
-    const secondStart = { ...firstStart, id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', number: 2 }
-    const withTwoStarts: ProjectDocument = {
-      ...project,
-      graph: { nodes: [...project.graph.nodes, secondStart] },
-    }
-
-    const issues = validateProject(withTwoStarts)
-    expect(issues.some((issue) => issue.code === 'MULTIPLE_START')).toBe(true)
-  })
-
-  it('detecta una respuesta de decision sin destino', () => {
-    let project = createProject('P')
-    project = createNode(project, 'decision', { x: 100, y: 0 })
-    const startId = nodeIdOf(project, 'start')
-    const decisionId = nodeIdOf(project, 'decision')
-    project = connect(project, startId, decisionId)
-    project = addResponse(project, decisionId)
-
-    const issues = validateProject(project)
-    expect(issues.some((issue) => issue.code === 'DECISION_RESPONSE_WITHOUT_TARGET')).toBe(true)
-  })
-
-  it('detecta un nodo content sin destino', () => {
-    let project = createProject('P')
-    project = createNode(project, 'content', { x: 100, y: 0 })
-    const startId = nodeIdOf(project, 'start')
-    const contentId = nodeIdOf(project, 'content')
-    project = connect(project, startId, contentId)
-    // El content queda sin su propio destino conectado.
-
-    const issues = validateProject(project)
-    expect(issues.some((issue) => issue.code === 'CONTENT_WITHOUT_TARGET')).toBe(true)
-  })
-
-  it('detecta un nodo decision sin ninguna respuesta', () => {
-    let project = createProject('P')
-    project = createNode(project, 'decision', { x: 100, y: 0 })
-    const startId = nodeIdOf(project, 'start')
-    const decisionId = nodeIdOf(project, 'decision')
-    project = connect(project, startId, decisionId)
-
-    // `createNode` deja el decision con A y B; para probar el caso límite de
-    // "sin ninguna respuesta" hay que eliminarlas explícitamente (el propio
-    // dominio permite llegar a 0 respuestas vía `removeResponse`, aunque
-    // nunca se nazca así).
-    const decisionNode = project.graph.nodes.find((n) => n.id === decisionId)
-    const responseIds =
-      decisionNode?.type === 'decision' ? decisionNode.responses.map((r) => r.id) : []
-    for (const responseId of responseIds) {
-      project = removeResponse(project, decisionId, responseId)
-    }
-
-    const issues = validateProject(project)
-    expect(issues.some((issue) => issue.code === 'DECISION_WITHOUT_RESPONSES')).toBe(true)
-  })
-
-  it('detecta un nodo inalcanzable desde start', () => {
-    let project = createProject('P')
-    // Se crea un content nunca conectado desde start.
-    project = createNode(project, 'content', { x: 300, y: 300 })
-    const contentId = nodeIdOf(project, 'content')
 
     const issues = validateProject(project)
     expect(
-      issues.some((issue) => issue.code === 'UNREACHABLE_NODE' && issue.nodeId === contentId),
+      issues.some(
+        (issue) =>
+          issue.code === 'SLIDE_WITHOUT_TARGET' && issue.nodeId === project.graph.startNodeId,
+      ),
     ).toBe(true)
   })
 
-  it('detecta ausencia de un final alcanzable desde start', () => {
+  it('una diapositiva sin respuestas pero con destino NO es un problema', () => {
+    let project = createNode(createProject('P'), 'final', { x: 100, y: 0 })
+    const finalId = otherNodeIdOf(project, 'final')
+    project = connect(project, project.graph.startNodeId, finalId)
+
+    const issues = validateProject(project)
+    expect(issues.some((issue) => issue.code === 'SLIDE_WITHOUT_TARGET')).toBe(false)
+    expect(issues).toEqual([])
+  })
+
+  it('detecta un nodo inalcanzable desde el inicio', () => {
+    let project = createNode(createProject('P'), 'final', { x: 100, y: 0 })
+    const finalId = otherNodeIdOf(project, 'final')
+    project = connect(project, project.graph.startNodeId, finalId)
+    // Una diapositiva nueva nunca conectada desde el inicio.
+    project = createNode(project, 'slide', { x: 300, y: 300 })
+    const orphanId = project.graph.nodes[project.graph.nodes.length - 1]?.id
+
+    const issues = validateProject(project)
+    expect(
+      issues.some((issue) => issue.code === 'UNREACHABLE_NODE' && issue.nodeId === orphanId),
+    ).toBe(true)
+  })
+
+  it('detecta ausencia de un final alcanzable desde el inicio', () => {
     let project = createProject('P')
-    project = createNode(project, 'content', { x: 100, y: 0 })
-    const startId = nodeIdOf(project, 'start')
-    const contentId = nodeIdOf(project, 'content')
-    project = connect(project, startId, contentId)
+    project = createNode(project, 'slide', { x: 100, y: 0 })
+    const slideId = otherNodeIdOf(project, 'slide')
+    project = connect(project, project.graph.startNodeId, slideId)
     // No hay ningún nodo final en absoluto.
 
     const issues = validateProject(project)

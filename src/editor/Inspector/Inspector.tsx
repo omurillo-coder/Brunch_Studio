@@ -6,30 +6,23 @@ import {
   useSelectedNodeIds,
   useTitleFocusRequestNodeId,
 } from '../../store'
-import { RESPONSE_LETTERS } from '../../domain'
+import { DEFAULT_CONTINUE_LABEL, MAX_RESPONSES, RESPONSE_LETTERS } from '../../domain'
 import type {
-  ContentNode,
-  DecisionNode,
   DecisionResponse,
   Node,
   NodeType,
   ProjectDocument,
+  SlideNode,
 } from '../../domain'
 import { useAppServices } from '../../app/AppServicesContext'
 import { useAssetDataUri } from '../../hooks/useAssetDataUri'
+import { NODE_TYPE_LABEL } from '../Canvas/nodes/nodeTypes'
 import { RichTextEditor } from '../richText/RichTextEditor'
 import styles from './Inspector.module.css'
 
-const NODE_TYPE_LABEL: Record<NodeType, string> = {
-  start: 'Inicio',
-  content: 'Pantalla',
-  decision: 'Decisión',
-  final: 'Final',
-}
-
 /** Vista sin selección: información básica de solo lectura del proyecto. */
 function ProjectSummary({ project }: { project: ProjectDocument }) {
-  const counts: Record<NodeType, number> = { start: 0, content: 0, decision: 0, final: 0 }
+  const counts: Record<NodeType, number> = { slide: 0, final: 0 }
   for (const node of project.graph.nodes) {
     counts[node.type] += 1
   }
@@ -43,16 +36,8 @@ function ProjectSummary({ project }: { project: ProjectDocument }) {
           <dd>{project.graph.nodes.length}</dd>
         </div>
         <div className={styles.summaryRow}>
-          <dt>{NODE_TYPE_LABEL.start}</dt>
-          <dd>{counts.start}</dd>
-        </div>
-        <div className={styles.summaryRow}>
-          <dt>{NODE_TYPE_LABEL.content}</dt>
-          <dd>{counts.content}</dd>
-        </div>
-        <div className={styles.summaryRow}>
-          <dt>{NODE_TYPE_LABEL.decision}</dt>
-          <dd>{counts.decision}</dd>
+          <dt>{NODE_TYPE_LABEL.slide}</dt>
+          <dd>{counts.slide}</dd>
         </div>
         <div className={styles.summaryRow}>
           <dt>{NODE_TYPE_LABEL.final}</dt>
@@ -63,24 +48,25 @@ function ProjectSummary({ project }: { project: ProjectDocument }) {
   )
 }
 
-/** Valor de la opción "— Sin destino —" del `<select>` de destino de una
- *  respuesta. Nunca puede coincidir con un id real (los ids son UUIDs). */
+/** Valor de la opción "— Sin destino —" de los `<select>` de destino. Nunca
+ *  puede coincidir con un id real (los ids son UUIDs). */
 const NO_TARGET_VALUE = '__none__'
 
 /**
- * Etiqueta legible de un nodo para mostrarlo como destino posible en el
- * `<select>` de una respuesta — nunca el `id` interno (UUID) como texto
- * visible. Formato: "<Tipo> <número> — <título o 'Sin título'>", p.ej.
- * "Pantalla 3 — Bienvenida" o "Pantalla 3 — Sin título".
+ * Etiqueta legible de un nodo para mostrarlo como destino posible en un
+ * `<select>` — nunca el `id` interno (UUID) como texto visible. Formato:
+ * "<Tipo> <número> — <título o 'Sin título'>", p.ej.
+ * "Diapositiva 3 — Bienvenida".
  */
 function nodeOptionLabel(node: Node): string {
   const title = node.title.trim() || 'Sin título'
   return `${NODE_TYPE_LABEL[node.type]} ${node.number} — ${title}`
 }
 
-/** Respuestas de un nodo decision, siempre en el orden fijo A→B→C→D — el
- *  array interno conserva el orden de creación, que puede no coincidir con
- *  el orden de letra tras eliminar y reañadir una intermedia. */
+/** Respuestas de una diapositiva, siempre en el orden fijo interno A→B→C→D
+ *  (la letra nunca se muestra; solo ordena) — el array interno conserva el
+ *  orden de creación, que puede no coincidir con el orden de letra tras
+ *  eliminar y reañadir una intermedia. */
 function sortByLetter(responses: DecisionResponse[]): DecisionResponse[] {
   return [...responses].sort(
     (a, b) => RESPONSE_LETTERS.indexOf(a.letter) - RESPONSE_LETTERS.indexOf(b.letter),
@@ -165,7 +151,7 @@ function AssetPreview({
 
 /**
  * Control de adjuntar/ver/quitar/reemplazar una imagen o un audio, reusado
- * tanto a nivel de nodo (Pantalla/Decisión) como por respuesta de Decisión.
+ * tanto a nivel de nodo (Diapositiva) como por respuesta.
  *
  * Flujo de adjuntar: `pickImportAssetPath(kind)` (diálogo nativo) -> si el
  * usuario elige un archivo, `assetRepository.importAsset` lo importa al
@@ -262,17 +248,10 @@ function MediaAttachment({
 }
 
 /**
- * Adjuntos de imagen/audio a nivel de nodo (Pantalla o Decisión). Se muestra
- * justo debajo de título/contenido, antes de la sección de respuestas si el
- * nodo es una Decisión.
+ * Adjuntos de imagen/audio a nivel de nodo (solo Diapositiva). Se muestra
+ * justo debajo de título/contenido.
  */
-function NodeMediaSection({
-  node,
-  filePath,
-}: {
-  node: ContentNode | DecisionNode
-  filePath: string
-}) {
+function NodeMediaSection({ node, filePath }: { node: SlideNode; filePath: string }) {
   const updateNode = useProjectStore((state) => state.updateNode)
 
   return (
@@ -302,23 +281,130 @@ function NodeMediaSection({
 }
 
 /**
- * Una fila de respuesta dentro del inspector de un nodo decision: texto
- * editable ("commit on blur", mismo criterio que título/body) y `<select>`
- * de destino.
+ * Modo "de continuar" de una diapositiva: destino único de "Continuar" más
+ * el texto personalizable de ese botón. Solo se muestra mientras la
+ * diapositiva NO tiene respuestas — en cuanto tiene una, esos dos campos
+ * dejan de tener efecto en el Player (quedan dormidos en el documento, sin
+ * borrarse) y se ocultan; si se eliminan todas las respuestas, vuelven a
+ * aparecer con el valor que ya tuvieran.
  *
- * Se monta con `key={response.id}` desde `DecisionResponsesSection` por el
- * mismo motivo que `NodeFields` se monta con `key={node.id}`: el estado
- * local de texto debe arrancar limpio para cada respuesta y no reutilizarse
- * entre respuestas distintas si la lista se reordena.
+ * Se monta con `key={node.id}` (a través de `NodeFields`) por el mismo
+ * motivo que el resto de campos con estado local: el texto en edición debe
+ * arrancar limpio al cambiar de nodo.
+ */
+function ContinueSection({ node, allNodes }: { node: SlideNode; allNodes: Node[] }) {
+  const updateNode = useProjectStore((state) => state.updateNode)
+  const connect = useProjectStore((state) => state.connect)
+  const disconnect = useProjectStore((state) => state.disconnect)
+
+  // Mismo criterio "commit on blur" que el título del nodo: estado local +
+  // confirmación en blur/Enter/desmontaje, comparando contra lo último
+  // confirmado para no generar entradas de historial vacías.
+  const [label, setLabel] = useState(node.continueLabel ?? '')
+  const committedRef = useRef(node.continueLabel ?? '')
+  const latestRef = useRef(label)
+  latestRef.current = label
+
+  useEffect(() => {
+    return () => {
+      commitPending()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  function commitPending() {
+    const pending = latestRef.current
+    if (pending === committedRef.current) return
+    // Vacío significa "vuelve al texto por defecto" (`null` borra el campo).
+    updateNode(node.id, { continueLabel: pending.trim() === '' ? null : pending })
+    committedRef.current = pending
+  }
+
+  function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key === 'Enter') {
+      commitPending()
+    }
+  }
+
+  function handleTargetChange(event: ChangeEvent<HTMLSelectElement>) {
+    const value = event.target.value
+    if (value === NO_TARGET_VALUE) {
+      if (node.targetNodeId) {
+        disconnect(node.id)
+      }
+    } else {
+      connect(node.id, value)
+    }
+  }
+
+  const targetFieldId = 'inspector-continue-target'
+  const labelFieldId = 'inspector-continue-label'
+
+  return (
+    <div className={styles.continueSection}>
+      <div>
+        <label className={styles.label} htmlFor={targetFieldId}>
+          Destino de continuar
+        </label>
+        <select
+          id={targetFieldId}
+          className={styles.select}
+          value={node.targetNodeId ?? NO_TARGET_VALUE}
+          onChange={handleTargetChange}
+        >
+          <option value={NO_TARGET_VALUE}>— Sin destino —</option>
+          {allNodes.map((candidate) => (
+            <option key={candidate.id} value={candidate.id}>
+              {nodeOptionLabel(candidate)}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label className={styles.label} htmlFor={labelFieldId}>
+          Texto del botón de continuar
+        </label>
+        <input
+          id={labelFieldId}
+          className={styles.input}
+          type="text"
+          value={label}
+          placeholder={DEFAULT_CONTINUE_LABEL}
+          onChange={(event) => setLabel(event.target.value)}
+          onBlur={commitPending}
+          onKeyDown={handleKeyDown}
+        />
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Una fila de respuesta dentro del inspector de una diapositiva: texto
+ * editable ("commit on blur", mismo criterio que título/body), `<select>` de
+ * destino, puntuación e imagen/audio.
+ *
+ * `index` es la posición 1-based de la respuesta en el orden mostrado, y se
+ * usa solo para desambiguar las etiquetas visibles y los nombres accesibles
+ * ("Texto de la respuesta 2"). Deliberadamente NO se usa la letra
+ * (A/B/C/D): sigue existiendo en el dominio como criterio de orden, pero no
+ * se muestra nunca al usuario.
+ *
+ * Se monta con `key={response.id}` desde `ResponsesSection` por el mismo
+ * motivo que `NodeFields` se monta con `key={node.id}`: el estado local de
+ * texto debe arrancar limpio para cada respuesta y no reutilizarse entre
+ * respuestas distintas si la lista se reordena.
  */
 function ResponseRow({
-  decisionNodeId,
+  slideNodeId,
   response,
+  index,
   allNodes,
   filePath,
 }: {
-  decisionNodeId: string
+  slideNodeId: string
   response: DecisionResponse
+  index: number
   allNodes: Node[]
   filePath: string
 }) {
@@ -353,7 +439,7 @@ function ResponseRow({
 
   function commitPending() {
     if (latestRef.current !== committedRef.current) {
-      updateResponse(decisionNodeId, response.id, { text: latestRef.current })
+      updateResponse(slideNodeId, response.id, { text: latestRef.current })
       committedRef.current = latestRef.current
     }
   }
@@ -365,7 +451,7 @@ function ResponseRow({
     }
     const trimmed = pending.trim()
     if (trimmed === '') {
-      updateResponse(decisionNodeId, response.id, { points: null })
+      updateResponse(slideNodeId, response.id, { points: null })
       pointsCommittedRef.current = pending
       return
     }
@@ -375,7 +461,7 @@ function ResponseRow({
       // valor válido o un vaciado explícito).
       return
     }
-    updateResponse(decisionNodeId, response.id, { points: parsed })
+    updateResponse(slideNodeId, response.id, { points: parsed })
     pointsCommittedRef.current = pending
   }
 
@@ -395,34 +481,34 @@ function ResponseRow({
     const value = event.target.value
     if (value === NO_TARGET_VALUE) {
       if (response.targetNodeId) {
-        disconnect(decisionNodeId, response.id)
+        disconnect(slideNodeId, response.id)
       }
     } else {
-      connect(decisionNodeId, value, response.id)
+      connect(slideNodeId, value, response.id)
     }
   }
 
   const textFieldId = `inspector-response-text-${response.id}`
   const targetFieldId = `inspector-response-target-${response.id}`
   const pointsFieldId = `inspector-response-points-${response.id}`
-  const responseContextLabel = `de la respuesta ${response.letter}`
+  const responseContextLabel = `de la respuesta ${index}`
 
   return (
     <div className={styles.responseRow}>
       <div className={styles.responseRowHeader}>
-        <span className={styles.responseLetter}>{response.letter}</span>
+        <span className={styles.responseBullet} aria-hidden="true" />
         <button
           type="button"
           className={styles.removeResponseButton}
-          onClick={() => removeResponse(decisionNodeId, response.id)}
-          aria-label={`Eliminar respuesta ${response.letter}`}
+          onClick={() => removeResponse(slideNodeId, response.id)}
+          aria-label={`Eliminar respuesta ${index}`}
         >
           Eliminar
         </button>
       </div>
       <div>
         <label className={styles.label} htmlFor={textFieldId}>
-          Texto de la respuesta {response.letter}
+          Texto de la respuesta {index}
         </label>
         <input
           id={textFieldId}
@@ -436,7 +522,7 @@ function ResponseRow({
       </div>
       <div>
         <label className={styles.label} htmlFor={targetFieldId}>
-          Destino de la respuesta {response.letter}
+          Destino de la respuesta {index}
         </label>
         <select
           id={targetFieldId}
@@ -454,7 +540,7 @@ function ResponseRow({
       </div>
       <div>
         <label className={styles.label} htmlFor={pointsFieldId}>
-          Puntuación de la respuesta {response.letter}
+          Puntuación de la respuesta {index}
         </label>
         <input
           id={pointsFieldId}
@@ -474,9 +560,9 @@ function ResponseRow({
             assetId={response.imageAssetId}
             filePath={filePath}
             onAttach={(assetId) =>
-              updateResponse(decisionNodeId, response.id, { imageAssetId: assetId })
+              updateResponse(slideNodeId, response.id, { imageAssetId: assetId })
             }
-            onRemove={() => updateResponse(decisionNodeId, response.id, { imageAssetId: null })}
+            onRemove={() => updateResponse(slideNodeId, response.id, { imageAssetId: null })}
             contextLabel={responseContextLabel}
           />
         </div>
@@ -487,9 +573,9 @@ function ResponseRow({
             assetId={response.audioAssetId}
             filePath={filePath}
             onAttach={(assetId) =>
-              updateResponse(decisionNodeId, response.id, { audioAssetId: assetId })
+              updateResponse(slideNodeId, response.id, { audioAssetId: assetId })
             }
-            onRemove={() => updateResponse(decisionNodeId, response.id, { audioAssetId: null })}
+            onRemove={() => updateResponse(slideNodeId, response.id, { audioAssetId: null })}
             contextLabel={responseContextLabel}
           />
         </div>
@@ -499,23 +585,23 @@ function ResponseRow({
 }
 
 /**
- * Sección de respuestas de un nodo decision (fase 6, "inspector completo").
- * Desde la fase 3 de Milestone 2 incluye también puntuación e imagen/audio
- * por respuesta (ver `ResponseRow`). El menú "¿qué quieres añadir?" al
- * soltar una conexión en el vacío se implementa en la fase 7
- * (`Canvas`/`ConnectionMenu`), no aquí.
+ * Sección de respuestas de una diapositiva. Se muestra SIEMPRE (para
+ * cualquier diapositiva), porque "+ Añadir respuesta" es justo la vía por la
+ * que una diapositiva "de continuar" se convierte en decisión — ya no hay un
+ * tipo de nodo "Decisión" que crear desde el panel izquierdo. Con 0
+ * respuestas solo se ve la cabecera con ese botón.
  */
-function DecisionResponsesSection({
+function ResponsesSection({
   node,
   allNodes,
   filePath,
 }: {
-  node: DecisionNode
+  node: SlideNode
   allNodes: Node[]
   filePath: string
 }) {
   const addResponse = useProjectStore((state) => state.addResponse)
-  const canAddResponse = node.responses.length < 4
+  const canAddResponse = node.responses.length < MAX_RESPONSES
   const responses = sortByLetter(node.responses)
 
   return (
@@ -533,11 +619,12 @@ function DecisionResponsesSection({
         )}
       </div>
       <div className={styles.responsesList}>
-        {responses.map((response) => (
+        {responses.map((response, index) => (
           <ResponseRow
             key={response.id}
-            decisionNodeId={node.id}
+            slideNodeId={node.id}
             response={response}
+            index={index + 1}
             allNodes={allNodes}
             filePath={filePath}
           />
@@ -549,13 +636,15 @@ function DecisionResponsesSection({
 
 /**
  * Campos de edición de un nodo (título/body), comunes a cualquier tipo, más
- * — para Decisión — la sección de respuestas (`DecisionResponsesSection`).
+ * — para una Diapositiva — sus adjuntos, su modo "de continuar" (si no tiene
+ * respuestas) y la sección de respuestas.
  *
  * Se monta con `key={node.id}` desde `Inspector` para que cambiar de nodo
  * seleccionado destruya y vuelva a crear esta instancia en vez de
  * reutilizarla. Eso da dos cosas gratis:
- * - Los campos locales (`title`/`body`) siempre arrancan con el valor del
- *   nodo recién seleccionado, sin lógica de sincronización manual.
+ * - Los campos locales (`title`, y los de sus secciones hijas) siempre
+ *   arrancan con el valor del nodo recién seleccionado, sin lógica de
+ *   sincronización manual.
  * - El efecto de limpieza (`useEffect` con `return () => ...`) se ejecuta
  *   exactamente cuando se abandona ese nodo (cambio de selección o
  *   deselección total), y ahí se confirma cualquier edición pendiente que
@@ -565,10 +654,12 @@ function DecisionResponsesSection({
 function NodeFields({
   node,
   allNodes,
+  startNodeId,
   filePath,
 }: {
   node: Node
   allNodes: Node[]
+  startNodeId: string
   filePath: string
 }) {
   const updateNode = useProjectStore((state) => state.updateNode)
@@ -577,11 +668,10 @@ function NodeFields({
   const clearTitleFocusRequest = useProjectStore((state) => state.clearTitleFocusRequest)
   const titleInputRef = useRef<HTMLInputElement>(null)
 
-  // El campo `body` (fase 4, Milestone 2: editor de texto enriquecido) ya no
-  // se gestiona aquí como estado local de texto — `RichTextEditor` confirma
-  // sus propios cambios en el store vía su prop `onCommit`, con el mismo
-  // criterio "commit on blur" (ver `RichTextEditor.tsx`). Este componente
-  // solo sigue gestionando el título.
+  // El campo `body` (editor de texto enriquecido) no se gestiona aquí como
+  // estado local de texto — `RichTextEditor` confirma sus propios cambios en
+  // el store vía su prop `onCommit`, con el mismo criterio "commit on blur"
+  // (ver `RichTextEditor.tsx`). Este componente solo gestiona el título.
   const [title, setTitle] = useState(node.title)
 
   // Snapshot de lo último confirmado contra el store, para no repetir un
@@ -602,12 +692,11 @@ function NodeFields({
   }, [])
 
   // Foco de título tras crear un nodo desde el menú "¿Qué quieres añadir?"
-  // (fase 7, ver `ui.titleFocusRequestNodeId`). Solo actúa cuando la
-  // petición apunta exactamente a este nodo — una selección "normal" (clic
-  // en `LeftPanel` o en el lienzo) nunca fija este campo, así que nunca le
-  // roba el foco al usuario en esos casos. Se limpia inmediatamente para no
-  // repetir el foco en renders posteriores (p.ej. si el usuario edita el
-  // título y luego el componente se re-renderiza por otro motivo).
+  // (ver `ui.titleFocusRequestNodeId`). Solo actúa cuando la petición apunta
+  // exactamente a este nodo — una selección "normal" (clic en `LeftPanel` o
+  // en el lienzo) nunca fija este campo, así que nunca le roba el foco al
+  // usuario en esos casos. Se limpia inmediatamente para no repetir el foco
+  // en renders posteriores.
   useEffect(() => {
     if (titleFocusRequestNodeId === node.id) {
       titleInputRef.current?.focus()
@@ -658,18 +747,19 @@ function NodeFields({
           ariaLabelledBy="inspector-node-body-label"
         />
       </div>
-      {(node.type === 'content' || node.type === 'decision') && (
-        <NodeMediaSection node={node} filePath={filePath} />
-      )}
-      {node.type === 'decision' && (
-        <DecisionResponsesSection node={node} allNodes={allNodes} filePath={filePath} />
+      {node.type === 'slide' && (
+        <>
+          <NodeMediaSection node={node} filePath={filePath} />
+          {node.responses.length === 0 && <ContinueSection node={node} allNodes={allNodes} />}
+          <ResponsesSection node={node} allNodes={allNodes} filePath={filePath} />
+        </>
       )}
       {/* Acción de borrado descubrible sin depender de la tecla Supr/Backspace
-          del lienzo (ver `Canvas`). Nunca se muestra para el nodo Inicio —
-          `store.deleteNode` (dominio) lanza si se intentara. Sin diálogo de
-          confirmación: el propio undo (Ctrl/Cmd+Z) cubre el "deshacer por
-          error", mismo criterio que "Eliminar respuesta" más arriba. */}
-      {node.type !== 'start' && (
+          del lienzo (ver `Canvas`). Nunca se muestra para la diapositiva de
+          inicio — `store.deleteNode` (dominio) lanza si se intentara. Sin
+          diálogo de confirmación: el propio undo (Ctrl/Cmd+Z) cubre el
+          "deshacer por error", mismo criterio que "Eliminar respuesta". */}
+      {node.id !== startNodeId && (
         <button
           type="button"
           className={styles.deleteNodeButton}
@@ -698,8 +788,7 @@ export interface InspectorProps {
 /**
  * Inspector derecho: información del proyecto sin selección, o
  * título/contenido del nodo seleccionado. Con selección múltiple, muestra
- * los campos del primer nodo seleccionado (no hay edición multi-nodo en
- * esta fase).
+ * los campos del primer nodo seleccionado (no hay edición multi-nodo).
  */
 export function Inspector({ filePath }: InspectorProps) {
   const project = useProject()
@@ -716,6 +805,7 @@ export function Inspector({ filePath }: InspectorProps) {
           key={selectedNode.id}
           node={selectedNode}
           allNodes={project.graph.nodes}
+          startNodeId={project.graph.startNodeId}
           filePath={filePath}
         />
       ) : (

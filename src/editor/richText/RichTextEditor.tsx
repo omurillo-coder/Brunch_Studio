@@ -12,8 +12,8 @@ export interface RichTextEditorProps {
   /**
    * Confirma el `body` serializado en el store. Se llama exactamente una vez
    * por edición al perder el foco ("commit on blur"), nunca por tecla —
-   * mismo criterio que título/body de texto plano y las respuestas de
-   * Decisión (`Inspector.tsx`).
+   * mismo criterio que título/body de texto plano y las respuestas de una
+   * diapositiva (`Inspector.tsx`).
    */
   onCommit: (nextBody: string) => void
   /**

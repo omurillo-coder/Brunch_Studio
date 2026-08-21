@@ -4,18 +4,38 @@ import { PlayerScreen } from '../PlayerScreen'
 import { useProjectStore } from '../../store'
 import { resetProjectStore } from '../../store/testHelpers'
 import { createProject } from '../../domain'
-import type { ProjectDocument } from '../../domain'
-import { AppServicesProvider } from '../../app/AppServicesContext'
 import type { AppServices } from '../../app/AppServices'
+import { AppServicesProvider } from '../../app/AppServicesContext'
 import { MemoryAssetRepository } from '../../persistence'
 import { serializeRichBody } from '../../editor/richText/richTextContent'
 
 const TEST_FILE_PATH = '/tmp/player-screen-test.brunch'
 
-function nodeIdOf(project: ProjectDocument, type: 'start' | 'content' | 'decision' | 'final'): string {
-  const ids = project.graph.nodes.filter((node) => node.type === type).map((node) => node.id)
+/** Id de la diapositiva de inicio del proyecto actual del store. */
+function startNodeId(): string {
+  return useProjectStore.getState().project.graph.startNodeId
+}
+
+/** Último nodo del tipo pedido que no sea la diapositiva de inicio. */
+function otherNodeIdOf(type: 'slide' | 'final'): string {
+  const { project } = useProjectStore.getState()
+  const ids = project.graph.nodes
+    .filter((node) => node.type === type && node.id !== project.graph.startNodeId)
+    .map((node) => node.id)
   const id = ids[ids.length - 1]
-  if (!id) throw new Error(`No hay nodo de tipo ${type} en el setup`)
+  if (!id) throw new Error(`No hay nodo "${type}" distinto del inicio en el setup`)
+  return id
+}
+
+/** Añade una respuesta a una diapositiva y devuelve su id. */
+function addResponseTo(nodeId: string): string {
+  act(() => {
+    useProjectStore.getState().addResponse(nodeId)
+  })
+  const node = useProjectStore.getState().project.graph.nodes.find((n) => n.id === nodeId)
+  const responses = node?.type === 'slide' ? node.responses : []
+  const id = responses[responses.length - 1]?.id
+  if (!id) throw new Error('responseId inesperadamente ausente')
   return id
 }
 
@@ -27,39 +47,34 @@ function renderPlayer(services?: Partial<AppServices>) {
   )
 }
 
-/** Construye, directamente sobre el store real, el recorrido:
- *  start -> pantalla "Bienvenida" -> decisión "¿Qué eliges?" -[A]-> final "Fin A"
+/**
+ * Construye, directamente sobre el store real, el recorrido:
+ * inicio "Bienvenida" (continuar) -> diapositiva "¿Qué eliges?" con una
+ * respuesta "Camino A" -> final "Fin A".
  */
 function buildGraphInStore() {
-  const store = useProjectStore.getState()
+  const startId = startNodeId()
   act(() => {
-    store.createNode('content', { x: 100, y: 0 }, { title: 'Bienvenida', body: 'Hola, esto es el inicio.' })
+    useProjectStore
+      .getState()
+      .updateNode(startId, { title: 'Bienvenida', body: 'Hola, esto es el inicio.' })
+    useProjectStore.getState().createNode('slide', { x: 200, y: 0 }, { title: '¿Qué eliges?' })
   })
-  let project = useProjectStore.getState().project
-  const startId = nodeIdOf(project, 'start')
-  const contentId = nodeIdOf(project, 'content')
+  const decisionId = otherNodeIdOf('slide')
   act(() => {
-    useProjectStore.getState().connect(startId, contentId)
-    useProjectStore.getState().createNode('decision', { x: 200, y: 0 }, { title: '¿Qué eliges?' })
+    useProjectStore.getState().connect(startId, decisionId)
+    useProjectStore
+      .getState()
+      .createNode('final', { x: 300, y: 0 }, { title: 'Fin A', body: 'Llegaste al final A.' })
   })
-  project = useProjectStore.getState().project
-  const decisionId = nodeIdOf(project, 'decision')
+  const finalId = otherNodeIdOf('final')
+  const responseAId = addResponseTo(decisionId)
   act(() => {
-    useProjectStore.getState().connect(contentId, decisionId)
-    useProjectStore.getState().createNode('final', { x: 300, y: 0 }, { title: 'Fin A', body: 'Llegaste al final A.' })
-  })
-  project = useProjectStore.getState().project
-  const finalId = nodeIdOf(project, 'final')
-  const decisionNode = project.graph.nodes.find((node) => node.id === decisionId)
-  const responses = decisionNode?.type === 'decision' ? decisionNode.responses : []
-  const responseA = responses.find((response) => response.letter === 'A')
-  if (!responseA) throw new Error('setup inválido')
-  act(() => {
-    useProjectStore.getState().updateResponse(decisionId, responseA.id, { text: 'Camino A' })
-    useProjectStore.getState().connect(decisionId, finalId, responseA.id)
+    useProjectStore.getState().updateResponse(decisionId, responseAId, { text: 'Camino A' })
+    useProjectStore.getState().connect(decisionId, finalId, responseAId)
   })
 
-  return { contentId, decisionId, finalId, responseAId: responseA.id }
+  return { startId, decisionId, finalId, responseAId }
 }
 
 /** Importa un asset "de mentira" en un `MemoryAssetRepository` y devuelve su
@@ -81,7 +96,7 @@ beforeEach(() => {
 })
 
 describe('PlayerScreen', () => {
-  it('muestra la pantalla con su contenido y avanza al pulsar Continuar', () => {
+  it('muestra la diapositiva de inicio con su contenido y avanza al pulsar Continuar', () => {
     buildGraphInStore()
     renderPlayer()
 
@@ -93,7 +108,22 @@ describe('PlayerScreen', () => {
     expect(screen.getByText('¿Qué eliges?')).toBeInTheDocument()
   })
 
-  it('muestra las opciones de una Decisión con su texto y avanza según la elegida', () => {
+  it('usa el texto personalizado del botón de continuar si la diapositiva lo define', () => {
+    const { startId } = buildGraphInStore()
+    act(() => {
+      useProjectStore.getState().updateNode(startId, { continueLabel: 'Empezar ya' })
+    })
+
+    renderPlayer()
+
+    expect(screen.getByText('Empezar ya')).toBeInTheDocument()
+    expect(screen.queryByText('Continuar')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByText('Empezar ya'))
+    expect(screen.getByText('¿Qué eliges?')).toBeInTheDocument()
+  })
+
+  it('muestra las opciones de una diapositiva con respuestas y avanza según la elegida', () => {
     buildGraphInStore()
     renderPlayer()
 
@@ -106,14 +136,47 @@ describe('PlayerScreen', () => {
     expect(screen.getByText('Llegaste al final A.')).toBeInTheDocument()
   })
 
-  it('muestra el mensaje de Final', () => {
+  it('nunca muestra la letra de una respuesta como texto visible', () => {
+    const { decisionId } = buildGraphInStore()
+    const responseBId = addResponseTo(decisionId)
+    act(() => {
+      useProjectStore.getState().updateResponse(decisionId, responseBId, { text: 'Camino B' })
+    })
+
+    renderPlayer()
+    fireEvent.click(screen.getByText('Continuar'))
+
+    expect(screen.getByText('Camino A')).toBeInTheDocument()
+    expect(screen.getByText('Camino B')).toBeInTheDocument()
+    // Las letras internas (A/B/C/D) no aparecen en ninguna parte del texto.
+    expect(screen.queryByText('A')).not.toBeInTheDocument()
+    expect(screen.queryByText('B')).not.toBeInTheDocument()
+  })
+
+  it('el Final muestra un botón "Reintentar" que vuelve al principio', () => {
     buildGraphInStore()
     renderPlayer()
 
     fireEvent.click(screen.getByText('Continuar'))
     fireEvent.click(screen.getByText('Camino A'))
-
     expect(screen.getByText('Fin de la experiencia')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByText('Reintentar'))
+
+    expect(screen.getByText('Bienvenida')).toBeInTheDocument()
+  })
+
+  it('"Reintentar" solo aparece en la tarjeta de Final', () => {
+    buildGraphInStore()
+    renderPlayer()
+
+    expect(screen.queryByText('Reintentar')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByText('Continuar'))
+    expect(screen.queryByText('Reintentar')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByText('Camino A'))
+    expect(screen.getByText('Reintentar')).toBeInTheDocument()
   })
 
   it('"Reiniciar experiencia" vuelve al principio dentro del propio Player', () => {
@@ -141,17 +204,7 @@ describe('PlayerScreen', () => {
   })
 
   it('muestra el aviso de "sin continuación" cuando el recorrido llega a un callejón sin salida', () => {
-    act(() => {
-      useProjectStore.getState().createNode('content', { x: 100, y: 0 }, { title: 'Pantalla suelta' })
-    })
-    const project = useProjectStore.getState().project
-    const startId = nodeIdOf(project, 'start')
-    const contentId = nodeIdOf(project, 'content')
-    act(() => {
-      useProjectStore.getState().connect(startId, contentId)
-      // Deliberadamente sin conectar la pantalla a ningún destino.
-    })
-
+    // La diapositiva de inicio de un proyecto nuevo no tiene destino.
     renderPlayer()
 
     expect(
@@ -166,38 +219,42 @@ describe('PlayerScreen', () => {
     const project = createProject('Mi proyecto de prueba')
     act(() => {
       useProjectStore.getState().loadProject(project)
+    })
+    const startId = startNodeId()
+    act(() => {
       useProjectStore
         .getState()
-        .createNode('content', { x: 50, y: 0 }, { title: 'Título exacto', body: 'Cuerpo exacto' })
-    })
-    const withContent = useProjectStore.getState().project
-    const startId = nodeIdOf(withContent, 'start')
-    const contentId = nodeIdOf(withContent, 'content')
-    // Se conecta la pantalla a un final para que tenga destino configurado
-    // (si no, el Player la trataría como callejón sin salida, un caso
-    // distinto ya cubierto por otro test) y así se puede comprobar que
-    // muestra exactamente el título/body reales del documento.
-    act(() => {
-      useProjectStore.getState().connect(startId, contentId)
+        .updateNode(startId, { title: 'Título exacto', body: 'Cuerpo exacto' })
       useProjectStore.getState().createNode('final', { x: 150, y: 0 })
     })
-    const withFinal = useProjectStore.getState().project
-    const finalId = nodeIdOf(withFinal, 'final')
+    const finalId = otherNodeIdOf('final')
     act(() => {
-      useProjectStore.getState().connect(contentId, finalId)
+      useProjectStore.getState().connect(startId, finalId)
     })
 
     renderPlayer()
 
     expect(screen.getByText('Título exacto')).toBeInTheDocument()
     expect(screen.getByText('Cuerpo exacto')).toBeInTheDocument()
-    // Y el propio documento del store sigue siendo el mismo objeto de
-    // proyecto (mismo id de metadata) que el Player está leyendo.
     expect(useProjectStore.getState().project.metadata.name).toBe('Mi proyecto de prueba')
   })
 })
 
-describe('PlayerScreen: texto enriquecido del body (fase 5, Milestone 2)', () => {
+describe('PlayerScreen: texto enriquecido del body', () => {
+  /** Deja la diapositiva de inicio con el body indicado y con destino a un
+   *  final, para que el Player la muestre como diapositiva "de continuar". */
+  function withRichStartSlide(body: string, title: string) {
+    const startId = startNodeId()
+    act(() => {
+      useProjectStore.getState().updateNode(startId, { title, body })
+      useProjectStore.getState().createNode('final', { x: 200, y: 0 })
+    })
+    const finalId = otherNodeIdOf('final')
+    act(() => {
+      useProjectStore.getState().connect(startId, finalId)
+    })
+  }
+
   it('un body en texto enriquecido (negrita + lista) se muestra formateado, no como JSON en crudo', async () => {
     const richBody = serializeRichBody({
       type: 'doc',
@@ -219,23 +276,7 @@ describe('PlayerScreen: texto enriquecido del body (fase 5, Milestone 2)', () =>
       ],
     })
 
-    act(() => {
-      useProjectStore
-        .getState()
-        .createNode('content', { x: 100, y: 0 }, { title: 'Pantalla enriquecida', body: richBody })
-    })
-    let project = useProjectStore.getState().project
-    const startId = nodeIdOf(project, 'start')
-    const contentId = nodeIdOf(project, 'content')
-    act(() => {
-      useProjectStore.getState().connect(startId, contentId)
-      useProjectStore.getState().createNode('final', { x: 200, y: 0 })
-    })
-    project = useProjectStore.getState().project
-    const finalId = nodeIdOf(project, 'final')
-    act(() => {
-      useProjectStore.getState().connect(contentId, finalId)
-    })
+    withRichStartSlide(richBody, 'Diapositiva enriquecida')
 
     const { container } = renderPlayer()
 
@@ -252,23 +293,7 @@ describe('PlayerScreen: texto enriquecido del body (fase 5, Milestone 2)', () =>
   })
 
   it('un body en texto plano histórico (sin pasar por Tiptap) se muestra igual de bien', async () => {
-    act(() => {
-      useProjectStore
-        .getState()
-        .createNode('content', { x: 100, y: 0 }, { title: 'Pantalla histórica', body: 'Texto plano de siempre.' })
-    })
-    let project = useProjectStore.getState().project
-    const startId = nodeIdOf(project, 'start')
-    const contentId = nodeIdOf(project, 'content')
-    act(() => {
-      useProjectStore.getState().connect(startId, contentId)
-      useProjectStore.getState().createNode('final', { x: 200, y: 0 })
-    })
-    project = useProjectStore.getState().project
-    const finalId = nodeIdOf(project, 'final')
-    act(() => {
-      useProjectStore.getState().connect(contentId, finalId)
-    })
+    withRichStartSlide('Texto plano de siempre.', 'Diapositiva histórica')
 
     renderPlayer()
 
@@ -278,29 +303,24 @@ describe('PlayerScreen: texto enriquecido del body (fase 5, Milestone 2)', () =>
   })
 })
 
-describe('PlayerScreen: imagen/audio adjuntos (fase 5, Milestone 2)', () => {
+describe('PlayerScreen: imagen/audio adjuntos', () => {
   it('la imagen y el audio de un nodo se cargan y se muestran', async () => {
     const assetRepository = new MemoryAssetRepository()
     const imageId = await importFakeAsset(assetRepository, '/tmp/foto.png', [1, 2, 3], 'image/png')
     const audioId = await importFakeAsset(assetRepository, '/tmp/audio.mp3', [4, 5, 6], 'audio/mpeg')
 
+    const startId = startNodeId()
     act(() => {
-      useProjectStore.getState().createNode('content', { x: 100, y: 0 }, { title: 'Con media' })
-    })
-    let project = useProjectStore.getState().project
-    const startId = nodeIdOf(project, 'start')
-    const contentId = nodeIdOf(project, 'content')
-    act(() => {
-      useProjectStore.getState().connect(startId, contentId)
-      useProjectStore
-        .getState()
-        .updateNode(contentId, { imageAssetId: imageId, audioAssetId: audioId })
+      useProjectStore.getState().updateNode(startId, {
+        title: 'Con media',
+        imageAssetId: imageId,
+        audioAssetId: audioId,
+      })
       useProjectStore.getState().createNode('final', { x: 200, y: 0 })
     })
-    project = useProjectStore.getState().project
-    const finalId = nodeIdOf(project, 'final')
+    const finalId = otherNodeIdOf('final')
     act(() => {
-      useProjectStore.getState().connect(contentId, finalId)
+      useProjectStore.getState().connect(startId, finalId)
     })
 
     const { container } = renderPlayer({ assetRepository })
@@ -315,38 +335,32 @@ describe('PlayerScreen: imagen/audio adjuntos (fase 5, Milestone 2)', () => {
     })
   })
 
-  it('la imagen y el audio de una respuesta de Decisión se muestran junto a la opción', async () => {
+  it('la imagen de una respuesta se muestra junto a la opción, con un alt sin letras', async () => {
     const assetRepository = new MemoryAssetRepository()
     const imageId = await importFakeAsset(assetRepository, '/tmp/foto-b.png', [7, 8, 9], 'image/png')
 
+    const startId = startNodeId()
     act(() => {
-      useProjectStore.getState().createNode('decision', { x: 100, y: 0 }, { title: '¿Qué eliges?' })
-    })
-    let project = useProjectStore.getState().project
-    const startId = nodeIdOf(project, 'start')
-    const decisionId = nodeIdOf(project, 'decision')
-    act(() => {
-      useProjectStore.getState().connect(startId, decisionId)
+      useProjectStore.getState().updateNode(startId, { title: '¿Qué eliges?' })
       useProjectStore.getState().createNode('final', { x: 200, y: 0 })
     })
-    project = useProjectStore.getState().project
-    const finalId = nodeIdOf(project, 'final')
-    const decisionNode = project.graph.nodes.find((node) => node.id === decisionId)
-    const responseA =
-      decisionNode?.type === 'decision' ? decisionNode.responses.find((r) => r.letter === 'A') : undefined
-    if (!responseA) throw new Error('setup inválido')
+    const finalId = otherNodeIdOf('final')
+    const responseAId = addResponseTo(startId)
     act(() => {
       useProjectStore
         .getState()
-        .updateResponse(decisionId, responseA.id, { text: 'Opción con imagen', imageAssetId: imageId })
-      useProjectStore.getState().connect(decisionId, finalId, responseA.id)
+        .updateResponse(startId, responseAId, {
+          text: 'Opción con imagen',
+          imageAssetId: imageId,
+        })
+      useProjectStore.getState().connect(startId, finalId, responseAId)
     })
 
     renderPlayer({ assetRepository })
 
     expect(screen.getByText('Opción con imagen')).toBeInTheDocument()
     await waitFor(() => {
-      const img = screen.getByAltText('Imagen de la respuesta A') as HTMLImageElement
+      const img = screen.getByAltText('Imagen de la respuesta 1') as HTMLImageElement
       expect(img.getAttribute('src')).toContain('data:image/png;base64,')
     })
   })
@@ -361,23 +375,18 @@ describe('PlayerScreen: imagen/audio adjuntos (fase 5, Milestone 2)', () => {
       },
     }
 
+    const startId = startNodeId()
     act(() => {
-      useProjectStore
-        .getState()
-        .createNode('content', { x: 100, y: 0 }, { title: 'Pantalla con media rota', body: 'El texto sigue aquí.' })
-    })
-    let project = useProjectStore.getState().project
-    const startId = nodeIdOf(project, 'start')
-    const contentId = nodeIdOf(project, 'content')
-    act(() => {
-      useProjectStore.getState().connect(startId, contentId)
-      useProjectStore.getState().updateNode(contentId, { imageAssetId: 'asset-inexistente' })
+      useProjectStore.getState().updateNode(startId, {
+        title: 'Diapositiva con media rota',
+        body: 'El texto sigue aquí.',
+        imageAssetId: 'asset-inexistente',
+      })
       useProjectStore.getState().createNode('final', { x: 200, y: 0 })
     })
-    project = useProjectStore.getState().project
-    const finalId = nodeIdOf(project, 'final')
+    const finalId = otherNodeIdOf('final')
     act(() => {
-      useProjectStore.getState().connect(contentId, finalId)
+      useProjectStore.getState().connect(startId, finalId)
     })
 
     renderPlayer({ assetRepository: failingAssetRepository })
@@ -393,34 +402,27 @@ describe('PlayerScreen: imagen/audio adjuntos (fase 5, Milestone 2)', () => {
   })
 })
 
-describe('PlayerScreen: puntuación acumulada (fase 5, Milestone 2)', () => {
+describe('PlayerScreen: puntuación acumulada', () => {
   function buildGraphWithPoints() {
+    const startId = startNodeId()
     act(() => {
-      useProjectStore.getState().createNode('decision', { x: 100, y: 0 }, { title: '¿Qué eliges?' })
-    })
-    let project = useProjectStore.getState().project
-    const startId = nodeIdOf(project, 'start')
-    const decisionId = nodeIdOf(project, 'decision')
-    act(() => {
-      useProjectStore.getState().connect(startId, decisionId)
+      useProjectStore.getState().updateNode(startId, { title: '¿Qué eliges?' })
       useProjectStore.getState().createNode('final', { x: 200, y: 0 }, { title: 'Fin' })
     })
-    project = useProjectStore.getState().project
-    const finalId = nodeIdOf(project, 'final')
-    const decisionNode = project.graph.nodes.find((node) => node.id === decisionId)
-    const responses = decisionNode?.type === 'decision' ? decisionNode.responses : []
-    const responseA = responses.find((r) => r.letter === 'A')
-    if (!responseA) throw new Error('setup inválido')
+    const finalId = otherNodeIdOf('final')
+    const responseAId = addResponseTo(startId)
     act(() => {
-      useProjectStore.getState().connect(decisionId, finalId, responseA.id)
+      useProjectStore.getState().connect(startId, finalId, responseAId)
     })
-    return { decisionId, finalId, responseAId: responseA.id }
+    return { startId, finalId, responseAId }
   }
 
   it('al llegar a un Final con puntuación acumulada, se muestra esa puntuación', () => {
-    const { decisionId, responseAId } = buildGraphWithPoints()
+    const { startId, responseAId } = buildGraphWithPoints()
     act(() => {
-      useProjectStore.getState().updateResponse(decisionId, responseAId, { text: 'Camino con puntos', points: 7 })
+      useProjectStore
+        .getState()
+        .updateResponse(startId, responseAId, { text: 'Camino con puntos', points: 7 })
     })
 
     renderPlayer()
@@ -432,13 +434,9 @@ describe('PlayerScreen: puntuación acumulada (fase 5, Milestone 2)', () => {
   })
 
   it('si ninguna respuesta elegida en el camino tenía "points", no se muestra ninguna puntuación', () => {
-    const { decisionId, responseAId } = buildGraphWithPoints()
-    // La respuesta se deja deliberadamente sin "points" configurado, con un
-    // texto propio para poder elegirla sin ambigüedad (la respuesta B, sin
-    // destino configurado, comparte el texto por defecto "Opción sin texto
-    // configurado" y no es pulsable).
+    const { startId, responseAId } = buildGraphWithPoints()
     act(() => {
-      useProjectStore.getState().updateResponse(decisionId, responseAId, { text: 'Camino sin puntos' })
+      useProjectStore.getState().updateResponse(startId, responseAId, { text: 'Camino sin puntos' })
     })
 
     renderPlayer()

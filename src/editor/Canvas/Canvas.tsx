@@ -129,24 +129,26 @@ export function Canvas() {
   // candidatos a borrarse (la selección actual), pero nunca debe mutar el
   // modelo por su cuenta — este componente sigue siendo un lienzo
   // "controlado" sobre `project`. `onBeforeDelete` es el punto de veto: si
-  // el nodo `start` está entre los candidatos, se excluye del conjunto
-  // (nunca se puede borrar, ver guarda de dominio en
-  // `src/domain/project.ts`). Si tras excluirlo no queda ningún nodo por
-  // borrar, se devuelve `false` para vetar el borrado por completo — así
-  // "seleccionar solo el Inicio y pulsar Supr" no dispara ningún borrado en
-  // vez de un borrado vacío silencioso. Las aristas candidatas se dejan
-  // pasar tal cual: esta app no tiene un modelo de aristas propio en
-  // `@xyflow/react` (se derivan de `project` en cada render, ver
-  // `adapter.ts`), así que aceptarlas aquí no tiene efecto en el dominio.
+  // la diapositiva de inicio (`graph.startNodeId`) está entre los
+  // candidatos, se excluye del conjunto (nunca se puede borrar, ver guarda
+  // de dominio en `src/domain/project.ts`). Si tras excluirla no queda
+  // ningún nodo por borrar, se devuelve `false` para vetar el borrado por
+  // completo — así "seleccionar solo la diapositiva de inicio y pulsar Supr"
+  // no dispara ningún borrado en vez de un borrado vacío silencioso. Las
+  // aristas candidatas se dejan pasar tal cual: esta app no tiene un modelo
+  // de aristas propio en `@xyflow/react` (se derivan de `project` en cada
+  // render, ver `adapter.ts`), así que aceptarlas aquí no tiene efecto en el
+  // dominio.
+  const startNodeId = project.graph.startNodeId
   const handleBeforeDelete: OnBeforeDelete<CanvasFlowNode, CanvasFlowEdge> = useCallback(
     async ({ nodes: candidateNodes, edges: candidateEdges }) => {
-      const allowedNodes = candidateNodes.filter((node) => node.type !== 'start')
+      const allowedNodes = candidateNodes.filter((node) => node.id !== startNodeId)
       if (allowedNodes.length === 0 && candidateNodes.length > 0) {
         return false
       }
       return { nodes: allowedNodes, edges: candidateEdges }
     },
-    [],
+    [startNodeId],
   )
 
   // -- Confirmación del borrado: por cada nodo que `onBeforeDelete` dejó

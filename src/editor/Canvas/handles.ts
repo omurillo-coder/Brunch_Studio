@@ -2,15 +2,15 @@
  * Ids de los handles de conexión usados por los nodos personalizados de
  * `@xyflow/react` (ver `nodes/nodeTypes.tsx`).
  *
- * - `start`/`content` tienen una única salida: handle fijo `OUT_HANDLE_ID`.
- * - `decision` tiene una salida por respuesta existente: un handle
+ * - Una diapositiva SIN respuestas tiene una única salida (la de
+ *   "Continuar"): handle fijo `OUT_HANDLE_ID`.
+ * - Una diapositiva CON respuestas tiene una salida por respuesta: un handle
  *   `response:<responseId>` por cada una — el prefijo permite recuperar el
  *   `responseId` original a partir del `sourceHandle` que entrega
  *   `onConnect` de `@xyflow/react`, sin mantener un mapa aparte ni otra
  *   fuente de verdad.
- * - Todos los nodos con entrada (`content`, `decision`, `final`, y `start`
- *   por consistencia visual — ver `nodeTypes.tsx`) usan el mismo handle de
- *   entrada fijo `IN_HANDLE_ID`.
+ * - Todos los nodos (diapositivas y finales) usan el mismo handle de entrada
+ *   fijo `IN_HANDLE_ID`.
  */
 
 export const OUT_HANDLE_ID = 'out'

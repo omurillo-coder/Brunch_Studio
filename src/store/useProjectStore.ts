@@ -169,9 +169,9 @@ export interface ProjectStoreActions {
   deleteNode: (nodeId: string) => void
   moveNode: (nodeId: string, position: NodePosition) => void
   updateNode: (nodeId: string, patch: UpdateNodePatch) => void
-  addResponse: (decisionNodeId: string) => void
-  removeResponse: (decisionNodeId: string, responseId: string) => void
-  updateResponse: (decisionNodeId: string, responseId: string, patch: UpdateResponsePatch) => void
+  addResponse: (slideNodeId: string) => void
+  removeResponse: (slideNodeId: string, responseId: string) => void
+  updateResponse: (slideNodeId: string, responseId: string, patch: UpdateResponsePatch) => void
   connect: (sourceNodeId: string, targetNodeId: string, responseId?: string) => void
   disconnect: (sourceNodeId: string, responseId?: string) => void
 
@@ -296,8 +296,8 @@ export const useProjectStore = create<ProjectStoreState>()(
       })
     },
 
-    addResponse: (decisionNodeId) => {
-      const next = domainAddResponse(get().project, decisionNodeId)
+    addResponse: (slideNodeId) => {
+      const next = domainAddResponse(get().project, slideNodeId)
       set((state) => {
         state.history.past.push(state.project as ProjectDocument)
         state.history.future = []
@@ -305,8 +305,8 @@ export const useProjectStore = create<ProjectStoreState>()(
       })
     },
 
-    removeResponse: (decisionNodeId, responseId) => {
-      const next = domainRemoveResponse(get().project, decisionNodeId, responseId)
+    removeResponse: (slideNodeId, responseId) => {
+      const next = domainRemoveResponse(get().project, slideNodeId, responseId)
       set((state) => {
         state.history.past.push(state.project as ProjectDocument)
         state.history.future = []
@@ -314,8 +314,8 @@ export const useProjectStore = create<ProjectStoreState>()(
       })
     },
 
-    updateResponse: (decisionNodeId, responseId, patch) => {
-      const next = domainUpdateResponse(get().project, decisionNodeId, responseId, patch)
+    updateResponse: (slideNodeId, responseId, patch) => {
+      const next = domainUpdateResponse(get().project, slideNodeId, responseId, patch)
       set((state) => {
         state.history.past.push(state.project as ProjectDocument)
         state.history.future = []

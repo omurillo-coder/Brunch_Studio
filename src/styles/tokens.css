@@ -9,6 +9,11 @@
  * Paleta sobria tipo Figma/Linear: fondos neutros, un único color de
  * acento, bordes discretos, sin gradientes ni sombras decorativas. Se
  * define tanto para claro como para oscuro vía `prefers-color-scheme`.
+ *
+ * El acento es el turquesa corporativo de iLERNA (#00AEC7). Toda la app lo
+ * consume a través de estas variables (botones primarios, selección del
+ * lienzo, foco de campos...), así que cambiarlo aquí lo cambia en todas
+ * partes sin tocar ningún componente.
  */
 
 :root {
@@ -20,12 +25,22 @@
   --bs-color-text: #1b1b1f;
   --bs-color-text-muted: #6b6b74;
   --bs-color-text-faint: #97979f;
-  --bs-color-accent: #5b5bd6;
-  --bs-color-accent-hover: #4a4ac2;
-  --bs-color-accent-contrast: #ffffff;
+  /* Acento corporativo iLERNA: turquesa #00AEC7.
+     Accesibilidad: el blanco puro sobre #00AEC7 solo da 2.67:1 (por debajo
+     de AA incluso para texto grande), así que el texto sobre acento
+     (`--bs-color-accent-contrast`) no es blanco sino un tono muy oscuro
+     derivado del propio turquesa — 5.66:1, AA para texto normal.
+     Por el mismo motivo el hover ACLARA en vez de oscurecer: un
+     oscurecimiento tipo #008FA3 dejaría ese texto oscuro en 3.92:1
+     (falla AA), mientras que #33C6DA lo sube a 7.35:1. */
+  --bs-color-accent: #00aec7;
+  --bs-color-accent-hover: #33c6da;
+  --bs-color-accent-contrast: #002b32;
   --bs-color-danger: #c22b3a;
+  --bs-color-danger-hover: #a32230;
   --bs-color-danger-bg: rgba(194, 43, 58, 0.08);
-  --bs-color-focus-ring: rgba(91, 91, 214, 0.45);
+  --bs-color-danger-contrast: #ffffff;
+  --bs-color-focus-ring: rgba(0, 174, 199, 0.45);
   --bs-color-canvas-dot: #d7d7de;
 
   /* Espaciado */
@@ -62,12 +77,17 @@
     --bs-color-text: #ededef;
     --bs-color-text-muted: #a1a1aa;
     --bs-color-text-faint: #71717a;
-    --bs-color-accent: #8080e8;
-    --bs-color-accent-hover: #9494ec;
-    --bs-color-accent-contrast: #14141a;
+    /* Mismo turquesa iLERNA aclarado para fondos oscuros (#2CC7DE), con un
+       hover todavía más claro (#5AD6E8) y texto muy oscuro encima:
+       8.13:1 en reposo y 9.62:1 en hover. */
+    --bs-color-accent: #2cc7de;
+    --bs-color-accent-hover: #5ad6e8;
+    --bs-color-accent-contrast: #06222a;
     --bs-color-danger: #f0677a;
+    --bs-color-danger-hover: #f78b99;
     --bs-color-danger-bg: rgba(240, 103, 122, 0.12);
-    --bs-color-focus-ring: rgba(128, 128, 232, 0.5);
+    --bs-color-danger-contrast: #2a0b10;
+    --bs-color-focus-ring: rgba(44, 199, 222, 0.5);
     --bs-color-canvas-dot: #34343a;
     --bs-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
   }

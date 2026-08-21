@@ -6,7 +6,6 @@ import { AppServicesProvider } from '../../../app/AppServicesContext'
 import { MemoryProjectRepository } from '../../../persistence'
 import type { ProjectRepository } from '../../../persistence'
 import { createProject, deriveEdges } from '../../../domain'
-import type { DecisionNode } from '../../../domain'
 import { useProjectStore } from '../../../store'
 import { resetProjectStore } from '../../../store/testHelpers'
 
@@ -186,7 +185,7 @@ describe('useAutosave — debounce y guardado', () => {
     expect(useProjectStore.getState().saveStatus).toBe('error')
 
     act(() => {
-      useProjectStore.getState().createNode('content', { x: 10, y: 10 })
+      useProjectStore.getState().createNode('slide', { x: 10, y: 10 })
     })
     await act(async () => {
       await vi.advanceTimersByTimeAsync(AUTOSAVE_DEBOUNCE_MS)
@@ -210,38 +209,48 @@ describe('useAutosave — fidelidad de reapertura (criterio de aceptación del m
 
     renderHarness(repository, filePath)
 
-    // 1. Crea nodos de varios tipos con título/body propios.
+    // 1. Crea nodos con título/body propios.
     act(() => {
       const store = useProjectStore.getState()
-      store.createNode('content', { x: 100, y: 50 }, { title: 'Pantalla 1', body: 'Cuerpo de la pantalla' })
-      store.createNode('decision', { x: 200, y: 150 })
+      store.createNode('slide', { x: 100, y: 50 }, { title: 'Diapositiva 1', body: 'Cuerpo de la diapositiva' })
+      store.createNode('slide', { x: 200, y: 150 })
       store.createNode('final', { x: 300, y: 250 })
     })
 
-    let project = useProjectStore.getState().project
-    const startId = project.graph.nodes.find((node) => node.type === 'start')?.id
-    const contentId = project.graph.nodes.find((node) => node.type === 'content')?.id
-    const decisionId = project.graph.nodes.find((node) => node.type === 'decision')?.id
+    const project = useProjectStore.getState().project
+    const startId = project.graph.startNodeId
+    const slideIds = project.graph.nodes
+      .filter((node) => node.type === 'slide' && node.id !== startId)
+      .map((node) => node.id)
+    const [contentId, decisionId] = slideIds as [string, string]
     const finalId = project.graph.nodes.find((node) => node.type === 'final')?.id
-    if (!startId || !contentId || !decisionId || !finalId) {
+    if (!contentId || !decisionId || !finalId) {
       throw new Error('setup inválido: faltan nodos')
     }
-    const decisionNode = project.graph.nodes.find(
-      (node) => node.id === decisionId,
-    ) as DecisionNode
-    const [responseA, responseB] = decisionNode.responses
-    if (!responseA || !responseB) throw new Error('setup inválido: faltan respuestas A/B')
 
-    // 2. Conecta los nodos, edita textos/títulos de respuestas y mueve nodos.
+    // 2. Conecta los nodos, añade y edita respuestas, y mueve nodos.
     act(() => {
       const store = useProjectStore.getState()
       store.connect(startId, contentId)
       store.connect(contentId, decisionId)
+      store.addResponse(decisionId)
+      store.addResponse(decisionId)
+    })
+
+    const decisionNode = useProjectStore
+      .getState()
+      .project.graph.nodes.find((node) => node.id === decisionId)
+    const responses = decisionNode?.type === 'slide' ? decisionNode.responses : []
+    const [responseA, responseB] = responses
+    if (!responseA || !responseB) throw new Error('setup inválido: faltan respuestas')
+
+    act(() => {
+      const store = useProjectStore.getState()
       store.connect(decisionId, finalId, responseA.id)
       store.connect(decisionId, contentId, responseB.id)
       store.updateResponse(decisionId, responseA.id, { text: 'Sí, continuar' })
       store.updateResponse(decisionId, responseB.id, { text: 'No, repetir' })
-      store.updateNode(startId, { title: 'Inicio del escenario' })
+      store.updateNode(startId, { title: 'Inicio del escenario', continueLabel: 'Vamos' })
       store.moveNode(contentId, { x: 111, y: 222 })
       store.moveNode(decisionId, { x: 333, y: 444 })
       store.setViewport({ x: 42, y: -17, zoom: 1.5 })
@@ -264,31 +273,36 @@ describe('useAutosave — fidelidad de reapertura (criterio de aceptación del m
     expect(reopened).toEqual(inMemory)
 
     expect(reopened.graph.nodes).toHaveLength(4)
+    // La referencia de inicio sobrevive al ciclo guardar/reabrir.
+    expect(reopened.graph.startNodeId).toBe(startId)
 
     const reopenedStart = reopened.graph.nodes.find((node) => node.id === startId)
     const reopenedContent = reopened.graph.nodes.find((node) => node.id === contentId)
-    const reopenedDecision = reopened.graph.nodes.find((node) => node.id === decisionId) as
-      | DecisionNode
-      | undefined
+    const reopenedDecision = reopened.graph.nodes.find((node) => node.id === decisionId)
     const reopenedFinal = reopened.graph.nodes.find((node) => node.id === finalId)
 
-    expect(reopenedStart?.type).toBe('start')
+    expect(reopenedStart?.type).toBe('slide')
     expect(reopenedStart?.title).toBe('Inicio del escenario')
-    expect(reopenedStart).toMatchObject({ targetNodeId: contentId })
+    expect(reopenedStart).toMatchObject({ targetNodeId: contentId, continueLabel: 'Vamos' })
 
-    expect(reopenedContent?.type).toBe('content')
-    expect(reopenedContent?.title).toBe('Pantalla 1')
-    expect(reopenedContent?.body).toBe('Cuerpo de la pantalla')
+    expect(reopenedContent?.type).toBe('slide')
+    expect(reopenedContent?.title).toBe('Diapositiva 1')
+    expect(reopenedContent?.body).toBe('Cuerpo de la diapositiva')
     expect(reopenedContent?.position).toEqual({ x: 111, y: 222 })
     expect(reopenedContent).toMatchObject({ targetNodeId: decisionId })
 
-    expect(reopenedDecision?.type).toBe('decision')
+    expect(reopenedDecision?.type).toBe('slide')
     expect(reopenedDecision?.position).toEqual({ x: 333, y: 444 })
-    expect(reopenedDecision?.responses).toHaveLength(2)
-    const reopenedA = reopenedDecision?.responses.find((response) => response.letter === 'A')
-    const reopenedB = reopenedDecision?.responses.find((response) => response.letter === 'B')
-    expect(reopenedA).toMatchObject({ text: 'Sí, continuar', targetNodeId: finalId })
-    expect(reopenedB).toMatchObject({ text: 'No, repetir', targetNodeId: contentId })
+    const reopenedResponses = reopenedDecision?.type === 'slide' ? reopenedDecision.responses : []
+    expect(reopenedResponses).toHaveLength(2)
+    expect(reopenedResponses.find((response) => response.id === responseA.id)).toMatchObject({
+      text: 'Sí, continuar',
+      targetNodeId: finalId,
+    })
+    expect(reopenedResponses.find((response) => response.id === responseB.id)).toMatchObject({
+      text: 'No, repetir',
+      targetNodeId: contentId,
+    })
 
     expect(reopenedFinal?.type).toBe('final')
     expect(reopenedFinal?.position).toEqual({ x: 300, y: 250 })
@@ -300,8 +314,8 @@ describe('useAutosave — fidelidad de reapertura (criterio de aceptación del m
       expect.arrayContaining([
         expect.objectContaining({ source: startId, target: contentId }),
         expect.objectContaining({ source: contentId, target: decisionId }),
-        expect.objectContaining({ source: decisionId, target: finalId, label: 'A' }),
-        expect.objectContaining({ source: decisionId, target: contentId, label: 'B' }),
+        expect.objectContaining({ source: decisionId, target: finalId }),
+        expect.objectContaining({ source: decisionId, target: contentId }),
       ]),
     )
     expect(edges).toHaveLength(4)

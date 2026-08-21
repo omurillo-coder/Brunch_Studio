@@ -3,7 +3,6 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { Canvas } from '../Canvas'
 import { useProjectStore } from '../../../store'
 import { resetProjectStore } from '../../../store/testHelpers'
-import type { DecisionNode } from '../../../domain'
 
 /**
  * Montaje real de `@xyflow/react` (sin mockear), apoyado en los polyfills
@@ -11,9 +10,7 @@ import type { DecisionNode } from '../../../domain'
  * `getBoundingClientRect`). Es deliberadamente un smoke test: comprueba que
  * el lienzo monta sin lanzar y pinta lo esperado, no gestos de puntero
  * reales (arrastre/zoom con el ratón) — esos se testean invocando
- * directamente los callbacks relevantes en `Canvas.wiring.test.tsx`, y el
- * pan/zoom real queda como verificación manual (ver limitación documentada
- * en el informe de la fase).
+ * directamente los callbacks relevantes en `Canvas.wiring.test.tsx`.
  */
 
 beforeEach(() => {
@@ -21,61 +18,59 @@ beforeEach(() => {
 })
 
 describe('Canvas (montaje real de @xyflow/react)', () => {
-  it('monta sin lanzar y pinta el nodo de Inicio inicial, sin ids internos visibles', async () => {
+  it('monta sin lanzar y pinta la diapositiva inicial, sin ids internos visibles', async () => {
     render(<Canvas />)
 
-    expect(await screen.findByText('Inicio')).toBeInTheDocument()
+    expect(await screen.findByText('Diapositiva')).toBeInTheDocument()
     expect(screen.getByText('1')).toBeInTheDocument()
     expect(screen.getByText('Sin título')).toBeInTheDocument()
 
-    const startId = useProjectStore.getState().project.graph.nodes[0]?.id
-    if (!startId) throw new Error('setup inválido')
+    const startId = useProjectStore.getState().project.graph.startNodeId
     expect(screen.queryByText(startId)).not.toBeInTheDocument()
   })
 
+  it('marca con una etiqueta discreta cuál es la diapositiva de inicio', async () => {
+    useProjectStore.getState().createNode('slide', { x: 50, y: 50 }, { title: 'Otra' })
+
+    render(<Canvas />)
+
+    // Una única marca "Inicio" en todo el lienzo, la de `graph.startNodeId`.
+    expect(await screen.findByTitle('Diapositiva de inicio')).toBeInTheDocument()
+    expect(screen.getAllByText('Inicio')).toHaveLength(1)
+  })
+
   it('pinta un nodo por cada nodo del proyecto', async () => {
-    useProjectStore.getState().createNode('content', { x: 50, y: 50 }, { title: 'Pantalla uno' })
-    useProjectStore.getState().createNode('decision', { x: 100, y: 100 })
+    useProjectStore.getState().createNode('slide', { x: 50, y: 50 }, { title: 'Diapositiva uno' })
+    useProjectStore.getState().createNode('final', { x: 100, y: 100 }, { title: 'El final' })
 
     render(<Canvas />)
 
-    expect(await screen.findByText('Pantalla')).toBeInTheDocument()
-    expect(screen.getByText('Pantalla uno')).toBeInTheDocument()
-    expect(screen.getByText('Decisión')).toBeInTheDocument()
+    expect(await screen.findByText('Diapositiva uno')).toBeInTheDocument()
+    expect(screen.getAllByText('Diapositiva')).toHaveLength(2)
+    expect(screen.getByText('Final')).toBeInTheDocument()
+    expect(screen.getByText('El final')).toBeInTheDocument()
   })
 
-  it('un nodo decision sin respuestas muestra "Sin respuestas"', async () => {
-    useProjectStore.getState().createNode('decision', { x: 0, y: 0 })
-    const decisionId = useProjectStore
-      .getState()
-      .project.graph.nodes.find((n) => n.type === 'decision')?.id
-    if (!decisionId) throw new Error('setup inválido')
-
-    // `createNode` deja el decision con A y B; para probar el caso límite de
-    // "sin ninguna respuesta" se eliminan explícitamente (el dominio no lo
-    // impide, aunque nunca se nazca así).
-    const initialResponses = (
-      useProjectStore.getState().project.graph.nodes.find((n) => n.id === decisionId) as DecisionNode
-    ).responses
-    for (const response of initialResponses) {
-      useProjectStore.getState().removeResponse(decisionId, response.id)
-    }
+  it('una diapositiva con respuestas muestra su texto pero nunca su letra', async () => {
+    const startId = useProjectStore.getState().project.graph.startNodeId
+    useProjectStore.getState().addResponse(startId)
+    const node = useProjectStore.getState().project.graph.nodes.find((n) => n.id === startId)
+    const responseId = node?.type === 'slide' ? node.responses[0]?.id : undefined
+    if (!responseId) throw new Error('setup inválido')
+    useProjectStore.getState().updateResponse(startId, responseId, { text: 'Primera opción' })
 
     render(<Canvas />)
 
-    expect(await screen.findByText('Sin respuestas')).toBeInTheDocument()
+    expect(await screen.findByText('Primera opción')).toBeInTheDocument()
+    expect(screen.queryByText('A')).not.toBeInTheDocument()
   })
 
-  it('un nodo decision con respuestas muestra su letra y texto', async () => {
-    useProjectStore.getState().createNode('decision', { x: 0, y: 0 })
-    const decisionId = useProjectStore
-      .getState()
-      .project.graph.nodes.find((n) => n.type === 'decision')?.id
-    if (!decisionId) throw new Error('setup inválido')
-    useProjectStore.getState().addResponse(decisionId)
+  it('una respuesta sin texto se resume como "Sin texto"', async () => {
+    const startId = useProjectStore.getState().project.graph.startNodeId
+    useProjectStore.getState().addResponse(startId)
 
     render(<Canvas />)
 
-    expect(await screen.findByText('A')).toBeInTheDocument()
+    expect(await screen.findByText('Sin texto')).toBeInTheDocument()
   })
 })

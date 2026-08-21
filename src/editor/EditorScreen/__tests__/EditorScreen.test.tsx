@@ -60,14 +60,14 @@ describe('EditorScreen — conmutación shell/Player (previewMode)', () => {
     expect(screen.getByText('▶ Probar')).toBeInTheDocument()
 
     act(() => {
-      useProjectStore.getState().createNode('content', { x: 50, y: 0 })
+      useProjectStore.getState().createNode('slide', { x: 50, y: 0 })
     })
     const project = useProjectStore.getState().project
-    const startId = project.graph.nodes.find((node) => node.type === 'start')?.id
-    const contentId = project.graph.nodes.find((node) => node.type === 'content')?.id
-    if (!startId || !contentId) throw new Error('setup inválido')
+    const startId = project.graph.startNodeId
+    const slideId = project.graph.nodes.find((node) => node.id !== startId)?.id
+    if (!slideId) throw new Error('setup inválido')
     act(() => {
-      useProjectStore.getState().connect(startId, contentId)
+      useProjectStore.getState().connect(startId, slideId)
       useProjectStore.getState().setPreviewMode(true)
     })
 

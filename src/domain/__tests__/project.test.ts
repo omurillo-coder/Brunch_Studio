@@ -10,9 +10,21 @@ import {
 } from '../project'
 import { connect } from '../graph'
 import { addResponse } from '../responses'
+import type { ProjectDocument } from '../schemas'
+
+/** Devuelve el id del primer nodo que NO es la diapositiva de inicio y es
+ *  del tipo pedido — atajo cómodo ahora que "slide" es el tipo por defecto y
+ *  hay siempre una diapositiva de inicio en el documento. */
+function otherNodeIdOf(project: ProjectDocument, type: 'slide' | 'final'): string {
+  const node = project.graph.nodes.find(
+    (candidate) => candidate.type === type && candidate.id !== project.graph.startNodeId,
+  )
+  if (!node) throw new Error(`No hay un nodo "${type}" distinto del inicio en el setup`)
+  return node.id
+}
 
 describe('createProject', () => {
-  it('crea un documento con schemaVersion 1, metadata coherente y un único nodo start', () => {
+  it('crea un documento con schemaVersion 1, metadata coherente y una única diapositiva que es el inicio', () => {
     const project = createProject('Mi escenario')
 
     expect(project.schemaVersion).toBe(1)
@@ -23,83 +35,91 @@ describe('createProject', () => {
     expect(project.editor.viewport).toEqual({ x: 0, y: 0, zoom: 1 })
 
     expect(project.graph.nodes).toHaveLength(1)
-    expect(project.graph.nodes[0]?.type).toBe('start')
-    expect(project.graph.nodes[0]?.number).toBe(1)
+    const first = project.graph.nodes[0]
+    expect(first?.type).toBe('slide')
+    expect(first?.number).toBe(1)
+    // El inicio ya no es un nodo aparte: es una referencia a la primera
+    // diapositiva del proyecto.
+    expect(project.graph.startNodeId).toBe(first?.id)
+  })
+
+  it('la diapositiva de inicio nace sin respuestas y sin destino', () => {
+    const project = createProject('P')
+    const start = project.graph.nodes[0]
+    expect(start?.type === 'slide' ? start.responses : undefined).toEqual([])
+    expect(start?.type === 'slide' ? start.targetNodeId : 'missing').toBeUndefined()
+    expect(start?.type === 'slide' ? start.continueLabel : 'missing').toBeUndefined()
   })
 })
 
 describe('createNode', () => {
   it('añade un nodo nuevo con número visible incremental', () => {
     const project = createProject('P')
-    const updated = createNode(project, 'content', { x: 100, y: 100 }, { title: 'Pantalla 1' })
+    const updated = createNode(project, 'slide', { x: 100, y: 100 }, { title: 'Diapositiva 1' })
 
     expect(updated.graph.nodes).toHaveLength(2)
-    const content = updated.graph.nodes.find((node) => node.type === 'content')
-    expect(content?.number).toBe(2)
-    expect(content?.title).toBe('Pantalla 1')
+    const slideId = otherNodeIdOf(updated, 'slide')
+    const slide = updated.graph.nodes.find((node) => node.id === slideId)
+    expect(slide?.number).toBe(2)
+    expect(slide?.title).toBe('Diapositiva 1')
     // Inmutabilidad: el proyecto original no se muta.
     expect(project.graph.nodes).toHaveLength(1)
   })
 
-  it('no permite crear un segundo nodo start', () => {
+  it('una diapositiva nueva nace sin respuestas (modo "de continuar")', () => {
     const project = createProject('P')
-    expect(() => createNode(project, 'start', { x: 0, y: 0 })).toThrow()
+    const updated = createNode(project, 'slide', { x: 0, y: 0 })
+    const slideId = otherNodeIdOf(updated, 'slide')
+    const slide = updated.graph.nodes.find((node) => node.id === slideId)
+    expect(slide?.type === 'slide' ? slide.responses : undefined).toEqual([])
   })
 
-  it('crea nodos decision con respuestas iniciales A y B (nunca vacío, nunca con más de 2 al nacer)', () => {
-    const project = createProject('P')
-    const updated = createNode(project, 'decision', { x: 0, y: 0 })
-    const decision = updated.graph.nodes.find((node) => node.type === 'decision')
-    expect(decision?.type).toBe('decision')
-    if (decision?.type === 'decision') {
-      expect(decision.responses).toHaveLength(2)
-      expect(decision.responses.map((r) => r.letter)).toEqual(['A', 'B'])
-      expect(decision.responses.every((r) => r.text === '')).toBe(true)
-      expect(decision.responses.every((r) => r.targetNodeId === undefined)).toBe(true)
-    }
+  it('crea nodos final sin respuestas ni salida', () => {
+    const project = createNode(createProject('P'), 'final', { x: 0, y: 0 })
+    const finalId = otherNodeIdOf(project, 'final')
+    const final = project.graph.nodes.find((node) => node.id === finalId)
+    expect(final?.type).toBe('final')
   })
 })
 
 describe('deleteNode', () => {
-  it('elimina el nodo y limpia targetNodeId de nodos start/content que apuntaban a él', () => {
+  it('elimina el nodo y limpia el targetNodeId de las diapositivas que apuntaban a él', () => {
     let project = createProject('P')
-    const startId = project.graph.nodes[0]?.id
-    project = createNode(project, 'content', { x: 100, y: 0 }, { title: 'C1' })
-    const contentId = project.graph.nodes.find((n) => n.type === 'content')?.id
-    if (!startId || !contentId) throw new Error('setup inválido')
+    const startId = project.graph.startNodeId
+    project = createNode(project, 'slide', { x: 100, y: 0 }, { title: 'C1' })
+    const slideId = otherNodeIdOf(project, 'slide')
 
-    project = connect(project, startId, contentId)
+    project = connect(project, startId, slideId)
     project = createNode(project, 'final', { x: 200, y: 0 })
-    const finalId = project.graph.nodes.find((n) => n.type === 'final')?.id
-    if (!finalId) throw new Error('setup inválido')
-    project = connect(project, contentId, finalId)
+    const finalId = otherNodeIdOf(project, 'final')
+    project = connect(project, slideId, finalId)
 
     project = deleteNode(project, finalId)
 
     expect(project.graph.nodes.some((n) => n.id === finalId)).toBe(false)
-    const content = project.graph.nodes.find((n) => n.id === contentId)
-    expect(content && content.type === 'content' ? content.targetNodeId : 'missing').toBeUndefined()
+    const slide = project.graph.nodes.find((n) => n.id === slideId)
+    expect(slide?.type === 'slide' ? slide.targetNodeId : 'missing').toBeUndefined()
   })
 
-  it('elimina el nodo y limpia targetNodeId de respuestas de decision que apuntaban a él', () => {
+  it('elimina el nodo y limpia el targetNodeId de las respuestas que apuntaban a él', () => {
     let project = createProject('P')
-    project = createNode(project, 'decision', { x: 100, y: 0 })
-    const decisionId = project.graph.nodes.find((n) => n.type === 'decision')?.id
+    project = createNode(project, 'slide', { x: 100, y: 0 })
+    const slideId = otherNodeIdOf(project, 'slide')
     project = createNode(project, 'final', { x: 200, y: 0 })
-    const finalId = project.graph.nodes.find((n) => n.type === 'final')?.id
-    if (!decisionId || !finalId) throw new Error('setup inválido')
+    const finalId = otherNodeIdOf(project, 'final')
 
-    project = addResponse(project, decisionId)
-    const decisionNode = project.graph.nodes.find((n) => n.id === decisionId)
-    const respId =
-      decisionNode?.type === 'decision' ? decisionNode.responses[0]?.id : undefined
+    project = addResponse(project, slideId)
+    const slideNode = project.graph.nodes.find((n) => n.id === slideId)
+    const respId = slideNode?.type === 'slide' ? slideNode.responses[0]?.id : undefined
     if (!respId) throw new Error('setup inválido')
 
-    project = connect(project, decisionId, finalId, respId)
+    project = connect(project, slideId, finalId, respId)
     project = deleteNode(project, finalId)
 
-    const decisionAfter = project.graph.nodes.find((n) => n.id === decisionId)
-    expect(decisionAfter?.type === 'decision' ? decisionAfter.responses[0]?.targetNodeId : 'missing').toBeUndefined()
+    const slideAfter = project.graph.nodes.find((n) => n.id === slideId)
+    expect(
+      slideAfter?.type === 'slide' ? slideAfter.responses[0]?.targetNodeId : 'missing',
+    ).toBeUndefined()
   })
 
   it('lanza error si el nodo no existe', () => {
@@ -107,12 +127,9 @@ describe('deleteNode', () => {
     expect(() => deleteNode(project, 'no-existe')).toThrow()
   })
 
-  it('no permite eliminar el nodo start', () => {
+  it('no permite eliminar la diapositiva de inicio', () => {
     const project = createProject('P')
-    const startId = project.graph.nodes[0]?.id
-    if (!startId) throw new Error('setup inválido')
-
-    expect(() => deleteNode(project, startId)).toThrow()
+    expect(() => deleteNode(project, project.graph.startNodeId)).toThrow()
     // No debe haber mutado nada aunque haya lanzado.
     expect(project.graph.nodes).toHaveLength(1)
   })
@@ -121,8 +138,7 @@ describe('deleteNode', () => {
 describe('moveNode', () => {
   it('actualiza la posición del nodo indicado', () => {
     const project = createProject('P')
-    const startId = project.graph.nodes[0]?.id
-    if (!startId) throw new Error('setup inválido')
+    const startId = project.graph.startNodeId
 
     const updated = moveNode(project, startId, { x: 42, y: 7 })
     expect(updated.graph.nodes[0]?.position).toEqual({ x: 42, y: 7 })
@@ -133,27 +149,25 @@ describe('moveNode', () => {
 describe('moveNodes', () => {
   it('mueve varios nodos a la vez en una sola operación', () => {
     let project = createProject('P')
-    project = createNode(project, 'content', { x: 100, y: 0 })
-    const startId = project.graph.nodes.find((n) => n.type === 'start')?.id
-    const contentId = project.graph.nodes.find((n) => n.type === 'content')?.id
-    if (!startId || !contentId) throw new Error('setup inválido')
+    project = createNode(project, 'slide', { x: 100, y: 0 })
+    const startId = project.graph.startNodeId
+    const slideId = otherNodeIdOf(project, 'slide')
 
     const updated = moveNodes(project, [
       { nodeId: startId, position: { x: 10, y: 20 } },
-      { nodeId: contentId, position: { x: 30, y: 40 } },
+      { nodeId: slideId, position: { x: 30, y: 40 } },
     ])
 
     expect(updated.graph.nodes.find((n) => n.id === startId)?.position).toEqual({ x: 10, y: 20 })
-    expect(updated.graph.nodes.find((n) => n.id === contentId)?.position).toEqual({ x: 30, y: 40 })
+    expect(updated.graph.nodes.find((n) => n.id === slideId)?.position).toEqual({ x: 30, y: 40 })
     // Inmutabilidad: el proyecto original no se toca.
     expect(project.graph.nodes.find((n) => n.id === startId)?.position).toEqual({ x: 0, y: 0 })
-    expect(project.graph.nodes.find((n) => n.id === contentId)?.position).toEqual({ x: 100, y: 0 })
+    expect(project.graph.nodes.find((n) => n.id === slideId)?.position).toEqual({ x: 100, y: 0 })
   })
 
   it('lanza error y no muta nada si alguno de los ids no existe', () => {
-    let project = createProject('P')
-    const startId = project.graph.nodes[0]?.id
-    if (!startId) throw new Error('setup inválido')
+    const project = createProject('P')
+    const startId = project.graph.startNodeId
 
     expect(() =>
       moveNodes(project, [
@@ -168,8 +182,7 @@ describe('moveNodes', () => {
 describe('updateNode', () => {
   it('actualiza título y body sin afectar otros campos', () => {
     const project = createProject('P')
-    const startId = project.graph.nodes[0]?.id
-    if (!startId) throw new Error('setup inválido')
+    const startId = project.graph.startNodeId
 
     const updated = updateNode(project, startId, { title: 'Inicio del escenario', body: 'texto' })
     const node = updated.graph.nodes[0]
@@ -181,160 +194,130 @@ describe('updateNode', () => {
   const IMAGE_ID = '11111111-1111-1111-1111-111111111111'
   const AUDIO_ID = '22222222-2222-2222-2222-222222222222'
 
-  it('fija imagen y audio en un nodo content', () => {
-    let project = createProject('P')
-    project = createNode(project, 'content', { x: 0, y: 0 })
-    const contentId = project.graph.nodes.find((n) => n.type === 'content')?.id
-    if (!contentId) throw new Error('setup inválido')
+  it('fija imagen y audio en una diapositiva', () => {
+    const project = createProject('P')
+    const startId = project.graph.startNodeId
 
-    const updated = updateNode(project, contentId, {
+    const updated = updateNode(project, startId, {
       imageAssetId: IMAGE_ID,
       audioAssetId: AUDIO_ID,
     })
-    const node = updated.graph.nodes.find((n) => n.id === contentId)
-    expect(node?.type === 'content' ? node.imageAssetId : undefined).toBe(IMAGE_ID)
-    expect(node?.type === 'content' ? node.audioAssetId : undefined).toBe(AUDIO_ID)
-  })
-
-  it('fija imagen y audio en un nodo decision', () => {
-    let project = createProject('P')
-    project = createNode(project, 'decision', { x: 0, y: 0 })
-    const decisionId = project.graph.nodes.find((n) => n.type === 'decision')?.id
-    if (!decisionId) throw new Error('setup inválido')
-
-    const updated = updateNode(project, decisionId, {
-      imageAssetId: IMAGE_ID,
-      audioAssetId: AUDIO_ID,
-    })
-    const node = updated.graph.nodes.find((n) => n.id === decisionId)
-    expect(node?.type === 'decision' ? node.imageAssetId : undefined).toBe(IMAGE_ID)
-    expect(node?.type === 'decision' ? node.audioAssetId : undefined).toBe(AUDIO_ID)
+    const node = updated.graph.nodes.find((n) => n.id === startId)
+    expect(node?.type === 'slide' ? node.imageAssetId : undefined).toBe(IMAGE_ID)
+    expect(node?.type === 'slide' ? node.audioAssetId : undefined).toBe(AUDIO_ID)
   })
 
   it('borra imagen y audio con null tras haberlos fijado', () => {
     let project = createProject('P')
-    project = createNode(project, 'content', { x: 0, y: 0 })
-    const contentId = project.graph.nodes.find((n) => n.type === 'content')?.id
-    if (!contentId) throw new Error('setup inválido')
+    const startId = project.graph.startNodeId
 
-    project = updateNode(project, contentId, { imageAssetId: IMAGE_ID, audioAssetId: AUDIO_ID })
-    const updated = updateNode(project, contentId, { imageAssetId: null, audioAssetId: null })
-    const node = updated.graph.nodes.find((n) => n.id === contentId)
-    expect(node?.type === 'content' ? node.imageAssetId : 'missing').toBeUndefined()
-    expect(node?.type === 'content' ? node.audioAssetId : 'missing').toBeUndefined()
+    project = updateNode(project, startId, { imageAssetId: IMAGE_ID, audioAssetId: AUDIO_ID })
+    const updated = updateNode(project, startId, { imageAssetId: null, audioAssetId: null })
+    const node = updated.graph.nodes.find((n) => n.id === startId)
+    expect(node?.type === 'slide' ? node.imageAssetId : 'missing').toBeUndefined()
+    expect(node?.type === 'slide' ? node.audioAssetId : 'missing').toBeUndefined()
   })
 
   it('no toca imagen/audio si el patch no los incluye (undefined)', () => {
     let project = createProject('P')
-    project = createNode(project, 'content', { x: 0, y: 0 })
-    const contentId = project.graph.nodes.find((n) => n.type === 'content')?.id
-    if (!contentId) throw new Error('setup inválido')
+    const startId = project.graph.startNodeId
 
-    project = updateNode(project, contentId, { imageAssetId: IMAGE_ID })
-    const updated = updateNode(project, contentId, { title: 'otro título' })
-    const node = updated.graph.nodes.find((n) => n.id === contentId)
-    expect(node?.type === 'content' ? node.imageAssetId : undefined).toBe(IMAGE_ID)
+    project = updateNode(project, startId, { imageAssetId: IMAGE_ID })
+    const updated = updateNode(project, startId, { title: 'otro título' })
+    const node = updated.graph.nodes.find((n) => n.id === startId)
+    expect(node?.type === 'slide' ? node.imageAssetId : undefined).toBe(IMAGE_ID)
   })
 
-  it('lanza error al fijar imagen/audio en un nodo start', () => {
-    const project = createProject('P')
-    const startId = project.graph.nodes[0]?.id
-    if (!startId) throw new Error('setup inválido')
-
-    expect(() => updateNode(project, startId, { imageAssetId: IMAGE_ID })).toThrow()
-    expect(() => updateNode(project, startId, { audioAssetId: AUDIO_ID })).toThrow()
-  })
-
-  it('lanza error al fijar imagen/audio en un nodo final', () => {
+  it('fija, cambia y borra el texto del botón de continuar', () => {
     let project = createProject('P')
-    project = createNode(project, 'final', { x: 0, y: 0 })
-    const finalId = project.graph.nodes.find((n) => n.type === 'final')?.id
-    if (!finalId) throw new Error('setup inválido')
+    const startId = project.graph.startNodeId
+
+    project = updateNode(project, startId, { continueLabel: 'Siguiente' })
+    let node = project.graph.nodes.find((n) => n.id === startId)
+    expect(node?.type === 'slide' ? node.continueLabel : undefined).toBe('Siguiente')
+
+    // `undefined` no toca el campo.
+    project = updateNode(project, startId, { title: 'X' })
+    node = project.graph.nodes.find((n) => n.id === startId)
+    expect(node?.type === 'slide' ? node.continueLabel : undefined).toBe('Siguiente')
+
+    // `null` lo borra (vuelve al texto por defecto).
+    project = updateNode(project, startId, { continueLabel: null })
+    node = project.graph.nodes.find((n) => n.id === startId)
+    expect(node?.type === 'slide' ? node.continueLabel : 'missing').toBeUndefined()
+  })
+
+  it('lanza error al fijar imagen/audio/texto de continuar en un nodo final', () => {
+    const project = createNode(createProject('P'), 'final', { x: 0, y: 0 })
+    const finalId = otherNodeIdOf(project, 'final')
 
     expect(() => updateNode(project, finalId, { imageAssetId: IMAGE_ID })).toThrow()
     expect(() => updateNode(project, finalId, { audioAssetId: null })).toThrow()
+    expect(() => updateNode(project, finalId, { continueLabel: 'Otra cosa' })).toThrow()
   })
 })
 
 describe('createConnectedNode', () => {
-  it('crea y conecta en una sola llamada desde un nodo start/content (sin sourceResponseId)', () => {
+  it('crea y conecta en una sola llamada desde una diapositiva sin respuestas (sin sourceResponseId)', () => {
     const project = createProject('P')
-    const startId = project.graph.nodes[0]?.id
-    if (!startId) throw new Error('setup inválido')
+    const startId = project.graph.startNodeId
 
     const { project: updated, nodeId } = createConnectedNode(
       project,
-      'content',
+      'slide',
       { x: 200, y: 50 },
       startId,
     )
 
     expect(updated.graph.nodes).toHaveLength(2)
     const created = updated.graph.nodes.find((node) => node.id === nodeId)
-    expect(created?.type).toBe('content')
+    expect(created?.type).toBe('slide')
     expect(created?.position).toEqual({ x: 200, y: 50 })
 
     const start = updated.graph.nodes.find((node) => node.id === startId)
-    expect(start?.type === 'start' ? start.targetNodeId : undefined).toBe(nodeId)
+    expect(start?.type === 'slide' ? start.targetNodeId : undefined).toBe(nodeId)
 
     // Inmutabilidad: el proyecto original no se toca.
     expect(project.graph.nodes).toHaveLength(1)
   })
 
-  it('crea y conecta en una sola llamada desde una respuesta de un nodo decision', () => {
+  it('crea y conecta en una sola llamada desde una respuesta concreta', () => {
     let project = createProject('P')
-    project = createNode(project, 'decision', { x: 0, y: 0 })
-    const decision = project.graph.nodes.find((node) => node.type === 'decision')
-    const responseId = decision?.type === 'decision' ? decision.responses[0]?.id : undefined
-    if (!decision || !responseId) throw new Error('setup inválido')
+    const startId = project.graph.startNodeId
+    project = addResponse(project, startId)
+    const start = project.graph.nodes.find((node) => node.id === startId)
+    const responseId = start?.type === 'slide' ? start.responses[0]?.id : undefined
+    if (!responseId) throw new Error('setup inválido')
 
     const { project: updated, nodeId } = createConnectedNode(
       project,
       'final',
       { x: 300, y: 0 },
-      decision.id,
+      startId,
       responseId,
     )
 
     const created = updated.graph.nodes.find((node) => node.id === nodeId)
     expect(created?.type).toBe('final')
 
-    const decisionAfter = updated.graph.nodes.find((node) => node.id === decision.id)
+    const startAfter = updated.graph.nodes.find((node) => node.id === startId)
     const response =
-      decisionAfter?.type === 'decision'
-        ? decisionAfter.responses.find((r) => r.id === responseId)
+      startAfter?.type === 'slide'
+        ? startAfter.responses.find((r) => r.id === responseId)
         : undefined
     expect(response?.targetNodeId).toBe(nodeId)
   })
 
-  it('el nodo nuevo creado es un nodo decision con respuestas A y B iniciales', () => {
+  it('propaga el error de `connect` si la respuesta de origen no existe', () => {
     const project = createProject('P')
-    const startId = project.graph.nodes[0]?.id
-    if (!startId) throw new Error('setup inválido')
-
-    const { project: updated, nodeId } = createConnectedNode(
-      project,
-      'decision',
-      { x: 0, y: 0 },
-      startId,
-    )
-
-    const created = updated.graph.nodes.find((node) => node.id === nodeId)
-    expect(created?.type === 'decision' ? created.responses.map((r) => r.letter) : []).toEqual([
-      'A',
-      'B',
-    ])
+    expect(() =>
+      createConnectedNode(project, 'final', { x: 0, y: 0 }, project.graph.startNodeId, 'no-existe'),
+    ).toThrow()
   })
 
-  it('propaga el error de `connect` si la combinación origen/respuesta es inválida', () => {
-    let project = createProject('P')
-    project = createNode(project, 'decision', { x: 0, y: 0 })
-    const decisionId = project.graph.nodes.find((node) => node.type === 'decision')?.id
-    if (!decisionId) throw new Error('setup inválido')
-
-    // Un nodo decision requiere `sourceResponseId`; omitirlo debe propagar
-    // el error que ya lanza `connect` de dominio, sin dejar el proyecto en
-    // un estado intermedio (nodo creado pero no conectado).
-    expect(() => createConnectedNode(project, 'final', { x: 0, y: 0 }, decisionId)).toThrow()
+  it('propaga el error de `connect` si el nodo de origen es un final', () => {
+    const project = createNode(createProject('P'), 'final', { x: 0, y: 0 })
+    const finalId = otherNodeIdOf(project, 'final')
+    expect(() => createConnectedNode(project, 'slide', { x: 0, y: 0 }, finalId)).toThrow()
   })
 })

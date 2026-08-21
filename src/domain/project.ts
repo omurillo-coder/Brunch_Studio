@@ -1,16 +1,13 @@
 import { produce } from 'immer'
 import { createId, nextNodeNumber } from './id'
-import { addResponse } from './responses'
 import { connect } from './graph'
 import type {
-  ContentNode,
-  DecisionNode,
   FinalNode,
   Node,
   NodePosition,
   NodeType,
   ProjectDocument,
-  StartNode,
+  SlideNode,
 } from './schemas'
 
 /** Campos editables al crear un nodo (aparte de tipo y posición). */
@@ -22,34 +19,53 @@ export interface CreateNodeExtra {
 /**
  * Campos editables mediante `updateNode` (título/body y afines básicos).
  *
- * Semántica de "patch" para `imageAssetId`/`audioAssetId`: `undefined` no
- * toca el campo, `null` lo borra (lo deja `undefined` en el nodo) y un
- * string lo fija a ese id. Solo aplican a nodos `content`/`decision` — un
- * `start`/`final` con alguno de estos campos presente en el patch (aunque
- * sea `null`) hace que `updateNode` lance, ver más abajo.
+ * Semántica de "patch" para `imageAssetId`/`audioAssetId`/`continueLabel`:
+ * `undefined` no toca el campo, `null` lo borra (lo deja `undefined` en el
+ * nodo — para `continueLabel` eso significa "vuelve al texto por defecto",
+ * ver `DEFAULT_CONTINUE_LABEL`) y un string lo fija a ese valor. Los tres
+ * solo aplican a nodos `slide`: un `final` con alguno de estos campos
+ * presente en el patch (aunque sea `null`) hace que `updateNode` lance, ver
+ * más abajo.
  */
 export interface UpdateNodePatch {
   title?: string
   body?: string
   imageAssetId?: string | null
   audioAssetId?: string | null
+  continueLabel?: string | null
+}
+
+function newSlideNode(
+  common: { id: string; number: number; position: NodePosition; title: string; body: string },
+): SlideNode {
+  return {
+    ...common,
+    type: 'slide',
+    targetNodeId: undefined,
+    continueLabel: undefined,
+    responses: [],
+    imageAssetId: undefined,
+    audioAssetId: undefined,
+  }
 }
 
 /**
- * Crea un `ProjectDocument` nuevo con metadata coherente y un único nodo
- * `start` automático (número visible 1, posición de origen).
+ * Crea un `ProjectDocument` nuevo con metadata coherente y una única
+ * diapositiva automática (número visible 1, posición de origen), que además
+ * es el punto de partida del recorrido (`graph.startNodeId`).
+ *
+ * Ya no existe un nodo "Inicio" separado e invisible: la primera
+ * diapositiva del proyecto ES el inicio.
  */
 export function createProject(name: string): ProjectDocument {
   const now = new Date().toISOString()
-  const startNode: StartNode = {
+  const startSlide = newSlideNode({
     id: createId(),
     number: 1,
-    type: 'start',
     position: { x: 0, y: 0 },
     title: '',
     body: '',
-    targetNodeId: undefined,
-  }
+  })
 
   return {
     schemaVersion: 1,
@@ -61,7 +77,8 @@ export function createProject(name: string): ProjectDocument {
     },
     settings: {},
     graph: {
-      nodes: [startNode],
+      nodes: [startSlide],
+      startNodeId: startSlide.id,
     },
     editor: {
       viewport: { x: 0, y: 0, zoom: 1 },
@@ -80,12 +97,13 @@ function findNodeIndex(project: ProjectDocument, nodeId: string): number {
 /**
  * Crea y añade un nodo nuevo al proyecto.
  *
- * Decisión de diseño: solo puede existir un nodo `start` por proyecto. Si ya
- * existe uno y se solicita crear otro, esta función lanza un `Error` en vez
- * de ignorar la petición silenciosamente o degradar el tipo — así la capa
- * que la invoque (futuro store) puede capturarlo y mostrar un mensaje claro
- * en vez de que el grafo quede en un estado inconsistente sin que nadie se
- * entere.
+ * Una diapositiva nueva nace SIN respuestas: se comporta como "de
+ * continuar" (un único destino, `targetNodeId`) hasta que se le añade la
+ * primera respuesta desde el Inspector (ver `addResponse`), momento en el
+ * que pasa a comportarse como decisión. Ya no hay ninguna guarda de
+ * "segundo nodo start" porque el tipo `start` no existe; lo que sí sigue
+ * siendo imposible es crear un tipo inexistente (lo impide el tipado de
+ * `NodeType`, y el `switch` es exhaustivo).
  */
 export function createNode(
   project: ProjectDocument,
@@ -93,10 +111,6 @@ export function createNode(
   position: NodePosition,
   extra: CreateNodeExtra = {},
 ): ProjectDocument {
-  if (type === 'start' && project.graph.nodes.some((node) => node.type === 'start')) {
-    throw new Error('Ya existe un nodo de tipo "start" en este proyecto; no se puede crear otro.')
-  }
-
   const number = nextNodeNumber(project.graph.nodes.map((node) => node.number))
   const title = extra.title ?? ''
   const body = extra.body ?? ''
@@ -104,19 +118,8 @@ export function createNode(
 
   let newNode: Node
   switch (type) {
-    case 'start': {
-      const node: StartNode = { ...common, type: 'start', targetNodeId: undefined }
-      newNode = node
-      break
-    }
-    case 'content': {
-      const node: ContentNode = { ...common, type: 'content', targetNodeId: undefined }
-      newNode = node
-      break
-    }
-    case 'decision': {
-      const node: DecisionNode = { ...common, type: 'decision', responses: [] }
-      newNode = node
+    case 'slide': {
+      newNode = newSlideNode(common)
       break
     }
     case 'final': {
@@ -126,58 +129,45 @@ export function createNode(
     }
   }
 
-  const withNode = produce(project, (draft) => {
+  return produce(project, (draft) => {
     draft.graph.nodes.push(newNode)
     touchUpdatedAt(draft)
   })
-
-  // Spec de producto: "Una decisión nueva debe empezar de forma intuitiva,
-  // preferiblemente con respuestas A y B [...]. Nunca debe existir E." Por
-  // eso un nodo decision nunca nace con `responses: []`: se le añaden A y B
-  // de inmediato reutilizando `addResponse` (mismo criterio de
-  // generación de id/letra que usa el resto del dominio, sin duplicarlo).
-  if (type === 'decision') {
-    return addResponse(addResponse(withNode, newNode.id), newNode.id)
-  }
-
-  return withNode
 }
 
 /**
  * Elimina un nodo y limpia cualquier referencia entrante hacia él: el
- * `targetNodeId` de nodos start/content, y el `targetNodeId` de cualquier
- * respuesta de nodos decision que apuntara al nodo borrado, quedan en
- * `undefined`. Lanza `Error` si el nodo no existe.
+ * `targetNodeId` de cualquier diapositiva, y el `targetNodeId` de cualquier
+ * respuesta, que apuntaran al nodo borrado quedan en `undefined`. Lanza
+ * `Error` si el nodo no existe.
  *
- * Guarda de dominio: nunca se puede eliminar el nodo `start`. Solo puede
- * existir un Inicio por proyecto (ver `createNode`) y no hay forma de crear
- * uno nuevo una vez borrado el único existente, así que permitirlo dejaría
- * el proyecto en un estado del que no se puede salir por la vía interactiva
- * normal. Lanza `Error` en vez de ignorar la petición en silencio, mismo
- * criterio que el resto de guardas de esta función.
+ * Guarda de dominio: nunca se puede eliminar la diapositiva de inicio
+ * (`graph.startNodeId`). No hay forma de reasignar el punto de partida a
+ * otra diapositiva, así que permitirlo dejaría el proyecto sin inicio y en
+ * un estado del que no se puede salir por la vía interactiva normal. Lanza
+ * `Error` en vez de ignorar la petición en silencio, mismo criterio que el
+ * resto de guardas de esta función.
  */
 export function deleteNode(project: ProjectDocument, nodeId: string): ProjectDocument {
   const index = findNodeIndex(project, nodeId)
   if (index === -1) {
     throw new Error(`No existe un nodo con id "${nodeId}".`)
   }
-  if (project.graph.nodes[index]?.type === 'start') {
-    throw new Error('No se puede eliminar el nodo de tipo "start" de un proyecto.')
+  if (nodeId === project.graph.startNodeId) {
+    throw new Error('No se puede eliminar la diapositiva de inicio del proyecto.')
   }
 
   return produce(project, (draft) => {
     draft.graph.nodes = draft.graph.nodes.filter((node) => node.id !== nodeId)
 
     for (const node of draft.graph.nodes) {
-      if (node.type === 'start' || node.type === 'content') {
-        if (node.targetNodeId === nodeId) {
-          node.targetNodeId = undefined
-        }
-      } else if (node.type === 'decision') {
-        for (const response of node.responses) {
-          if (response.targetNodeId === nodeId) {
-            response.targetNodeId = undefined
-          }
+      if (node.type !== 'slide') continue
+      if (node.targetNodeId === nodeId) {
+        node.targetNodeId = undefined
+      }
+      for (const response of node.responses) {
+        if (response.targetNodeId === nodeId) {
+          response.targetNodeId = undefined
         }
       }
     }
@@ -243,13 +233,14 @@ export function moveNodes(project: ProjectDocument, moves: NodeMove[]): ProjectD
 
 /**
  * Actualiza campos editables básicos de un nodo (título/body/adjuntos de
- * media). No permite cambiar `type`, `id`, `number` ni campos estructurales
- * (responses, targetNodeId) — para eso existen funciones dedicadas.
+ * media/texto del botón de continuar). No permite cambiar `type`, `id`,
+ * `number` ni campos estructurales (responses, targetNodeId) — para eso
+ * existen funciones dedicadas.
  *
- * `imageAssetId`/`audioAssetId` solo son válidos en nodos `content` y
- * `decision`: si el patch los incluye (aunque sea con valor `null` para
- * borrarlos) y el nodo es `start` o `final`, lanza `Error` — esos tipos de
- * nodo no soportan media adjunta.
+ * `imageAssetId`/`audioAssetId`/`continueLabel` solo son válidos en nodos
+ * `slide`: si el patch los incluye (aunque sea con valor `null` para
+ * borrarlos) y el nodo es `final`, lanza `Error` — un Final no admite media
+ * adjunta ni tiene botón de continuar.
  */
 export function updateNode(
   project: ProjectDocument,
@@ -262,10 +253,13 @@ export function updateNode(
   }
 
   const node = project.graph.nodes[index]
-  const setsMedia = patch.imageAssetId !== undefined || patch.audioAssetId !== undefined
-  if (setsMedia && node && node.type !== 'content' && node.type !== 'decision') {
+  const setsSlideOnlyField =
+    patch.imageAssetId !== undefined ||
+    patch.audioAssetId !== undefined ||
+    patch.continueLabel !== undefined
+  if (setsSlideOnlyField && node && node.type !== 'slide') {
     throw new Error(
-      `El nodo "${nodeId}" es de tipo "${node.type}" y no admite imagen/audio adjuntos.`,
+      `El nodo "${nodeId}" es de tipo "${node.type}" y no admite imagen/audio adjuntos ni texto de continuar.`,
     )
   }
 
@@ -274,12 +268,15 @@ export function updateNode(
     if (!draftNode) return
     if (patch.title !== undefined) draftNode.title = patch.title
     if (patch.body !== undefined) draftNode.body = patch.body
-    if (draftNode.type === 'content' || draftNode.type === 'decision') {
+    if (draftNode.type === 'slide') {
       if (patch.imageAssetId !== undefined) {
         draftNode.imageAssetId = patch.imageAssetId === null ? undefined : patch.imageAssetId
       }
       if (patch.audioAssetId !== undefined) {
         draftNode.audioAssetId = patch.audioAssetId === null ? undefined : patch.audioAssetId
+      }
+      if (patch.continueLabel !== undefined) {
+        draftNode.continueLabel = patch.continueLabel === null ? undefined : patch.continueLabel
       }
     }
     touchUpdatedAt(draft)
@@ -299,28 +296,24 @@ export interface CreateConnectedNodeResult {
  * operación de dominio.
  *
  * Pensada para el flujo "arrastrar una conexión hasta el vacío del lienzo y
- * elegir qué crear" (fase 7): sin esta función, el store tendría que
- * encadenar `createNode` + `connect` como dos llamadas independientes, lo
- * que en el diseño actual del store (cada acción de dominio empuja una
- * entrada a `history.past`) generaría dos entradas de historial deshacibles
- * por separado en vez de una única acción percibida por el usuario.
+ * elegir qué crear": sin esta función, el store tendría que encadenar
+ * `createNode` + `connect` como dos llamadas independientes, lo que en el
+ * diseño actual del store (cada acción de dominio empuja una entrada a
+ * `history.past`) generaría dos entradas de historial deshacibles por
+ * separado en vez de una única acción percibida por el usuario.
  *
  * Internamente llama a `createNode` y después a `connect` sobre su
  * resultado. El `nodeId` devuelto se obtiene comparando los ids de nodo
  * antes/después de `createNode` (el único nodo nuevo es el que no estaba en
- * el conjunto anterior) — deliberadamente no "el nodo de mayor `number`"
- * (atajo que sí usa hoy `LeftPanel`): esa heurística deja de ser correcta en
- * cuanto haya habido borrados o, en el futuro, reordenaciones, mientras que
- * comparar por id es correcto sea cual sea el estado previo del proyecto.
+ * el conjunto anterior) — deliberadamente no "el nodo de mayor `number`":
+ * esa heurística deja de ser correcta en cuanto haya habido borrados o, en
+ * el futuro, reordenaciones, mientras que comparar por id es correcto sea
+ * cual sea el estado previo del proyecto.
  *
  * Si `sourceNodeId`/`sourceResponseId` no describen una combinación válida
- * (nodo inexistente, `sourceResponseId` obligatorio y ausente para un
- * `decision`, etc.), `connect` lanza y esta función propaga el error sin
- * capturarlo — igual que el resto de funciones de dominio (`createNode`,
- * `deleteNode`...) ya hacen para sus propias combinaciones inválidas. En la
- * práctica no debería ocurrir cuando el origen se deriva de un handle real
- * de un nodo existente (ver `resolveEmptyPaneDrop` en la capa de edición),
- * pero no se enmascara el fallo por si esa invariante se rompiera.
+ * (nodo inexistente, `sourceResponseId` que no pertenece al nodo de origen,
+ * origen de tipo `final`...), `connect` lanza y esta función propaga el
+ * error sin capturarlo — igual que el resto de funciones de dominio.
  */
 export function createConnectedNode(
   project: ProjectDocument,

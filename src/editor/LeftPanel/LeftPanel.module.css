@@ -68,6 +68,15 @@
   padding: 1px 6px;
 }
 
+/* Marca de "diapositiva de inicio" en la lista. Sobria y del mismo tono que
+   la del lienzo (`NodeCard.module.css` .startMark). */
+.nodeStartMark {
+  flex: 0 0 auto;
+  font-size: var(--bs-font-size-xs);
+  font-weight: 600;
+  color: var(--bs-color-accent);
+}
+
 .nodeNumber {
   flex: 0 0 auto;
   color: var(--bs-color-text-faint);

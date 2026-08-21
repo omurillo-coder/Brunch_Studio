@@ -1,8 +1,8 @@
 /**
- * Estilo compartido por los 4 tipos de nodo del lienzo. Deliberadamente
- * compacto: solo tipo/número/título (+ resumen de respuestas en decision),
- * nunca el `body` completo — el lienzo debe seguir siendo legible con
- * decenas de nodos.
+ * Estilo compartido por los dos tipos de nodo del lienzo (Diapositiva y
+ * Final). Deliberadamente compacto: solo tipo/número/título (+ resumen de
+ * respuestas si la diapositiva las tiene), nunca el `body` completo — el
+ * lienzo debe seguir siendo legible con decenas de nodos.
  */
 
 .card {
@@ -44,6 +44,17 @@
   color: var(--bs-color-text-faint);
 }
 
+/* Marca discreta de "esta es la diapositiva de inicio". Deliberadamente
+   sobria (texto pequeño con el color de acento, sin badge grande de color
+   sólido) para no competir visualmente con el título del nodo. */
+.startMark {
+  flex: 0 0 auto;
+  font-size: var(--bs-font-size-xs);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--bs-color-accent);
+}
+
 .title {
   flex: 1 1 auto;
   min-width: 0;
@@ -72,18 +83,15 @@
   padding: 2px 0;
 }
 
-.responseLetter {
+/* Punto de viñeta de una respuesta. Sustituye al antiguo círculo con la
+   letra (A/B/C/D): las letras siguen existiendo en el dominio como criterio
+   de orden, pero nunca se muestran al usuario. */
+.responseBullet {
   flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
-  background: var(--bs-color-bg);
-  color: var(--bs-color-text-muted);
-  font-size: var(--bs-font-size-xs);
-  font-weight: 600;
+  background: var(--bs-color-text-faint);
 }
 
 .responseText {
@@ -93,11 +101,6 @@
   white-space: nowrap;
   text-overflow: ellipsis;
   color: var(--bs-color-text-muted);
-}
-
-.emptyResponses {
-  color: var(--bs-color-text-faint);
-  font-size: var(--bs-font-size-xs);
 }
 
 /* Handles: puntos discretos con el color de acento, en vez del estilo por

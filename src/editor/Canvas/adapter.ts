@@ -1,6 +1,6 @@
 import type { Edge as XyEdge, Node as XyNode } from '@xyflow/react'
-import { deriveEdges } from '../../domain'
-import type { Node as DomainNode, NodeType, ProjectDocument } from '../../domain'
+import { deriveEdges, RESPONSE_LETTERS } from '../../domain'
+import type { DecisionResponse, Node as DomainNode, NodeType, ProjectDocument } from '../../domain'
 import { IN_HANDLE_ID, OUT_HANDLE_ID, parseResponseHandleId, responseHandleId } from './handles'
 
 /**
@@ -14,10 +14,15 @@ import { IN_HANDLE_ID, OUT_HANDLE_ID, parseResponseHandleId, responseHandleId } 
  * tal cual a las props `nodes`/`edges` de `<ReactFlow>`.
  */
 
-/** Resumen de una respuesta de un nodo decision, para pintar en el nodo. */
+/**
+ * Resumen de una respuesta de una diapositiva, para pintar en la tarjeta del
+ * lienzo. Deliberadamente NO lleva la letra: las respuestas se muestran con
+ * un punto, nunca con la letra A/B/C/D (que sigue existiendo en el dominio
+ * solo como criterio interno de orden y de cota de 4, ver
+ * `RESPONSE_LETTERS`). El orden del array ya viene aplicado (por letra).
+ */
 export interface CanvasResponseSummary {
   id: string
-  letter: string
   text: string
 }
 
@@ -26,8 +31,20 @@ export interface CanvasNodeData extends Record<string, unknown> {
   nodeType: NodeType
   number: number
   title: string
-  /** Solo presente en nodos `decision`. */
+  /** Solo presente en nodos `slide`; vacío si la diapositiva no tiene
+   *  respuestas (y por tanto se comporta como "de continuar"). */
   responses?: CanvasResponseSummary[]
+  /** `true` solo para la diapositiva de inicio (`graph.startNodeId`). */
+  isStart: boolean
+}
+
+/** Ordena las respuestas por letra (A→D), igual que el Inspector y el
+ *  Player: el array interno conserva el orden de creación, que puede no
+ *  coincidir con el de letra tras eliminar y reañadir una intermedia. */
+function sortByLetter(responses: DecisionResponse[]): DecisionResponse[] {
+  return [...responses].sort(
+    (a, b) => RESPONSE_LETTERS.indexOf(a.letter) - RESPONSE_LETTERS.indexOf(b.letter),
+  )
 }
 
 /**
@@ -45,7 +62,7 @@ export interface CanvasNodeData extends Record<string, unknown> {
  * `initialHeight` le dan a la librería un tamaño de partida coherente con
  * el que realmente van a pintar las tarjetas (`NodeCard.module.css`:
  * `.card` tiene `min-width: 160px`/`max-width: 220px`; la cabecera por sí
- * sola mide bastante menos que un nodo `decision` con respuestas) mientras
+ * sola mide bastante menos que una diapositiva con respuestas) mientras
  * llega la medición real, que la sustituye en cuanto el `ResizeObserver` la
  * reporta — no hace falta que sea exacto, solo evitar el hueco de "sin
  * medir todavía". Se reutilizan los mismos valores que ya usa `Canvas`
@@ -59,16 +76,16 @@ const INITIAL_NODE_HEIGHT = 60
 export type CanvasFlowNode = XyNode<CanvasNodeData>
 export type CanvasFlowEdge = XyEdge
 
-function toNodeData(node: DomainNode): CanvasNodeData {
+function toNodeData(node: DomainNode, startNodeId: string): CanvasNodeData {
   const base: CanvasNodeData = {
     nodeType: node.type,
     number: node.number,
     title: node.title,
+    isStart: node.id === startNodeId,
   }
-  if (node.type === 'decision') {
-    base.responses = node.responses.map((response) => ({
+  if (node.type === 'slide') {
+    base.responses = sortByLetter(node.responses).map((response) => ({
       id: response.id,
-      letter: response.letter,
       text: response.text,
     }))
   }
@@ -97,7 +114,7 @@ export function toFlowNodes(
     type: node.type,
     position: node.position,
     selected: selected.has(node.id),
-    data: toNodeData(node),
+    data: toNodeData(node, project.graph.startNodeId),
     initialWidth: INITIAL_NODE_WIDTH,
     initialHeight: INITIAL_NODE_HEIGHT,
   }))
@@ -106,8 +123,13 @@ export function toFlowNodes(
 /**
  * Mapea las aristas derivadas de dominio (`deriveEdges`) a aristas de
  * `@xyflow/react`. El `sourceHandle` de dominio es el `responseId` "pelado"
- * (o `undefined` para start/content); aquí se traduce al id de handle real
- * usado por los nodos personalizados (`response:<id>` u `OUT_HANDLE_ID`).
+ * (o `undefined` para la salida de "Continuar" de una diapositiva sin
+ * respuestas); aquí se traduce al id de handle real usado por los nodos
+ * personalizados (`response:<id>` u `OUT_HANDLE_ID`).
+ *
+ * Las aristas no llevan `label`: antes mostraban la letra de la respuesta
+ * (A/B/C/D) sobre la línea, y las letras ya no se muestran nunca al
+ * usuario.
  */
 export function toFlowEdges(project: ProjectDocument): CanvasFlowEdge[] {
   return deriveEdges(project).map((edge) => ({
@@ -116,7 +138,6 @@ export function toFlowEdges(project: ProjectDocument): CanvasFlowEdge[] {
     target: edge.target,
     sourceHandle: edge.sourceHandle ? responseHandleId(edge.sourceHandle) : OUT_HANDLE_ID,
     targetHandle: IN_HANDLE_ID,
-    label: edge.label,
   }))
 }
 

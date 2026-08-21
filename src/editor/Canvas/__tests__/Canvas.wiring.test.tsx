@@ -42,62 +42,79 @@ beforeEach(() => {
   capturedProps = undefined
 })
 
-function firstNodeOfType(type: 'start' | 'content' | 'decision' | 'final') {
-  const node = useProjectStore.getState().project.graph.nodes.find((n) => n.type === type)
-  if (!node) throw new Error(`No hay nodo de tipo ${type}`)
+/** La diapositiva de inicio del proyecto actual del store. */
+function startSlide() {
+  const { project } = useProjectStore.getState()
+  const node = project.graph.nodes.find((n) => n.id === project.graph.startNodeId)
+  if (!node) throw new Error('No hay diapositiva de inicio')
   return node
+}
+
+/** Primer nodo del tipo pedido que no sea la diapositiva de inicio. */
+function otherNodeOfType(type: 'slide' | 'final') {
+  const { project } = useProjectStore.getState()
+  const node = project.graph.nodes.find(
+    (n) => n.type === type && n.id !== project.graph.startNodeId,
+  )
+  if (!node) throw new Error(`No hay nodo "${type}" distinto del inicio`)
+  return node
+}
+
+/** Añade una respuesta a un nodo y devuelve su id. */
+function addResponseTo(nodeId: string): string {
+  act(() => {
+    useProjectStore.getState().addResponse(nodeId)
+  })
+  const node = useProjectStore.getState().project.graph.nodes.find((n) => n.id === nodeId)
+  const responses = node?.type === 'slide' ? node.responses : []
+  const id = responses[responses.length - 1]?.id
+  if (!id) throw new Error('responseId inesperadamente ausente')
+  return id
 }
 
 describe('Canvas — cableado con @xyflow/react (ReactFlow stub)', () => {
   it('onConnect con sourceHandle response:<id> llama a connect con el responseId correcto', () => {
     render(<Canvas />)
     act(() => {
-      useProjectStore.getState().createNode('decision', { x: 0, y: 0 })
       useProjectStore.getState().createNode('final', { x: 100, y: 0 })
     })
-    const decision = firstNodeOfType('decision')
-    const final = firstNodeOfType('final')
-    act(() => {
-      useProjectStore.getState().addResponse(decision.id)
-    })
-    const responseId = firstNodeOfType('decision')
-    const responses = responseId.type === 'decision' ? responseId.responses : []
-    const response = responses[0]
-    if (!response) throw new Error('setup inválido')
+    const slide = startSlide()
+    const final = otherNodeOfType('final')
+    const responseId = addResponseTo(slide.id)
 
     act(() => {
       capturedProps?.onConnect?.({
-        source: decision.id,
+        source: slide.id,
         target: final.id,
-        sourceHandle: responseHandleId(response.id),
+        sourceHandle: responseHandleId(responseId),
         targetHandle: 'in',
       })
     })
 
-    const updated = useProjectStore.getState().project.graph.nodes.find((n) => n.id === decision.id)
-    const updatedResponse = updated?.type === 'decision' ? updated.responses[0] : undefined
+    const updated = useProjectStore.getState().project.graph.nodes.find((n) => n.id === slide.id)
+    const updatedResponse = updated?.type === 'slide' ? updated.responses[0] : undefined
     expect(updatedResponse?.targetNodeId).toBe(final.id)
   })
 
-  it('onConnect con un nodo start/content como origen llama a connect sin responseId', () => {
+  it('onConnect desde el handle de "continuar" de una diapositiva llama a connect sin responseId', () => {
     render(<Canvas />)
-    const start = firstNodeOfType('start')
+    const start = startSlide()
     act(() => {
-      useProjectStore.getState().createNode('content', { x: 50, y: 0 })
+      useProjectStore.getState().createNode('slide', { x: 50, y: 0 })
     })
-    const content = firstNodeOfType('content')
+    const other = otherNodeOfType('slide')
 
     act(() => {
       capturedProps?.onConnect?.({
         source: start.id,
-        target: content.id,
+        target: other.id,
         sourceHandle: 'out',
         targetHandle: 'in',
       })
     })
 
     const updatedStart = useProjectStore.getState().project.graph.nodes.find((n) => n.id === start.id)
-    expect(updatedStart?.type === 'start' ? updatedStart.targetNodeId : undefined).toBe(content.id)
+    expect(updatedStart?.type === 'slide' ? updatedStart.targetNodeId : undefined).toBe(other.id)
   })
 
   it('una conexión que el dominio rechaza (nodo final como origen) se ignora sin romper la UI', () => {
@@ -106,8 +123,8 @@ describe('Canvas — cableado con @xyflow/react (ReactFlow stub)', () => {
     act(() => {
       useProjectStore.getState().createNode('final', { x: 0, y: 0 })
     })
-    const final = firstNodeOfType('final')
-    const start = firstNodeOfType('start')
+    const final = otherNodeOfType('final')
+    const start = startSlide()
     const projectBefore = useProjectStore.getState().project
 
     expect(() => {
@@ -128,7 +145,7 @@ describe('Canvas — cableado con @xyflow/react (ReactFlow stub)', () => {
 
   it('onSelectionChange sincroniza `selection.selectedNodeIds` en el store', () => {
     render(<Canvas />)
-    const start = firstNodeOfType('start')
+    const start = startSlide()
 
     act(() => {
       capturedProps?.onSelectionChange?.({
@@ -154,7 +171,7 @@ describe('Canvas — cableado con @xyflow/react (ReactFlow stub)', () => {
 
   it('dragStart→drag×N→dragStop deja una única entrada de historial y la posición final es la leída por el adaptador', () => {
     render(<Canvas />)
-    const start = firstNodeOfType('start')
+    const start = startSlide()
     const historyBefore = useProjectStore.getState().history.past.length
 
     act(() => {
@@ -182,7 +199,7 @@ describe('Canvas — cableado con @xyflow/react (ReactFlow stub)', () => {
 
   it('un arrastre que vuelve a la posición de origen no genera entrada de historial', () => {
     render(<Canvas />)
-    const start = firstNodeOfType('start')
+    const start = startSlide()
     const historyBefore = useProjectStore.getState().history.past.length
 
     act(() => {
@@ -205,11 +222,11 @@ describe('Canvas — cableado con @xyflow/react (ReactFlow stub)', () => {
 
   it('arrastrar varios nodos seleccionados a la vez conserva la posición final de TODOS (no solo el "principal")', () => {
     render(<Canvas />)
-    const start = firstNodeOfType('start')
+    const start = startSlide()
     act(() => {
-      useProjectStore.getState().createNode('content', { x: 100, y: 0 })
+      useProjectStore.getState().createNode('slide', { x: 100, y: 0 })
     })
-    const content = firstNodeOfType('content')
+    const content = otherNodeOfType('slide')
     const historyBefore = useProjectStore.getState().history.past.length
 
     act(() => {
@@ -246,7 +263,7 @@ describe('Canvas — cableado con @xyflow/react (ReactFlow stub)', () => {
 
   it('focusNode centra la vista (setCenter) y limpia focusRequestNodeId tras procesarse', () => {
     render(<Canvas />)
-    const start = firstNodeOfType('start')
+    const start = startSlide()
 
     const setCenter = vi.fn()
     const getZoom = vi.fn(() => 1)
@@ -275,7 +292,7 @@ describe('Canvas — cableado con @xyflow/react (ReactFlow stub)', () => {
 
   it('focusNode sin instancia de React Flow todavía disponible limpia la petición sin lanzar', () => {
     render(<Canvas />)
-    const start = firstNodeOfType('start')
+    const start = startSlide()
 
     expect(() => {
       act(() => {
@@ -304,9 +321,9 @@ describe('Canvas — onConnectEnd abre el menú "¿Qué quieres añadir?" (fase 
     return { target: pane, clientX, clientY } as unknown as MouseEvent
   }
 
-  it('conexión inválida que termina en el pane vacío desde un start/content abre el menú sin responseId', () => {
+  it('conexión inválida que termina en el pane vacío desde el handle de continuar abre el menú sin responseId', () => {
     render(<Canvas />)
-    const start = firstNodeOfType('start')
+    const start = startSlide()
 
     act(() => {
       capturedProps?.onConnectEnd?.(panePoint(120, 240), {
@@ -322,31 +339,27 @@ describe('Canvas — onConnectEnd abre el menú "¿Qué quieres añadir?" (fase 
     expect(menu.originResponseId).toBeNull()
   })
 
-  it('conexión inválida que termina en el pane vacío desde una respuesta de decision abre el menú con el responseId', () => {
+  it('conexión inválida que termina en el pane vacío desde una respuesta abre el menú con el responseId', () => {
     render(<Canvas />)
-    act(() => {
-      useProjectStore.getState().createNode('decision', { x: 0, y: 0 })
-    })
-    const decision = firstNodeOfType('decision')
-    const response = decision.type === 'decision' ? decision.responses[0] : undefined
-    if (!response) throw new Error('setup inválido')
+    const slide = startSlide()
+    const responseId = addResponseTo(slide.id)
 
     act(() => {
       capturedProps?.onConnectEnd?.(panePoint(10, 20), {
         isValid: false,
-        fromHandle: { nodeId: decision.id, id: responseHandleId(response.id) },
+        fromHandle: { nodeId: slide.id, id: responseHandleId(responseId) },
       } as never)
     })
 
     const menu = useProjectStore.getState().ui.contextMenu
     expect(menu.open).toBe(true)
-    expect(menu.originNodeId).toBe(decision.id)
-    expect(menu.originResponseId).toBe(response.id)
+    expect(menu.originNodeId).toBe(slide.id)
+    expect(menu.originResponseId).toBe(responseId)
   })
 
   it('conexión válida (soltada sobre un handle real) no abre el menú', () => {
     render(<Canvas />)
-    const start = firstNodeOfType('start')
+    const start = startSlide()
 
     act(() => {
       capturedProps?.onConnectEnd?.(panePoint(0, 0), {
@@ -360,7 +373,7 @@ describe('Canvas — onConnectEnd abre el menú "¿Qué quieres añadir?" (fase 
 
   it('conexión inválida soltada dentro de un nodo existente (no el pane vacío) no abre el menú', () => {
     render(<Canvas />)
-    const start = firstNodeOfType('start')
+    const start = startSlide()
     const nodeEl = document.createElement('div')
     nodeEl.className = 'react-flow__node'
 
@@ -400,7 +413,7 @@ describe('Canvas — elegir una opción del menú crea, conecta, selecciona y ci
 
   it('convierte la posición de pantalla a lienzo con screenToFlowPosition y crea+conecta el nodo elegido', () => {
     render(<Canvas />)
-    const start = firstNodeOfType('start')
+    const start = startSlide()
 
     const screenToFlowPosition = vi.fn(({ x, y }: { x: number; y: number }) => ({
       x: x + 1000,
@@ -419,7 +432,12 @@ describe('Canvas — elegir una opción del menú crea, conecta, selecciona y ci
 
     const idsBefore = new Set(useProjectStore.getState().project.graph.nodes.map((n) => n.id))
 
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Pantalla' }))
+    // El menú ofrece solo Diapositiva y Final (ya no Pantalla/Decisión).
+    expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
+      'Diapositiva',
+      'Final',
+    ])
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Diapositiva' }))
 
     expect(screenToFlowPosition).toHaveBeenCalledWith({ x: 5, y: 7 })
 
@@ -427,11 +445,11 @@ describe('Canvas — elegir una opción del menú crea, conecta, selecciona y ci
     const created = state.project.graph.nodes.find((n) => !idsBefore.has(n.id))
     if (!created) throw new Error('no se creó ningún nodo')
 
-    expect(created.type).toBe('content')
+    expect(created.type).toBe('slide')
     expect(created.position).toEqual({ x: 1005, y: 2007 })
 
     const updatedStart = state.project.graph.nodes.find((n) => n.id === start.id)
-    expect(updatedStart?.type === 'start' ? updatedStart.targetNodeId : undefined).toBe(created.id)
+    expect(updatedStart?.type === 'slide' ? updatedStart.targetNodeId : undefined).toBe(created.id)
 
     expect(state.selection.selectedNodeIds).toEqual([created.id])
     expect(state.ui.titleFocusRequestNodeId).toBe(created.id)
@@ -440,7 +458,7 @@ describe('Canvas — elegir una opción del menú crea, conecta, selecciona y ci
 
   it('Escape cierra el menú sin crear ni conectar nada', () => {
     render(<Canvas />)
-    const start = firstNodeOfType('start')
+    const start = startSlide()
 
     act(() => {
       capturedProps?.onConnectEnd?.(panePoint(0, 0), {
@@ -459,36 +477,36 @@ describe('Canvas — elegir una opción del menú crea, conecta, selecciona y ci
 })
 
 /**
- * Tests de borrado con Supr/Backspace (cabo suelto A): `onBeforeDelete` veta
- * el nodo start entre los candidatos y `onNodesDelete` llama a
- * `store.deleteNode` por cada nodo que quedó permitido.
+ * Tests de borrado con Supr/Backspace: `onBeforeDelete` veta la diapositiva
+ * de inicio (`graph.startNodeId`) entre los candidatos y `onNodesDelete`
+ * llama a `store.deleteNode` por cada nodo que quedó permitido.
  */
 describe('Canvas — borrado de nodos (onBeforeDelete / onNodesDelete)', () => {
-  it('onBeforeDelete veta el nodo start y deja pasar los demás candidatos', async () => {
+  it('onBeforeDelete veta la diapositiva de inicio y deja pasar los demás candidatos', async () => {
     render(<Canvas />)
-    const start = firstNodeOfType('start')
+    const start = startSlide()
     act(() => {
-      useProjectStore.getState().createNode('content', { x: 0, y: 0 })
+      useProjectStore.getState().createNode('slide', { x: 0, y: 0 })
     })
-    const content = firstNodeOfType('content')
+    const other = otherNodeOfType('slide')
 
     const result = await capturedProps?.onBeforeDelete?.({
       nodes: [
-        { id: start.id, type: 'start' } as never,
-        { id: content.id, type: 'content' } as never,
+        { id: start.id, type: 'slide' } as never,
+        { id: other.id, type: 'slide' } as never,
       ],
       edges: [],
     })
 
-    expect(result).toEqual({ nodes: [{ id: content.id, type: 'content' }], edges: [] })
+    expect(result).toEqual({ nodes: [{ id: other.id, type: 'slide' }], edges: [] })
   })
 
-  it('onBeforeDelete veta el borrado por completo si el único candidato es el nodo start', async () => {
+  it('onBeforeDelete veta el borrado por completo si el único candidato es la diapositiva de inicio', async () => {
     render(<Canvas />)
-    const start = firstNodeOfType('start')
+    const start = startSlide()
 
     const result = await capturedProps?.onBeforeDelete?.({
-      nodes: [{ id: start.id, type: 'start' } as never],
+      nodes: [{ id: start.id, type: 'slide' } as never],
       edges: [],
     })
 
@@ -498,11 +516,11 @@ describe('Canvas — borrado de nodos (onBeforeDelete / onNodesDelete)', () => {
   it('onNodesDelete llama a store.deleteNode con los ids de los nodos borrados', () => {
     render(<Canvas />)
     act(() => {
-      useProjectStore.getState().createNode('content', { x: 0, y: 0 })
+      useProjectStore.getState().createNode('slide', { x: 0, y: 0 })
       useProjectStore.getState().createNode('final', { x: 100, y: 0 })
     })
-    const content = firstNodeOfType('content')
-    const final = firstNodeOfType('final')
+    const content = otherNodeOfType('slide')
+    const final = otherNodeOfType('final')
 
     act(() => {
       capturedProps?.onNodesDelete?.([

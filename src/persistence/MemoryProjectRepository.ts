@@ -1,3 +1,4 @@
+import { parseOrMigrateProjectDocument } from '../domain'
 import type { ProjectDocument } from '../domain'
 import type { ProjectRepository } from './ProjectRepository'
 
@@ -26,7 +27,13 @@ export class MemoryProjectRepository implements ProjectRepository {
     if (!document) {
       throw new Error(`No existe ningún proyecto en memoria en la ruta "${path}".`)
     }
-    return structuredClone(document)
+    // Mismo tratamiento que `TauriProjectRepository.openProject`: el
+    // documento pasa por `parseOrMigrateProjectDocument`, así que un
+    // documento con el modelo de nodos anterior guardado aquí (p.ej. una
+    // fixture de test que simula un `.brunch` antiguo) se migra igual que
+    // uno leído de disco. Para un documento ya en la forma nueva es una
+    // validación sin efectos.
+    return parseOrMigrateProjectDocument(structuredClone(document))
   }
 
   async saveProject(path: string, document: ProjectDocument): Promise<void> {

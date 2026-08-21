@@ -72,6 +72,52 @@ describe('TauriProjectRepository.openProject', () => {
     await expect(repo.openProject('/tmp/proyecto.brunch')).rejects.toThrow()
   })
 
+  it('migra un documento guardado con el modelo de nodos anterior', async () => {
+    // Forma antigua: nodos `start`/`content`/`final` y sin `graph.startNodeId`
+    // (ver `src/domain/migration.ts`). Debe abrirse sin fallar, con el
+    // `content` convertido en diapositiva y el inicio apuntando a él.
+    const legacyJson = JSON.stringify({
+      schemaVersion: 1,
+      metadata: {
+        id: '99999999-9999-4999-8999-999999999999',
+        name: 'Antiguo',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+      settings: {},
+      editor: { viewport: { x: 0, y: 0, zoom: 1 } },
+      graph: {
+        nodes: [
+          {
+            id: '11111111-1111-4111-8111-111111111111',
+            number: 1,
+            type: 'start',
+            position: { x: 0, y: 0 },
+            title: '',
+            body: '',
+            targetNodeId: '22222222-2222-4222-8222-222222222222',
+          },
+          {
+            id: '22222222-2222-4222-8222-222222222222',
+            number: 2,
+            type: 'content',
+            position: { x: 200, y: 0 },
+            title: 'Pantalla',
+            body: '',
+          },
+        ],
+      },
+    })
+    mockIPC(() => legacyJson)
+
+    const repo = new TauriProjectRepository()
+    const opened = await repo.openProject('/tmp/antiguo.brunch')
+
+    expect(opened.graph.startNodeId).toBe('22222222-2222-4222-8222-222222222222')
+    expect(opened.graph.nodes).toHaveLength(1)
+    expect(opened.graph.nodes[0]?.type).toBe('slide')
+  })
+
   it('propaga un PersistenceCommandError con kind NotFound', async () => {
     mockIPC(() => {
       throw { kind: 'NotFound', content: '/tmp/no-existe.brunch' }

@@ -1,32 +1,40 @@
 import { Handle, Position } from '@xyflow/react'
 import type { NodeProps } from '@xyflow/react'
+import { MAX_RESPONSES } from '../../../domain'
 import type { NodeType } from '../../../domain'
 import type { CanvasFlowNode, CanvasNodeData, CanvasResponseSummary } from '../adapter'
 import { IN_HANDLE_ID, OUT_HANDLE_ID, responseHandleId } from '../handles'
 import styles from './NodeCard.module.css'
 
 /**
- * Nodos personalizados del lienzo, uno por tipo de dominio. Compactos a
- * propósito: tipo traducido + número visible + título (nunca el `id`
- * interno), truncados con CSS si son largos. El `body` completo del nodo
- * nunca se pinta aquí — el lienzo debe seguir siendo legible con decenas de
- * nodos; el contenido completo se edita en el inspector.
+ * Nodos personalizados del lienzo, uno por tipo de dominio (`slide` y
+ * `final`). Compactos a propósito: tipo traducido + número visible + título
+ * (nunca el `id` interno), truncados con CSS si son largos. El `body`
+ * completo del nodo nunca se pinta aquí — el lienzo debe seguir siendo
+ * legible con decenas de nodos; el contenido completo se edita en el
+ * inspector.
+ *
+ * Ya no existe un nodo visual de "Inicio": la diapositiva de inicio
+ * (`graph.startNodeId`) es una diapositiva normal, marcada con una etiqueta
+ * discreta en su cabecera (`data.isStart`).
  */
 
 /** Exportado para que otros componentes del lienzo (p.ej. `ConnectionMenu`,
- *  el menú "¿Qué quieres añadir?" de la fase 7) reutilicen el mismo
- *  diccionario de etiquetas en vez de duplicarlo. */
+ *  el menú "¿Qué quieres añadir?") reutilicen el mismo diccionario de
+ *  etiquetas en vez de duplicarlo. */
 export const NODE_TYPE_LABEL: Record<NodeType, string> = {
-  start: 'Inicio',
-  content: 'Pantalla',
-  decision: 'Decisión',
+  slide: 'Diapositiva',
   final: 'Final',
 }
 
-/** Máximo de respuestas que se resumen dentro del nodo decision. El propio
+/** Etiqueta discreta que marca la diapositiva de inicio del proyecto, tanto
+ *  aquí como en la lista de `LeftPanel`. */
+export const START_NODE_LABEL = 'Inicio'
+
+/** Máximo de respuestas que se resumen dentro de la tarjeta. El propio
  *  esquema de dominio ya limita `responses` a 4, así que esto es solo una
  *  defensa adicional si esa cota cambiara en el futuro. */
-const MAX_SUMMARIZED_RESPONSES = 4
+const MAX_SUMMARIZED_RESPONSES = MAX_RESPONSES
 
 function displayTitle(title: string): string {
   return title.trim() || 'Sin título'
@@ -36,16 +44,18 @@ function Header({ data }: { data: CanvasNodeData }) {
   return (
     <div className={styles.header}>
       <span className={styles.type}>{NODE_TYPE_LABEL[data.nodeType]}</span>
+      {data.isStart && (
+        <span className={styles.startMark} title="Diapositiva de inicio">
+          {START_NODE_LABEL}
+        </span>
+      )}
       <span className={styles.number}>{data.number}</span>
       <span className={styles.title}>{displayTitle(data.title)}</span>
     </div>
   )
 }
 
-/** Handle de entrada único, reutilizado por content/decision/final y, por
- *  consistencia visual, también por start (que en la práctica nunca recibe
- *  una conexión entrante, pero así los 4 tipos de nodo tienen la misma
- *  silueta con puntos de conexión a ambos lados). */
+/** Handle de entrada único, compartido por diapositivas y finales. */
 function InHandle() {
   return (
     <Handle
@@ -57,6 +67,8 @@ function InHandle() {
   )
 }
 
+/** Handle de salida de "Continuar", presente solo en diapositivas SIN
+ *  respuestas (en cuanto hay respuestas, cada una tiene el suyo). */
 function OutHandle() {
   return (
     <Handle
@@ -68,22 +80,42 @@ function OutHandle() {
   )
 }
 
-export function StartNodeView({ data }: NodeProps<CanvasFlowNode>) {
+/** Una respuesta resumida: un punto (nunca la letra) + su texto + su propio
+ *  handle de salida. */
+function ResponseRow({ response }: { response: CanvasResponseSummary }) {
   return (
-    <div className={styles.card}>
-      <InHandle />
-      <Header data={data} />
-      <OutHandle />
+    <div className={styles.responseRow}>
+      <span className={styles.responseBullet} aria-hidden="true" />
+      <span className={styles.responseText}>{response.text.trim() || 'Sin texto'}</span>
+      <Handle
+        className={styles.handle}
+        type="source"
+        position={Position.Right}
+        id={responseHandleId(response.id)}
+        style={{ top: '50%' }}
+      />
     </div>
   )
 }
 
-export function ContentNodeView({ data }: NodeProps<CanvasFlowNode>) {
+export function SlideNodeView({ data }: NodeProps<CanvasFlowNode>) {
+  const responses = (data.responses ?? []).slice(0, MAX_SUMMARIZED_RESPONSES)
+
   return (
     <div className={styles.card}>
       <InHandle />
       <Header data={data} />
-      <OutHandle />
+      {responses.length > 0 ? (
+        <div className={styles.body}>
+          <div className={styles.responseList}>
+            {responses.map((response) => (
+              <ResponseRow key={response.id} response={response} />
+            ))}
+          </div>
+        </div>
+      ) : (
+        <OutHandle />
+      )}
     </div>
   )
 }
@@ -97,44 +129,6 @@ export function FinalNodeView({ data }: NodeProps<CanvasFlowNode>) {
   )
 }
 
-function ResponseRow({ response }: { response: CanvasResponseSummary }) {
-  return (
-    <div className={styles.responseRow}>
-      <span className={styles.responseLetter}>{response.letter}</span>
-      <span className={styles.responseText}>{response.text.trim() || 'Sin texto'}</span>
-      <Handle
-        className={styles.handle}
-        type="source"
-        position={Position.Right}
-        id={responseHandleId(response.id)}
-        style={{ top: '50%' }}
-      />
-    </div>
-  )
-}
-
-export function DecisionNodeView({ data }: NodeProps<CanvasFlowNode>) {
-  const responses = (data.responses ?? []).slice(0, MAX_SUMMARIZED_RESPONSES)
-
-  return (
-    <div className={styles.card}>
-      <InHandle />
-      <Header data={data} />
-      <div className={styles.body}>
-        {responses.length === 0 ? (
-          <span className={styles.emptyResponses}>Sin respuestas</span>
-        ) : (
-          <div className={styles.responseList}>
-            {responses.map((response) => (
-              <ResponseRow key={response.id} response={response} />
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
 /**
  * Mapa `nodeTypes` de `@xyflow/react`. Definido una sola vez a nivel de
  * módulo (no dentro del componente `Canvas`) para que sea una referencia
@@ -142,8 +136,6 @@ export function DecisionNodeView({ data }: NodeProps<CanvasFlowNode>) {
  * objeto `nodeTypes`/`edgeTypes` nuevo en cada render.
  */
 export const nodeTypes = {
-  start: StartNodeView,
-  content: ContentNodeView,
-  decision: DecisionNodeView,
+  slide: SlideNodeView,
   final: FinalNodeView,
 }

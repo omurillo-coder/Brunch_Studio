@@ -4,130 +4,137 @@ import type { ProjectDocument } from '../../../domain'
 import { resolveConnection, toFlowEdges, toFlowNodes } from '../adapter'
 import { IN_HANDLE_ID, OUT_HANDLE_ID, responseHandleId } from '../handles'
 
-function nodeIdOf(project: ProjectDocument, type: 'start' | 'content' | 'decision' | 'final'): string {
-  const id = project.graph.nodes.find((n) => n.type === type)?.id
-  if (!id) throw new Error(`No hay nodo de tipo ${type} en el setup`)
+function otherNodeIdOf(project: ProjectDocument, type: 'slide' | 'final'): string {
+  const id = project.graph.nodes.find(
+    (n) => n.type === type && n.id !== project.graph.startNodeId,
+  )?.id
+  if (!id) throw new Error(`No hay nodo "${type}" distinto del inicio en el setup`)
+  return id
+}
+
+function firstResponseId(project: ProjectDocument, nodeId: string): string {
+  const node = project.graph.nodes.find((n) => n.id === nodeId)
+  const id = node?.type === 'slide' ? node.responses[0]?.id : undefined
+  if (!id) throw new Error('setup inválido')
   return id
 }
 
 describe('toFlowNodes', () => {
   it('mapea tipo, número y título de cada nodo de dominio', () => {
     let project = createProject('P')
-    project = createNode(project, 'content', { x: 10, y: 20 }, { title: 'Pantalla 1' })
-    const startId = nodeIdOf(project, 'start')
-    const contentId = nodeIdOf(project, 'content')
+    project = createNode(project, 'slide', { x: 10, y: 20 }, { title: 'Diapositiva 1' })
+    const startId = project.graph.startNodeId
+    const slideId = otherNodeIdOf(project, 'slide')
 
     const flowNodes = toFlowNodes(project, [])
 
-    const start = flowNodes.find((n) => n.id === startId)
-    const content = flowNodes.find((n) => n.id === contentId)
-
-    expect(start).toMatchObject({
+    expect(flowNodes.find((n) => n.id === startId)).toMatchObject({
       id: startId,
-      type: 'start',
+      type: 'slide',
       position: { x: 0, y: 0 },
       selected: false,
-      data: { nodeType: 'start', number: 1, title: '' },
+      data: { nodeType: 'slide', number: 1, title: '', isStart: true },
     })
-    expect(content).toMatchObject({
-      id: contentId,
-      type: 'content',
+    expect(flowNodes.find((n) => n.id === slideId)).toMatchObject({
+      id: slideId,
+      type: 'slide',
       position: { x: 10, y: 20 },
       selected: false,
-      data: { nodeType: 'content', number: 2, title: 'Pantalla 1' },
+      data: { nodeType: 'slide', number: 2, title: 'Diapositiva 1', isStart: false },
     })
+  })
+
+  it('marca `isStart: true` solo para la diapositiva de graph.startNodeId', () => {
+    const project = createNode(createProject('P'), 'slide', { x: 0, y: 0 })
+    const flowNodes = toFlowNodes(project, [])
+
+    const starts = flowNodes.filter((n) => n.data.isStart)
+    expect(starts).toHaveLength(1)
+    expect(starts[0]?.id).toBe(project.graph.startNodeId)
   })
 
   it('marca `selected: true` solo para los ids indicados', () => {
-    let project = createProject('P')
-    project = createNode(project, 'content', { x: 0, y: 0 })
-    const startId = nodeIdOf(project, 'start')
-    const contentId = nodeIdOf(project, 'content')
+    const project = createNode(createProject('P'), 'slide', { x: 0, y: 0 })
+    const startId = project.graph.startNodeId
+    const slideId = otherNodeIdOf(project, 'slide')
 
-    const flowNodes = toFlowNodes(project, [contentId])
+    const flowNodes = toFlowNodes(project, [slideId])
 
     expect(flowNodes.find((n) => n.id === startId)?.selected).toBe(false)
-    expect(flowNodes.find((n) => n.id === contentId)?.selected).toBe(true)
+    expect(flowNodes.find((n) => n.id === slideId)?.selected).toBe(true)
   })
 
-  it('incluye el resumen de respuestas de un nodo decision, hasta 4', () => {
-    let project = createProject('P')
-    // `createNode` ya deja el decision con A y B (ver fix del dominio).
-    project = createNode(project, 'decision', { x: 0, y: 0 })
-    const decisionId = nodeIdOf(project, 'decision')
-
+  it('una diapositiva sin respuestas lleva `responses` vacío', () => {
+    const project = createProject('P')
     const flowNodes = toFlowNodes(project, [])
-    const decision = flowNodes.find((n) => n.id === decisionId)
-
-    expect(decision?.data.responses).toHaveLength(2)
-    expect(decision?.data.responses?.map((r) => r.letter)).toEqual(['A', 'B'])
+    expect(flowNodes[0]?.data.responses).toEqual([])
   })
 
-  it('un nodo start/content/final no lleva campo `responses`', () => {
+  it('incluye el resumen de respuestas (id y texto, sin letra) en orden de letra', () => {
     let project = createProject('P')
-    project = createNode(project, 'final', { x: 0, y: 0 })
-    const flowNodes = toFlowNodes(project, [])
+    const startId = project.graph.startNodeId
+    project = addResponse(project, startId) // A
+    project = addResponse(project, startId) // B
 
-    for (const node of flowNodes) {
-      expect(node.data.responses).toBeUndefined()
+    const flowNodes = toFlowNodes(project, [])
+    const summaries = flowNodes.find((n) => n.id === startId)?.data.responses
+
+    expect(summaries).toHaveLength(2)
+    // El resumen no transporta la letra: el lienzo pinta un punto, no letras.
+    for (const summary of summaries ?? []) {
+      expect(Object.keys(summary).sort()).toEqual(['id', 'text'])
     }
+  })
+
+  it('un nodo final no lleva campo `responses`', () => {
+    const project = createNode(createProject('P'), 'final', { x: 0, y: 0 })
+    const finalId = otherNodeIdOf(project, 'final')
+    const flowNodes = toFlowNodes(project, [])
+    expect(flowNodes.find((n) => n.id === finalId)?.data.responses).toBeUndefined()
   })
 })
 
 describe('toFlowEdges', () => {
-  it('arista start/content usa el handle de salida único (OUT_HANDLE_ID) y de entrada (IN_HANDLE_ID)', () => {
-    let project = createProject('P')
-    project = createNode(project, 'content', { x: 100, y: 0 })
-    const startId = nodeIdOf(project, 'start')
-    const contentId = nodeIdOf(project, 'content')
-    project = connect(project, startId, contentId)
+  it('la arista de "continuar" usa el handle de salida único (OUT_HANDLE_ID) y de entrada (IN_HANDLE_ID)', () => {
+    let project = createNode(createProject('P'), 'slide', { x: 100, y: 0 })
+    const startId = project.graph.startNodeId
+    const slideId = otherNodeIdOf(project, 'slide')
+    project = connect(project, startId, slideId)
 
-    const edges = toFlowEdges(project)
-
-    expect(edges).toEqual([
+    expect(toFlowEdges(project)).toEqual([
       {
-        id: `${startId}->${contentId}`,
+        id: `${startId}->${slideId}`,
         source: startId,
-        target: contentId,
+        target: slideId,
         sourceHandle: OUT_HANDLE_ID,
         targetHandle: IN_HANDLE_ID,
-        label: undefined,
       },
     ])
   })
 
-  it('arista de decision lleva la letra como label y el handle response:<id> como sourceHandle', () => {
-    let project = createProject('P')
-    project = createNode(project, 'decision', { x: 100, y: 0 })
-    project = createNode(project, 'final', { x: 200, y: 0 })
-    const decisionId = nodeIdOf(project, 'decision')
-    const finalId = nodeIdOf(project, 'final')
-    project = addResponse(project, decisionId) // A
-    const decision = project.graph.nodes.find((n) => n.id === decisionId)
-    const responseId = decision?.type === 'decision' ? decision.responses[0]?.id : undefined
-    if (!responseId) throw new Error('setup inválido')
+  it('la arista de una respuesta usa response:<id> como sourceHandle y NO lleva label', () => {
+    let project = createNode(createProject('P'), 'final', { x: 200, y: 0 })
+    const startId = project.graph.startNodeId
+    const finalId = otherNodeIdOf(project, 'final')
+    project = addResponse(project, startId)
+    const responseId = firstResponseId(project, startId)
 
-    project = connect(project, decisionId, finalId, responseId)
-    const edges = toFlowEdges(project)
+    project = connect(project, startId, finalId, responseId)
 
-    expect(edges).toEqual([
+    expect(toFlowEdges(project)).toEqual([
       {
-        id: `${decisionId}:${responseId}->${finalId}`,
-        source: decisionId,
+        id: `${startId}:${responseId}->${finalId}`,
+        source: startId,
         target: finalId,
         sourceHandle: responseHandleId(responseId),
         targetHandle: IN_HANDLE_ID,
-        label: 'A',
       },
     ])
   })
 
   it('no genera arista para una respuesta sin destino', () => {
-    let project = createProject('P')
-    project = createNode(project, 'decision', { x: 100, y: 0 })
-    const decisionId = nodeIdOf(project, 'decision')
-    project = addResponse(project, decisionId)
-
+    const base = createProject('P')
+    const project = addResponse(base, base.graph.startNodeId)
     expect(toFlowEdges(project)).toEqual([])
   })
 })

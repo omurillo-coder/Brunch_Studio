@@ -10,7 +10,7 @@ beforeEach(() => {
 })
 
 describe('App: navegación HomeScreen -> EditorScreen', () => {
-  it('"Nuevo proyecto" lleva a EditorScreen con el nodo de Inicio creado', async () => {
+  it('"Nuevo proyecto" lleva a EditorScreen con la diapositiva de inicio creada', async () => {
     const repository = new MemoryProjectRepository()
     const pickSaveProjectPath = vi.fn().mockResolvedValue('/tmp/proyecto-nuevo.brunch')
     const pickOpenProjectPath = vi.fn().mockResolvedValue(null)
@@ -29,11 +29,12 @@ describe('App: navegación HomeScreen -> EditorScreen', () => {
     // inspector sin selección), por eso se usa `findAllByText`.
     await screen.findByText('▶ Probar')
     expect(screen.getAllByText('Escenario de prueba').length).toBeGreaterThan(0)
-    expect(screen.getByText('+ Pantalla')).toBeInTheDocument()
-    // El nodo de Inicio, creado automáticamente por `createProject`, ya
-    // aparece en la lista del panel izquierdo (también aparece en el
-    // desglose del inspector sin selección, por eso son al menos dos).
-    expect(screen.getAllByText('Inicio').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getByText('+ Diapositiva')).toBeInTheDocument()
+    expect(screen.getByText('+ Final')).toBeInTheDocument()
+    // La diapositiva de inicio, creada automáticamente por `createProject`,
+    // ya aparece en la lista del panel izquierdo y en el lienzo, marcada
+    // como punto de partida del recorrido.
+    expect(screen.getAllByTitle('Diapositiva de inicio').length).toBeGreaterThanOrEqual(1)
   })
 
   it('"Abrir proyecto" con un documento existente lleva a EditorScreen con esos datos', async () => {

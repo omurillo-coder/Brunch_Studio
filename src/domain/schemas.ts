@@ -8,10 +8,18 @@ import { z } from 'zod'
  * TypeScript se derivan de ellos vía `z.infer` para que validación en
  * tiempo de ejecución y tipado estático nunca se desincronicen.
  *
- * Nota de nomenclatura: los nombres de tipo de nodo (`start`, `content`,
- * `decision`, `final`) son el vocabulario del dominio. Sus etiquetas en la
- * UI (Inicio/Pantalla/Decisión/Final) son responsabilidad de una fase de UI
- * posterior y no se modelan aquí.
+ * Nota de nomenclatura: los nombres de tipo de nodo (`slide`, `final`) son
+ * el vocabulario del dominio. Sus etiquetas en la UI
+ * (Diapositiva/Final) son responsabilidad de la capa de UI y no se
+ * modelan aquí.
+ *
+ * Rediseño del modelo de nodos: los antiguos tipos `content` (Pantalla) y
+ * `decision` (Decisión) se fusionan en un único tipo `slide`
+ * (Diapositiva), y el antiguo tipo `start` (Inicio) desaparece como nodo
+ * — el punto de partida del recorrido pasa a ser una referencia
+ * (`ProjectGraph.startNodeId`) a una `SlideNode` existente. Los documentos
+ * `.brunch` guardados con el modelo anterior se convierten al abrirlos,
+ * ver `src/domain/migration.ts`.
  */
 
 // ---------------------------------------------------------------------------
@@ -23,7 +31,16 @@ export const NodePositionSchema = z.object({
   y: z.number(),
 })
 
-/** Letras fijas de respuesta, siempre en este orden y nunca más de 4. */
+/**
+ * Letras fijas de respuesta, siempre en este orden y nunca más de 4.
+ *
+ * Decisión de diseño: la letra sigue existiendo en el modelo porque es lo
+ * que ordena las respuestas de forma estable (el array interno conserva el
+ * orden de creación, que puede no coincidir con el orden de letra tras
+ * eliminar y reañadir una intermedia) y lo que acota su número a 4. Es un
+ * detalle interno: la UI NUNCA muestra la letra como texto visible — las
+ * respuestas se pintan con un punto/viñeta, sin letra.
+ */
 export const RESPONSE_LETTERS = ['A', 'B', 'C', 'D'] as const
 
 export const ResponseLetterSchema = z.enum(RESPONSE_LETTERS)
@@ -51,45 +68,44 @@ const baseNodeFields = {
   number: z.number().int().positive(),
   position: NodePositionSchema,
   title: z.string(),
-  /** Placeholder para contenido estructurado; por ahora texto plano. */
+  /** Contenido enriquecido serializado (ver `src/editor/richText`). */
   body: z.string(),
 }
 
-export const StartNodeSchema = z.object({
+/**
+ * Diapositiva: el único tipo de nodo "con salida" del modelo. Una misma
+ * diapositiva puede comportarse de dos formas según tenga o no respuestas:
+ *
+ * - `responses` vacío → diapositiva "de continuar": su salida es
+ *   `targetNodeId` y el Player muestra un único botón de continuar, con el
+ *   texto de `continueLabel` (o "Continuar" si no está definido).
+ * - `responses` con 1..4 elementos → diapositiva "de decisión": sus salidas
+ *   son los `targetNodeId` de cada respuesta y el Player muestra las
+ *   opciones. `targetNodeId`/`continueLabel` quedan "dormidos" (no se usan
+ *   ni se borran) y vuelven a tener efecto si se eliminan todas las
+ *   respuestas.
+ */
+export const SlideNodeSchema = z.object({
   ...baseNodeFields,
-  type: z.literal('start'),
+  type: z.literal('slide'),
+  /** Destino de "Continuar". Solo se usa si `responses` está vacío. */
   targetNodeId: z.string().uuid().optional(),
-})
-
-export const ContentNodeSchema = z.object({
-  ...baseNodeFields,
-  type: z.literal('content'),
-  targetNodeId: z.string().uuid().optional(),
-  imageAssetId: z.string().uuid().optional(),
-  audioAssetId: z.string().uuid().optional(),
-})
-
-export const DecisionNodeSchema = z.object({
-  ...baseNodeFields,
-  type: z.literal('decision'),
+  /** Texto personalizado del botón de continuar; por defecto "Continuar". */
+  continueLabel: z.string().optional(),
   responses: z.array(DecisionResponseSchema).max(4),
   imageAssetId: z.string().uuid().optional(),
   audioAssetId: z.string().uuid().optional(),
 })
 
+/** Nodo terminal del recorrido: no tiene ninguna salida. */
 export const FinalNodeSchema = z.object({
   ...baseNodeFields,
   type: z.literal('final'),
 })
 
-export const NodeSchema = z.discriminatedUnion('type', [
-  StartNodeSchema,
-  ContentNodeSchema,
-  DecisionNodeSchema,
-  FinalNodeSchema,
-])
+export const NodeSchema = z.discriminatedUnion('type', [SlideNodeSchema, FinalNodeSchema])
 
-export const NODE_TYPES = ['start', 'content', 'decision', 'final'] as const
+export const NODE_TYPES = ['slide', 'final'] as const
 
 // ---------------------------------------------------------------------------
 // Documento de proyecto
@@ -119,8 +135,15 @@ export const EditorStateSchema = z.object({
   viewport: ViewportSchema,
 })
 
+/**
+ * Grafo del escenario. `startNodeId` es el punto de partida del recorrido:
+ * el id de la `SlideNode` por la que empieza el Player. No es un nodo
+ * aparte (el antiguo tipo `start` ya no existe) sino una referencia a una
+ * diapositiva real, que además nunca se puede borrar (ver `deleteNode`).
+ */
 export const ProjectGraphSchema = z.object({
   nodes: z.array(NodeSchema),
+  startNodeId: z.string().uuid(),
 })
 
 export const ProjectDocumentSchema = z.object({
@@ -139,9 +162,7 @@ export type NodePosition = z.infer<typeof NodePositionSchema>
 export type ResponseLetter = z.infer<typeof ResponseLetterSchema>
 export type DecisionResponse = z.infer<typeof DecisionResponseSchema>
 
-export type StartNode = z.infer<typeof StartNodeSchema>
-export type ContentNode = z.infer<typeof ContentNodeSchema>
-export type DecisionNode = z.infer<typeof DecisionNodeSchema>
+export type SlideNode = z.infer<typeof SlideNodeSchema>
 export type FinalNode = z.infer<typeof FinalNodeSchema>
 export type Node = z.infer<typeof NodeSchema>
 export type NodeType = (typeof NODE_TYPES)[number]
@@ -153,5 +174,10 @@ export type EditorState = z.infer<typeof EditorStateSchema>
 export type ProjectGraph = z.infer<typeof ProjectGraphSchema>
 export type ProjectDocument = z.infer<typeof ProjectDocumentSchema>
 
-/** Nodos que tienen una única salida (`targetNodeId` a nivel de nodo). */
-export type SingleOutputNode = StartNode | ContentNode
+/** Máximo de respuestas que admite una diapositiva (ver `SlideNodeSchema`). */
+export const MAX_RESPONSES = RESPONSE_LETTERS.length
+
+/** Texto por defecto del botón de continuar cuando `continueLabel` no está
+ *  definido. Vive en el dominio para que Player e Inspector (placeholder)
+ *  usen exactamente el mismo valor sin duplicar la cadena. */
+export const DEFAULT_CONTINUE_LABEL = 'Continuar'

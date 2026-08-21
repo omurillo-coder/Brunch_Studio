@@ -1,8 +1,8 @@
-import type { ContentNode, DecisionNode, FinalNode, Node, ProjectDocument, StartNode } from '../domain'
+import type { FinalNode, Node, ProjectDocument, SlideNode } from '../domain'
 
 /**
  * ---------------------------------------------------------------------------
- * Runtime del Player (fase 8)
+ * Runtime del Player
  * ---------------------------------------------------------------------------
  *
  * Lógica de recorrido pura, sin ningún import de React ni de
@@ -13,12 +13,13 @@ import type { ContentNode, DecisionNode, FinalNode, Node, ProjectDocument, Start
  * mostrar ahora" se calcula con `getView`, un tipo discriminado
  * (`PlayerView`) a partir del documento + ese estado.
  *
- * Estas funciones nunca lanzan ante un grafo incompleto (nodo sin destino,
- * decision sin respuestas con destino, o incluso ausencia total de un nodo
- * `start`): en cualquiera de esos casos `getView` resuelve a `dead-end` en
- * vez de romperse, para que el Player pueda mostrar un mensaje en vez de
- * quedarse en blanco o lanzar una excepción durante la edición (momento en
- * el que el grafo está incompleto la mayor parte del tiempo).
+ * Estas funciones nunca lanzan ante un grafo incompleto (diapositiva sin
+ * destino, diapositiva con respuestas pero ninguna conectada, o incluso un
+ * `graph.startNodeId` que no apunta a ningún nodo): en cualquiera de esos
+ * casos `getView` resuelve a `dead-end` en vez de romperse, para que el
+ * Player pueda mostrar un mensaje en vez de quedarse en blanco o lanzar una
+ * excepción durante la edición (momento en el que el grafo está incompleto la
+ * mayor parte del tiempo).
  */
 
 /**
@@ -26,21 +27,19 @@ import type { ContentNode, DecisionNode, FinalNode, Node, ProjectDocument, Start
  * documento (nunca una copia): el Player es una vista de lectura sobre el
  * mismo `ProjectDocument` que edita el usuario.
  *
- * `dead-end` cubre tres situaciones distintas, todas con el mismo
- * tratamiento (mensaje de "sin continuación configurada", sin romper):
- * - Un nodo `start`/`content` sin `targetNodeId`.
- * - Un nodo `decision` sin ninguna respuesta con `targetNodeId`.
- * - Ausencia total de un nodo `start` en el documento (`node: null`): no hay
- *   ningún nodo "actual" al que apuntar, así que no hay nodo que mostrar.
+ * Las dos formas de una diapositiva se distinguen aquí, no en el dominio:
+ * - `continue`: diapositiva SIN respuestas y con destino de continuar.
+ * - `decision`: diapositiva con al menos una respuesta con destino.
  *
- * Nunca existe un `kind: 'start'`: Inicio no es una pantalla visible (ver
- * `getInitialState`), así que si el recorrido queda "atascado" en el propio
- * `start` (porque no tiene destino) se resuelve igualmente como `dead-end`,
- * sin revelar que se trata del nodo Inicio.
+ * `dead-end` cubre el resto de situaciones, todas con el mismo tratamiento
+ * (mensaje de "sin continuación configurada", sin romper):
+ * - Una diapositiva sin respuestas y sin `targetNodeId`.
+ * - Una diapositiva con respuestas pero ninguna con `targetNodeId`.
+ * - `graph.startNodeId` sin nodo correspondiente (`node: null`).
  */
 export type PlayerView =
-  | { kind: 'content'; node: ContentNode }
-  | { kind: 'decision'; node: DecisionNode }
+  | { kind: 'continue'; node: SlideNode }
+  | { kind: 'decision'; node: SlideNode }
   | { kind: 'final'; node: FinalNode }
   | { kind: 'dead-end'; node: Node | null }
 
@@ -52,22 +51,18 @@ export type PlayerView =
  * `PlayerScreen`).
  */
 export interface PlayerState {
-  /** `null` únicamente cuando el documento no tiene ningún nodo `start`. */
+  /** `null` únicamente cuando `graph.startNodeId` no apunta a ningún nodo. */
   currentNodeId: string | null
   /**
-   * Puntuación acumulada a lo largo del recorrido (fase 5, Milestone 2).
-   * `null` mientras ninguna respuesta elegida haya definido `points` —
-   * deliberadamente distinto de `0`: un escenario que no usa puntuación en
-   * absoluto no debe mostrar "0 puntos" en su Final, sería confuso. Pasa a
-   * ser un número en cuanto se elige la primera respuesta con `points`
-   * definido, y a partir de ahí solo puede crecer o decrecer (nunca vuelve a
-   * `null` salvo por `restart`/`getInitialState`).
+   * Puntuación acumulada a lo largo del recorrido. `null` mientras ninguna
+   * respuesta elegida haya definido `points` — deliberadamente distinto de
+   * `0`: un escenario que no usa puntuación en absoluto no debe mostrar
+   * "0 puntos" en su Final, sería confuso. Pasa a ser un número en cuanto se
+   * elige la primera respuesta con `points` definido, y a partir de ahí solo
+   * puede crecer o decrecer (nunca vuelve a `null` salvo por
+   * `restart`/`getInitialState`).
    */
   totalPoints: number | null
-}
-
-function findStartNode(project: ProjectDocument): StartNode | null {
-  return project.graph.nodes.find((node): node is StartNode => node.type === 'start') ?? null
 }
 
 function findNode(project: ProjectDocument, nodeId: string): Node | null {
@@ -75,26 +70,26 @@ function findNode(project: ProjectDocument, nodeId: string): Node | null {
 }
 
 /**
- * Calcula el estado inicial del recorrido a partir del documento: salta
- * automáticamente desde el nodo `start` a su `targetNodeId`, tal y como pide
- * el spec ("Inicio no es una pantalla visible... al empezar el Player debe
- * saltar automáticamente"). Si `start` no tiene destino configurado, el
- * estado queda apuntando al propio `start` — `getView` lo resolverá como
- * `dead-end` sin mostrar nunca "Inicio". Si no existe ningún nodo `start`,
- * `currentNodeId` es `null`.
+ * Calcula el estado inicial del recorrido a partir del documento: el
+ * recorrido empieza directamente en `graph.startNodeId`, la diapositiva de
+ * inicio del proyecto. Ya no hay ningún nodo "Inicio" invisible del que
+ * saltar automáticamente: la diapositiva de inicio es una diapositiva
+ * normal y se muestra tal cual.
+ *
+ * Si `startNodeId` no corresponde a ningún nodo del documento (documento
+ * incoherente), `currentNodeId` queda en `null` y `getView` resuelve a
+ * `dead-end`.
  */
 export function getInitialState(project: ProjectDocument): PlayerState {
-  const start = findStartNode(project)
-  if (!start) return { currentNodeId: null, totalPoints: null }
-  return { currentNodeId: start.targetNodeId ?? start.id, totalPoints: null }
+  const start = findNode(project, project.graph.startNodeId)
+  return { currentNodeId: start ? start.id : null, totalPoints: null }
 }
 
 /**
  * Reinicia el recorrido: recalcula el estado inicial desde cero (mismo
- * resultado que `getInitialState`, incluyendo el salto automático desde
- * `start`). Nombre propio para que quien la llama (`PlayerScreen`) exprese
- * la intención "reiniciar" sin tener que saber que internamente es la misma
- * función que el cálculo inicial.
+ * resultado que `getInitialState`). Nombre propio para que quien la llama
+ * (`PlayerScreen`) exprese la intención "reiniciar" sin tener que saber que
+ * internamente es la misma función que el cálculo inicial.
  */
 export function restart(project: ProjectDocument): PlayerState {
   return getInitialState(project)
@@ -118,38 +113,35 @@ export function getView(project: ProjectDocument, state: PlayerState): PlayerVie
     return { kind: 'dead-end', node: null }
   }
 
-  switch (node.type) {
-    case 'start':
-      // Solo se llega aquí si `start` no tenía destino configurado (ver
-      // `getInitialState`): un callejón sin salida, nunca una pantalla
-      // "Inicio" visible.
-      return { kind: 'dead-end', node }
-    case 'content':
-      return node.targetNodeId ? { kind: 'content', node } : { kind: 'dead-end', node }
-    case 'decision':
-      return node.responses.some((response) => response.targetNodeId)
-        ? { kind: 'decision', node }
-        : { kind: 'dead-end', node }
-    case 'final':
-      return { kind: 'final', node }
+  if (node.type === 'final') {
+    return { kind: 'final', node }
   }
+
+  if (node.responses.length > 0) {
+    return node.responses.some((response) => response.targetNodeId)
+      ? { kind: 'decision', node }
+      : { kind: 'dead-end', node }
+  }
+
+  return node.targetNodeId ? { kind: 'continue', node } : { kind: 'dead-end', node }
 }
 
 /**
- * Avanza desde una Pantalla (nodo `content`) siguiendo su `targetNodeId`.
- * Si el nodo actual no es `content` o no tiene destino configurado, no hace
- * nada y devuelve el mismo estado — la UI solo debería llamarla cuando
- * `getView` haya devuelto `kind: 'content'`.
+ * Avanza desde una diapositiva "de continuar" siguiendo su `targetNodeId`.
+ * Si el nodo actual no es una diapositiva sin respuestas, o no tiene destino
+ * configurado, no hace nada y devuelve el mismo estado — la UI solo debería
+ * llamarla cuando `getView` haya devuelto `kind: 'continue'`.
  */
 export function advance(project: ProjectDocument, state: PlayerState): PlayerState {
   if (state.currentNodeId === null) return state
   const node = findNode(project, state.currentNodeId)
-  if (!node || node.type !== 'content' || !node.targetNodeId) return state
+  if (!node || node.type !== 'slide') return state
+  if (node.responses.length > 0 || !node.targetNodeId) return state
   return { ...state, currentNodeId: node.targetNodeId }
 }
 
 /**
- * Elige una respuesta desde una Decisión y avanza a su `targetNodeId`,
+ * Elige una respuesta de una diapositiva y avanza a su `targetNodeId`,
  * acumulando su `points` (si los define) en `state.totalPoints`. Si la
  * respuesta no existe, no pertenece al nodo actual, o no tiene destino
  * configurado, no hace nada y devuelve el mismo estado — la UI solo debería
@@ -168,7 +160,7 @@ export function choose(
 ): PlayerState {
   if (state.currentNodeId === null) return state
   const node = findNode(project, state.currentNodeId)
-  if (!node || node.type !== 'decision') return state
+  if (!node || node.type !== 'slide') return state
   const response = node.responses.find((candidate) => candidate.id === responseId)
   if (!response || !response.targetNodeId) return state
   const totalPoints =

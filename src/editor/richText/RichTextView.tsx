@@ -4,7 +4,7 @@ import { parseRichBody } from './richTextContent'
 import styles from './RichTextView.module.css'
 
 export interface RichTextViewProps {
-  /** `body` (string) del nodo/Pantalla/Decisión/Final a mostrar. */
+  /** `body` (string) del nodo (Diapositiva o Final) a mostrar. */
   body: string
   /** Clase adicional del contenedor, para que el llamador ajuste espaciado
    *  sin necesitar envolver este componente en un `<div>` de más. */

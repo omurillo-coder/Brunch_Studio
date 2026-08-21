@@ -142,17 +142,25 @@
   justify-content: space-between;
 }
 
-.responseLetter {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
+/* Punto que identifica visualmente una respuesta. Sustituye al antiguo
+   círculo con la letra (A/B/C/D): la letra sigue existiendo en el dominio
+   como criterio de orden, pero no se muestra nunca al usuario. */
+.responseBullet {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   background: var(--bs-color-accent);
-  color: var(--bs-color-bg);
-  font-size: var(--bs-font-size-xs);
-  font-weight: 600;
+}
+
+/* Modo "de continuar" de una diapositiva (destino único + texto del botón).
+   Se oculta en cuanto la diapositiva tiene respuestas. */
+.continueSection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--bs-space-3);
+  padding-top: var(--bs-space-3);
+  border-top: 1px solid var(--bs-color-border);
 }
 
 .removeResponseButton {
@@ -259,5 +267,5 @@
 
 .deleteNodeButton:hover {
   background: var(--bs-color-danger);
-  color: var(--bs-color-accent-contrast);
+  color: var(--bs-color-danger-contrast);
 }

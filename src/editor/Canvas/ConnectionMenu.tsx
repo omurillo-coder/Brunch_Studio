@@ -4,11 +4,13 @@ import { NODE_TYPE_LABEL } from './nodes/nodeTypes'
 import styles from './ConnectionMenu.module.css'
 
 /**
- * Tipos ofrecidos por el menú "¿Qué quieres añadir?" (fase 7). No incluye
- * `start`: solo puede existir un nodo de Inicio por proyecto, igual que en
- * `LeftPanel`.
+ * Tipos ofrecidos por el menú "¿Qué quieres añadir?": los dos que existen en
+ * el modelo, igual que en `LeftPanel`. Las antiguas opciones "Pantalla" y
+ * "Decisión" se han fusionado en una única "Diapositiva" (que empieza en
+ * modo "de continuar" y pasa a decisión al añadirle respuestas desde el
+ * Inspector).
  */
-const MENU_TYPES: NodeType[] = ['content', 'decision', 'final']
+const MENU_TYPES: NodeType[] = ['slide', 'final']
 
 export interface ConnectionMenuProps {
   /** Posición de pantalla (viewport) donde pintar el menú — normalmente
@@ -27,7 +29,7 @@ export interface ConnectionMenuProps {
  * `Canvas.handleConnectEnd` / `handles.resolveEmptyPaneDrop`).
  *
  * Puramente de presentación: no conoce `@xyflow/react`, el store, ni cómo
- * convertir coordenadas — solo pinta las 3 opciones en la posición indicada
+ * convertir coordenadas — solo pinta las opciones en la posición indicada
  * y delega en `onSelect`/`onClose`. Las etiquetas se reutilizan del
  * diccionario ya usado por los nodos del lienzo (`NODE_TYPE_LABEL`).
  */

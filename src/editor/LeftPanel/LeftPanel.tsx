@@ -1,28 +1,21 @@
 import { useProject, useProjectStore } from '../../store'
 import type { NodePosition, NodeType } from '../../domain'
+import { NODE_TYPE_LABEL, START_NODE_LABEL } from '../Canvas/nodes/nodeTypes'
 import styles from './LeftPanel.module.css'
 
-const NODE_TYPE_LABEL: Record<NodeType, string> = {
-  start: 'Inicio',
-  content: 'Pantalla',
-  decision: 'Decisión',
-  final: 'Final',
-}
-
 /**
- * Tipos que se pueden crear desde este panel. No incluye `start`: solo
- * puede existir un nodo de Inicio por proyecto (lo crea `createProject`
- * automáticamente), así que no tiene sentido ofrecer un botón para crear
- * un segundo.
+ * Tipos que se pueden crear desde este panel: los dos que existen en el
+ * modelo. Ya no hay un botón de "Decisión" separado — una Diapositiva nace
+ * en modo "de continuar" y se convierte en decisión al añadirle respuestas
+ * desde el Inspector.
  */
-const CREATABLE_TYPES: NodeType[] = ['content', 'decision', 'final']
+const CREATABLE_TYPES: NodeType[] = ['slide', 'final']
 
 /**
  * Heurística de posición para nodos creados desde este panel: cascadeo en
  * una cuadrícula de 5 columnas, origen en (80, 80), separación de 220px en
- * horizontal y 160px en vertical. No pretende ser un layout definitivo
- * (eso llega con el lienzo real de React Flow en la fase siguiente), solo
- * evitar que los nodos nuevos se apilen exactamente unos sobre otros.
+ * horizontal y 160px en vertical. No pretende ser un layout definitivo,
+ * solo evitar que los nodos nuevos se apilen exactamente unos sobre otros.
  */
 function nextCascadePosition(existingNodeCount: number): NodePosition {
   const columns = 5
@@ -75,6 +68,15 @@ export function LeftPanel() {
                 `ui.focusRequestNodeId` en `src/store`. */}
             <button type="button" className={styles.nodeItem} onClick={() => focusNode(node.id)}>
               <span className={styles.nodeType}>{NODE_TYPE_LABEL[node.type]}</span>
+              {/* Marca discreta del punto de partida del recorrido. Mismo
+                  criterio (y misma etiqueta) que en la tarjeta del lienzo:
+                  el inicio ya no es un nodo aparte, así que hay que poder
+                  distinguirlo de un vistazo entre las demás diapositivas. */}
+              {node.id === project.graph.startNodeId && (
+                <span className={styles.nodeStartMark} title="Diapositiva de inicio">
+                  {START_NODE_LABEL}
+                </span>
+              )}
               <span className={styles.nodeNumber}>{node.number}</span>
               <span className={styles.nodeTitle}>{node.title.trim() || 'Sin título'}</span>
             </button>

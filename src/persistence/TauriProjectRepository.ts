@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
-import { ProjectDocumentSchema, type ProjectDocument } from '../domain'
+import { parseOrMigrateProjectDocument, type ProjectDocument } from '../domain'
 import type { ProjectRepository } from './ProjectRepository'
 import { wrapInvokeError } from './wrapInvokeError'
 
@@ -14,9 +14,12 @@ export { PersistenceCommandError, type PersistenceErrorKind } from './wrapInvoke
  * `open_branch_project`, `save_branch_project`).
  *
  * Serializa el `ProjectDocument` a JSON antes de invocar, y valida con
- * `ProjectDocumentSchema.parse` cualquier JSON que Rust devuelva antes de
+ * `parseOrMigrateProjectDocument` cualquier JSON que Rust devuelva antes de
  * confiar en su forma — Rust lo trata como texto opaco, así que la
- * validación real de la forma del documento vive aquí.
+ * validación real de la forma del documento vive aquí. Esa misma función es
+ * la que reconoce y convierte los `.brunch` guardados con el modelo de nodos
+ * anterior (`start`/`content`/`decision`, sin `graph.startNodeId`), ver
+ * `src/domain/migration.ts`.
  */
 export class TauriProjectRepository implements ProjectRepository {
   async createProject(path: string, document: ProjectDocument): Promise<void> {
@@ -34,7 +37,7 @@ export class TauriProjectRepository implements ProjectRepository {
     try {
       const json = await invoke<string>('open_branch_project', { path })
       const parsed: unknown = JSON.parse(json)
-      return ProjectDocumentSchema.parse(parsed)
+      return parseOrMigrateProjectDocument(parsed)
     } catch (error) {
       wrapInvokeError(error)
     }
