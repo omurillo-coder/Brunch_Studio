@@ -1,7 +1,7 @@
 export type { ProjectRepository } from './ProjectRepository'
 export { MemoryProjectRepository } from './MemoryProjectRepository'
-export {
-  TauriProjectRepository,
-  PersistenceCommandError,
-  type PersistenceErrorKind,
-} from './TauriProjectRepository'
+export { TauriProjectRepository } from './TauriProjectRepository'
+export { PersistenceCommandError, type PersistenceErrorKind } from './wrapInvokeError'
+export type { AssetRepository, AssetMeta, AssetData } from './AssetRepository'
+export { MemoryAssetRepository } from './MemoryAssetRepository'
+export { TauriAssetRepository } from './TauriAssetRepository'

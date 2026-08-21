@@ -7,7 +7,7 @@
 
 use std::path::Path;
 
-use crate::persistence::{self, PersistenceError};
+use crate::persistence::{self, AssetDataDto, AssetMetaDto, PersistenceError};
 
 /// Crea un `.brunch` nuevo en `path`: inicializa el esquema SQLite y guarda
 /// `document_json` (el `ProjectDocument` inicial, ya construido en TS con
@@ -32,4 +32,26 @@ pub fn open_branch_project(path: String) -> Result<String, PersistenceError> {
 #[tauri::command]
 pub fn save_branch_project(path: String, document_json: String) -> Result<(), PersistenceError> {
     persistence::save_project_file(Path::new(&path), &document_json)
+}
+
+/// Importa el archivo en `source_path` (una ruta absoluta del disco del
+/// usuario, obtenida en TS con el diálogo nativo `open()` — este comando no
+/// abre ningún diálogo) como asset del `.brunch` en `project_path`. Lee los
+/// bytes en Rust; el lado JS/webview nunca los toca directamente.
+///
+/// Deduplica por `sha256` del contenido: importar el mismo contenido dos
+/// veces devuelve el mismo `id` sin insertar una fila nueva.
+#[tauri::command]
+pub fn import_asset(
+    project_path: String,
+    source_path: String,
+) -> Result<AssetMetaDto, PersistenceError> {
+    persistence::import_asset(Path::new(&project_path), Path::new(&source_path))
+}
+
+/// Devuelve los bytes (en base64) y metadatos de un asset ya importado en
+/// el `.brunch` en `project_path`.
+#[tauri::command]
+pub fn get_asset(project_path: String, asset_id: String) -> Result<AssetDataDto, PersistenceError> {
+    persistence::get_asset(Path::new(&project_path), &asset_id)
 }

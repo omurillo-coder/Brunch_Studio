@@ -23,6 +23,10 @@ pub enum PersistenceError {
     /// El JSON del documento no se pudo interpretar (p.ej. no tiene un
     /// campo `schemaVersion` numérico).
     InvalidDocument(String),
+    /// El archivo indicado para importar como asset no tiene una extensión
+    /// reconocida como imagen o audio. El contenido es la ruta original
+    /// (para poder mostrar al usuario qué archivo se rechazó).
+    UnsupportedAssetType(String),
     /// Error de E/S genérico.
     Io(String),
     /// Error de SQLite genérico no cubierto por las variantes anteriores.
@@ -46,6 +50,10 @@ impl fmt::Display for PersistenceError {
             PersistenceError::InvalidDocument(reason) => {
                 write!(f, "documento inválido: {reason}")
             }
+            PersistenceError::UnsupportedAssetType(path) => write!(
+                f,
+                "tipo de archivo no soportado como asset (ni imagen ni audio reconocidos): {path}"
+            ),
             PersistenceError::Io(message) => write!(f, "error de E/S: {message}"),
             PersistenceError::Sqlite(message) => write!(f, "error de SQLite: {message}"),
         }

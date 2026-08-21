@@ -1,11 +1,17 @@
 import { createContext, useContext } from 'react'
 import type { ReactNode } from 'react'
 import { open, save } from '@tauri-apps/plugin-dialog'
-import { TauriProjectRepository } from '../persistence'
+import { TauriAssetRepository, TauriProjectRepository } from '../persistence'
 import type { AppServices } from './AppServices'
 
 /** Único filtro de extensión de archivo que reconoce este editor. */
 const BRUNCH_FILE_FILTERS = [{ name: 'Proyecto Brunch Studio', extensions: ['brunch'] }]
+
+/** Extensiones de imagen/audio reconocidas al importar un asset. */
+const ASSET_FILE_FILTERS: Record<'image' | 'audio', { name: string; extensions: string[] }> = {
+  image: { name: 'Imagen', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'] },
+  audio: { name: 'Audio', extensions: ['mp3', 'wav', 'ogg', 'm4a'] },
+}
 
 /** Caracteres no válidos en un nombre de archivo en Windows/macOS. */
 const INVALID_FILENAME_CHARS = /[/\\:*?"<>|]/g
@@ -37,6 +43,17 @@ async function pickOpenProjectPathWithNativeDialog(): Promise<string | null> {
   return typeof selected === 'string' ? selected : null
 }
 
+async function pickImportAssetPathWithNativeDialog(
+  kind: 'image' | 'audio',
+): Promise<string | null> {
+  const selected = await open({
+    filters: [ASSET_FILE_FILTERS[kind]],
+    multiple: false,
+    directory: false,
+  })
+  return typeof selected === 'string' ? selected : null
+}
+
 /**
  * Servicios "reales" por defecto: repositorio respaldado por los comandos
  * Tauri y diálogos nativos del sistema operativo.
@@ -49,6 +66,8 @@ export const defaultAppServices: AppServices = {
   repository: new TauriProjectRepository(),
   pickSaveProjectPath: pickSaveProjectPathWithNativeDialog,
   pickOpenProjectPath: pickOpenProjectPathWithNativeDialog,
+  pickImportAssetPath: pickImportAssetPathWithNativeDialog,
+  assetRepository: new TauriAssetRepository(),
 }
 
 const AppServicesContext = createContext<AppServices>(defaultAppServices)

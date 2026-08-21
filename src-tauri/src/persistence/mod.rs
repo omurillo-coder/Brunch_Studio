@@ -11,10 +11,12 @@
 //! (eso es responsabilidad de Zod en TypeScript) — solo lee el campo
 //! `schemaVersion` para decidir si sabe leerlo.
 
+mod assets;
 mod error;
 mod repository;
 mod schema;
 
+pub use assets::{get_asset, import_asset, AssetDataDto, AssetMetaDto};
 pub use error::PersistenceError;
 pub use repository::{create_project_file, open_project_file, save_project_file};
 // Reexportado para uso futuro (p.ej. comandos que informen de la versión de

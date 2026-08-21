@@ -1,4 +1,4 @@
-import type { ProjectRepository } from '../persistence'
+import type { AssetRepository, ProjectRepository } from '../persistence'
 
 /**
  * Dependencias externas de la aplicación que dependen del entorno de
@@ -23,4 +23,13 @@ export interface AppServices {
   pickSaveProjectPath: (suggestedName?: string) => Promise<string | null>
   /** Abre el diálogo nativo de "Abrir…"; `null` si el usuario cancela. */
   pickOpenProjectPath: () => Promise<string | null>
+  /**
+   * Abre el diálogo nativo de "Abrir…" filtrado a extensiones de imagen o
+   * audio según `kind`, para que el usuario elija un archivo del disco que
+   * luego se importa como asset (`assetRepository.importAsset`). `null` si
+   * cancela. Este diálogo solo obtiene la ruta: no lee bytes en JS.
+   */
+  pickImportAssetPath: (kind: 'image' | 'audio') => Promise<string | null>
+  /** Importa/lee assets binarios (imagen/audio) de un `.brunch`. */
+  assetRepository: AssetRepository
 }
