@@ -177,6 +177,83 @@ describe('updateNode', () => {
     expect(node?.body).toBe('texto')
     expect(node?.id).toBe(startId)
   })
+
+  const IMAGE_ID = '11111111-1111-1111-1111-111111111111'
+  const AUDIO_ID = '22222222-2222-2222-2222-222222222222'
+
+  it('fija imagen y audio en un nodo content', () => {
+    let project = createProject('P')
+    project = createNode(project, 'content', { x: 0, y: 0 })
+    const contentId = project.graph.nodes.find((n) => n.type === 'content')?.id
+    if (!contentId) throw new Error('setup inválido')
+
+    const updated = updateNode(project, contentId, {
+      imageAssetId: IMAGE_ID,
+      audioAssetId: AUDIO_ID,
+    })
+    const node = updated.graph.nodes.find((n) => n.id === contentId)
+    expect(node?.type === 'content' ? node.imageAssetId : undefined).toBe(IMAGE_ID)
+    expect(node?.type === 'content' ? node.audioAssetId : undefined).toBe(AUDIO_ID)
+  })
+
+  it('fija imagen y audio en un nodo decision', () => {
+    let project = createProject('P')
+    project = createNode(project, 'decision', { x: 0, y: 0 })
+    const decisionId = project.graph.nodes.find((n) => n.type === 'decision')?.id
+    if (!decisionId) throw new Error('setup inválido')
+
+    const updated = updateNode(project, decisionId, {
+      imageAssetId: IMAGE_ID,
+      audioAssetId: AUDIO_ID,
+    })
+    const node = updated.graph.nodes.find((n) => n.id === decisionId)
+    expect(node?.type === 'decision' ? node.imageAssetId : undefined).toBe(IMAGE_ID)
+    expect(node?.type === 'decision' ? node.audioAssetId : undefined).toBe(AUDIO_ID)
+  })
+
+  it('borra imagen y audio con null tras haberlos fijado', () => {
+    let project = createProject('P')
+    project = createNode(project, 'content', { x: 0, y: 0 })
+    const contentId = project.graph.nodes.find((n) => n.type === 'content')?.id
+    if (!contentId) throw new Error('setup inválido')
+
+    project = updateNode(project, contentId, { imageAssetId: IMAGE_ID, audioAssetId: AUDIO_ID })
+    const updated = updateNode(project, contentId, { imageAssetId: null, audioAssetId: null })
+    const node = updated.graph.nodes.find((n) => n.id === contentId)
+    expect(node?.type === 'content' ? node.imageAssetId : 'missing').toBeUndefined()
+    expect(node?.type === 'content' ? node.audioAssetId : 'missing').toBeUndefined()
+  })
+
+  it('no toca imagen/audio si el patch no los incluye (undefined)', () => {
+    let project = createProject('P')
+    project = createNode(project, 'content', { x: 0, y: 0 })
+    const contentId = project.graph.nodes.find((n) => n.type === 'content')?.id
+    if (!contentId) throw new Error('setup inválido')
+
+    project = updateNode(project, contentId, { imageAssetId: IMAGE_ID })
+    const updated = updateNode(project, contentId, { title: 'otro título' })
+    const node = updated.graph.nodes.find((n) => n.id === contentId)
+    expect(node?.type === 'content' ? node.imageAssetId : undefined).toBe(IMAGE_ID)
+  })
+
+  it('lanza error al fijar imagen/audio en un nodo start', () => {
+    const project = createProject('P')
+    const startId = project.graph.nodes[0]?.id
+    if (!startId) throw new Error('setup inválido')
+
+    expect(() => updateNode(project, startId, { imageAssetId: IMAGE_ID })).toThrow()
+    expect(() => updateNode(project, startId, { audioAssetId: AUDIO_ID })).toThrow()
+  })
+
+  it('lanza error al fijar imagen/audio en un nodo final', () => {
+    let project = createProject('P')
+    project = createNode(project, 'final', { x: 0, y: 0 })
+    const finalId = project.graph.nodes.find((n) => n.type === 'final')?.id
+    if (!finalId) throw new Error('setup inválido')
+
+    expect(() => updateNode(project, finalId, { imageAssetId: IMAGE_ID })).toThrow()
+    expect(() => updateNode(project, finalId, { audioAssetId: null })).toThrow()
+  })
 })
 
 describe('createConnectedNode', () => {

@@ -19,10 +19,20 @@ export interface CreateNodeExtra {
   body?: string
 }
 
-/** Campos editables mediante `updateNode` (título/body y afines básicos). */
+/**
+ * Campos editables mediante `updateNode` (título/body y afines básicos).
+ *
+ * Semántica de "patch" para `imageAssetId`/`audioAssetId`: `undefined` no
+ * toca el campo, `null` lo borra (lo deja `undefined` en el nodo) y un
+ * string lo fija a ese id. Solo aplican a nodos `content`/`decision` — un
+ * `start`/`final` con alguno de estos campos presente en el patch (aunque
+ * sea `null`) hace que `updateNode` lance, ver más abajo.
+ */
 export interface UpdateNodePatch {
   title?: string
   body?: string
+  imageAssetId?: string | null
+  audioAssetId?: string | null
 }
 
 /**
@@ -232,9 +242,14 @@ export function moveNodes(project: ProjectDocument, moves: NodeMove[]): ProjectD
 }
 
 /**
- * Actualiza campos editables básicos de un nodo (título/body). No permite
- * cambiar `type`, `id`, `number` ni campos estructurales (responses,
- * targetNodeId) — para eso existen funciones dedicadas.
+ * Actualiza campos editables básicos de un nodo (título/body/adjuntos de
+ * media). No permite cambiar `type`, `id`, `number` ni campos estructurales
+ * (responses, targetNodeId) — para eso existen funciones dedicadas.
+ *
+ * `imageAssetId`/`audioAssetId` solo son válidos en nodos `content` y
+ * `decision`: si el patch los incluye (aunque sea con valor `null` para
+ * borrarlos) y el nodo es `start` o `final`, lanza `Error` — esos tipos de
+ * nodo no soportan media adjunta.
  */
 export function updateNode(
   project: ProjectDocument,
@@ -246,11 +261,27 @@ export function updateNode(
     throw new Error(`No existe un nodo con id "${nodeId}".`)
   }
 
+  const node = project.graph.nodes[index]
+  const setsMedia = patch.imageAssetId !== undefined || patch.audioAssetId !== undefined
+  if (setsMedia && node && node.type !== 'content' && node.type !== 'decision') {
+    throw new Error(
+      `El nodo "${nodeId}" es de tipo "${node.type}" y no admite imagen/audio adjuntos.`,
+    )
+  }
+
   return produce(project, (draft) => {
-    const node = draft.graph.nodes[index]
-    if (!node) return
-    if (patch.title !== undefined) node.title = patch.title
-    if (patch.body !== undefined) node.body = patch.body
+    const draftNode = draft.graph.nodes[index]
+    if (!draftNode) return
+    if (patch.title !== undefined) draftNode.title = patch.title
+    if (patch.body !== undefined) draftNode.body = patch.body
+    if (draftNode.type === 'content' || draftNode.type === 'decision') {
+      if (patch.imageAssetId !== undefined) {
+        draftNode.imageAssetId = patch.imageAssetId === null ? undefined : patch.imageAssetId
+      }
+      if (patch.audioAssetId !== undefined) {
+        draftNode.audioAssetId = patch.audioAssetId === null ? undefined : patch.audioAssetId
+      }
+    }
     touchUpdatedAt(draft)
   })
 }

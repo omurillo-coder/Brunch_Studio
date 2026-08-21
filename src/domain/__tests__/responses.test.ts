@@ -119,4 +119,86 @@ describe('updateResponse', () => {
     const { project, decisionId } = withDecisionNode()
     expect(() => updateResponse(project, decisionId, 'no-existe', { text: 'x' })).toThrow()
   })
+
+  const IMAGE_ID = '11111111-1111-1111-1111-111111111111'
+  const AUDIO_ID = '22222222-2222-2222-2222-222222222222'
+
+  it('fija puntos (incluyendo negativos y cero) e imagen/audio independientemente', () => {
+    const { project, decisionId } = withDecisionNode()
+    const decision = project.graph.nodes.find((n) => n.id === decisionId)
+    const responseA = decision?.type === 'decision' ? decision.responses[0] : undefined
+    if (!responseA) throw new Error('setup inválido')
+
+    const updated = updateResponse(project, decisionId, responseA.id, {
+      points: -5,
+      imageAssetId: IMAGE_ID,
+      audioAssetId: AUDIO_ID,
+    })
+    const decisionAfter = updated.graph.nodes.find((n) => n.id === decisionId)
+    const found =
+      decisionAfter?.type === 'decision'
+        ? decisionAfter.responses.find((r) => r.id === responseA.id)
+        : undefined
+    expect(found?.points).toBe(-5)
+    expect(found?.imageAssetId).toBe(IMAGE_ID)
+    expect(found?.audioAssetId).toBe(AUDIO_ID)
+  })
+
+  it('acepta puntos igual a cero', () => {
+    const { project, decisionId } = withDecisionNode()
+    const decision = project.graph.nodes.find((n) => n.id === decisionId)
+    const responseA = decision?.type === 'decision' ? decision.responses[0] : undefined
+    if (!responseA) throw new Error('setup inválido')
+
+    const updated = updateResponse(project, decisionId, responseA.id, { points: 0 })
+    const decisionAfter = updated.graph.nodes.find((n) => n.id === decisionId)
+    const found =
+      decisionAfter?.type === 'decision'
+        ? decisionAfter.responses.find((r) => r.id === responseA.id)
+        : undefined
+    expect(found?.points).toBe(0)
+  })
+
+  it('borra puntos/imagen/audio con null tras haberlos fijado', () => {
+    const { project: initialProject, decisionId } = withDecisionNode()
+    const decision = initialProject.graph.nodes.find((n) => n.id === decisionId)
+    const responseA = decision?.type === 'decision' ? decision.responses[0] : undefined
+    if (!responseA) throw new Error('setup inválido')
+
+    let project = updateResponse(initialProject, decisionId, responseA.id, {
+      points: 10,
+      imageAssetId: IMAGE_ID,
+      audioAssetId: AUDIO_ID,
+    })
+    project = updateResponse(project, decisionId, responseA.id, {
+      points: null,
+      imageAssetId: null,
+      audioAssetId: null,
+    })
+    const decisionAfter = project.graph.nodes.find((n) => n.id === decisionId)
+    const found =
+      decisionAfter?.type === 'decision'
+        ? decisionAfter.responses.find((r) => r.id === responseA.id)
+        : undefined
+    expect(found?.points).toBeUndefined()
+    expect(found?.imageAssetId).toBeUndefined()
+    expect(found?.audioAssetId).toBeUndefined()
+  })
+
+  it('no toca puntos/imagen/audio si el patch no los incluye (undefined)', () => {
+    const { project: initialProject, decisionId } = withDecisionNode()
+    const decision = initialProject.graph.nodes.find((n) => n.id === decisionId)
+    const responseA = decision?.type === 'decision' ? decision.responses[0] : undefined
+    if (!responseA) throw new Error('setup inválido')
+
+    let project = updateResponse(initialProject, decisionId, responseA.id, { points: 3 })
+    project = updateResponse(project, decisionId, responseA.id, { text: 'nuevo texto' })
+    const decisionAfter = project.graph.nodes.find((n) => n.id === decisionId)
+    const found =
+      decisionAfter?.type === 'decision'
+        ? decisionAfter.responses.find((r) => r.id === responseA.id)
+        : undefined
+    expect(found?.points).toBe(3)
+    expect(found?.text).toBe('nuevo texto')
+  })
 })

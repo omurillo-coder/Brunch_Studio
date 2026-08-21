@@ -52,19 +52,28 @@ export function addResponse(project: ProjectDocument, decisionNodeId: string): P
  * Elimina una respuesta de un nodo decision. Las respuestas restantes
  * conservan su id/letra/orden relativo — no se reindexan letras.
  */
-/** Campos editables de una respuesta ya creada mediante `updateResponse`.
- *  Por ahora solo el texto: imagen/audio/puntos quedan fuera de alcance de
- *  este milestone (no se editan en la UI), y el destino (`targetNodeId`)
- *  tiene su propio mecanismo dedicado vía `connect`/`disconnect`. */
+/**
+ * Campos editables de una respuesta ya creada mediante `updateResponse`. El
+ * destino (`targetNodeId`) tiene su propio mecanismo dedicado vía
+ * `connect`/`disconnect` y no se toca aquí.
+ *
+ * Semántica de "patch" para `points`/`imageAssetId`/`audioAssetId`:
+ * `undefined` no toca el campo, `null` lo borra (lo deja `undefined` en la
+ * respuesta) y un valor lo fija a ese valor/id. `points` acepta cualquier
+ * `number` (positivo, negativo o cero); no hay restricción de rango.
+ */
 export interface UpdateResponsePatch {
   text?: string
+  points?: number | null
+  imageAssetId?: string | null
+  audioAssetId?: string | null
 }
 
 /**
  * Actualiza campos editables básicos de una respuesta ya existente de un
- * nodo decision (por ahora, solo `text`). Análoga a `updateNode` pero a
- * nivel de respuesta. Lanza `Error` si el nodo no existe, no es `decision`,
- * o la respuesta no existe.
+ * nodo decision (texto, puntuación, imagen/audio adjuntos). Análoga a
+ * `updateNode` pero a nivel de respuesta. Lanza `Error` si el nodo no
+ * existe, no es `decision`, o la respuesta no existe.
  */
 export function updateResponse(
   project: ProjectDocument,
@@ -81,8 +90,19 @@ export function updateResponse(
     const draftNode = draft.graph.nodes.find((candidate) => candidate.id === decisionNodeId)
     if (draftNode && draftNode.type === 'decision') {
       const response = draftNode.responses.find((candidate) => candidate.id === responseId)
-      if (response && patch.text !== undefined) {
-        response.text = patch.text
+      if (response) {
+        if (patch.text !== undefined) {
+          response.text = patch.text
+        }
+        if (patch.points !== undefined) {
+          response.points = patch.points === null ? undefined : patch.points
+        }
+        if (patch.imageAssetId !== undefined) {
+          response.imageAssetId = patch.imageAssetId === null ? undefined : patch.imageAssetId
+        }
+        if (patch.audioAssetId !== undefined) {
+          response.audioAssetId = patch.audioAssetId === null ? undefined : patch.audioAssetId
+        }
       }
     }
     draft.metadata.updatedAt = new Date().toISOString()

@@ -65,12 +65,16 @@ export const ContentNodeSchema = z.object({
   ...baseNodeFields,
   type: z.literal('content'),
   targetNodeId: z.string().uuid().optional(),
+  imageAssetId: z.string().uuid().optional(),
+  audioAssetId: z.string().uuid().optional(),
 })
 
 export const DecisionNodeSchema = z.object({
   ...baseNodeFields,
   type: z.literal('decision'),
   responses: z.array(DecisionResponseSchema).max(4),
+  imageAssetId: z.string().uuid().optional(),
+  audioAssetId: z.string().uuid().optional(),
 })
 
 export const FinalNodeSchema = z.object({
