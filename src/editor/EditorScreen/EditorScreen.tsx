@@ -42,7 +42,7 @@ export function EditorScreen({ filePath }: EditorScreenProps) {
 
   return (
     <div className={styles.screen}>
-      <Topbar />
+      <Topbar filePath={filePath} />
       <div className={styles.body}>
         <LeftPanel />
         <Canvas />

@@ -5,3 +5,6 @@ export { PersistenceCommandError, type PersistenceErrorKind } from './wrapInvoke
 export type { AssetRepository, AssetMeta, AssetData } from './AssetRepository'
 export { MemoryAssetRepository } from './MemoryAssetRepository'
 export { TauriAssetRepository } from './TauriAssetRepository'
+export type { HtmlBundleWriter } from './HtmlBundleWriter'
+export { MemoryHtmlBundleWriter } from './MemoryHtmlBundleWriter'
+export { TauriHtmlBundleWriter } from './TauriHtmlBundleWriter'

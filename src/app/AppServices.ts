@@ -1,4 +1,4 @@
-import type { AssetRepository, ProjectRepository } from '../persistence'
+import type { AssetRepository, HtmlBundleWriter, ProjectRepository } from '../persistence'
 
 /**
  * Dependencias externas de la aplicación que dependen del entorno de
@@ -30,6 +30,16 @@ export interface AppServices {
    * cancela. Este diálogo solo obtiene la ruta: no lee bytes en JS.
    */
   pickImportAssetPath: (kind: 'image' | 'audio') => Promise<string | null>
+  /**
+   * Abre el diálogo nativo de "Guardar como…" para elegir dónde escribir el
+   * `index.html` autónomo de la exportación; `null` si el usuario cancela.
+   * `suggestedName` (normalmente el nombre del proyecto) preselecciona el
+   * nombre de archivo propuesto, con extensión `.html`. Mismo patrón que
+   * `pickSaveProjectPath`.
+   */
+  pickExportHtmlPath: (suggestedName?: string) => Promise<string | null>
   /** Importa/lee assets binarios (imagen/audio) de un `.brunch`. */
   assetRepository: AssetRepository
+  /** Escribe en disco el HTML autónomo generado por `src/export`. */
+  htmlBundleWriter: HtmlBundleWriter
 }

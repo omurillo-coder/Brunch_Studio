@@ -55,3 +55,15 @@ pub fn import_asset(
 pub fn get_asset(project_path: String, asset_id: String) -> Result<AssetDataDto, PersistenceError> {
     persistence::get_asset(Path::new(&project_path), &asset_id)
 }
+
+/// Escribe en `path` el `index.html` autónomo generado en TypeScript
+/// (`src/export/htmlBundle.ts`): un único archivo con el documento, el
+/// runtime del Player y todos los assets embebidos como `data:` URI.
+///
+/// `html` es texto opaco para Rust: este comando no lo interpreta ni lo
+/// valida, solo lo escribe tal cual. La ruta la elige el usuario con el
+/// diálogo nativo de guardar (`pickExportHtmlPath` en `AppServices`).
+#[tauri::command]
+pub fn export_html_bundle(path: String, html: String) -> Result<(), PersistenceError> {
+    persistence::write_html_bundle(Path::new(&path), &html)
+}

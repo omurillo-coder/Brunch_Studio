@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { useCanRedo, useCanUndo, useProject, useProjectStore } from '../../store'
 import type { SaveStatus } from '../../store'
+import { useHtmlExport } from '../../export'
 import styles from './Topbar.module.css'
 
 /**
@@ -28,11 +29,29 @@ function isEditableTarget(target: EventTarget | null): boolean {
   )
 }
 
+export interface TopbarProps {
+  /**
+   * Ruta absoluta del `.brunch` abierto. La necesita "Exportar HTML" para
+   * leer los bytes de los assets adjuntos que hay que embeber en el archivo
+   * exportado (`resolveExportAssets`) — mismo prop-drilling de `filePath` ya
+   * establecido en `Inspector`/`PlayerScreen`/`useAutosave`: es un detalle de
+   * la sesión de edición, no del documento, así que no vive en
+   * `useProjectStore`.
+   */
+  filePath: string
+}
+
 /**
  * Barra superior del editor: nombre del proyecto, estado de guardado,
- * deshacer/rehacer (con atajo de teclado) y el botón "Probar".
+ * deshacer/rehacer (con atajo de teclado), "Exportar HTML" y el botón
+ * "Probar".
+ *
+ * "Exportar HTML" vive aquí (y no en el panel izquierdo ni en el Inspector)
+ * porque es una acción de proyecto, no de nodo: al lado del nombre del
+ * proyecto, del estado de guardado y de "Probar" — las otras tres cosas de
+ * la interfaz que hablan del documento entero y no de la selección actual.
  */
-export function Topbar() {
+export function Topbar({ filePath }: TopbarProps) {
   const project = useProject()
   const saveStatus = useProjectStore((state) => state.saveStatus)
   const canUndo = useCanUndo()
@@ -40,6 +59,7 @@ export function Topbar() {
   const undo = useProjectStore((state) => state.undo)
   const redo = useProjectStore((state) => state.redo)
   const setPreviewMode = useProjectStore((state) => state.setPreviewMode)
+  const htmlExport = useHtmlExport(filePath)
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -91,6 +111,29 @@ export function Topbar() {
           title="Rehacer (Cmd/Ctrl+Shift+Z)"
         >
           ↻
+        </button>
+        {/* Resultado de la última exportación. `role="alert"` solo para el
+            fallo (interrumpe al lector de pantalla porque hay algo que
+            corregir); el éxito va como `role="status"`, que se anuncia sin
+            interrumpir. Mismo criterio de mensajes honestos y sin jerga que
+            `HomeScreen`. */}
+        {htmlExport.message && (
+          <span
+            role={htmlExport.status === 'error' ? 'alert' : 'status'}
+            className={
+              htmlExport.status === 'error' ? styles.exportError : styles.exportStatus
+            }
+          >
+            {htmlExport.message}
+          </span>
+        )}
+        <button
+          type="button"
+          className={styles.exportButton}
+          onClick={htmlExport.exportHtml}
+          disabled={htmlExport.status === 'exporting'}
+        >
+          {htmlExport.status === 'exporting' ? 'Exportando…' : 'Exportar HTML'}
         </button>
         <button type="button" className={styles.playButton} onClick={() => setPreviewMode(true)}>
           ▶ Probar

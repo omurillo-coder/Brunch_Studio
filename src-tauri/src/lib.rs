@@ -21,6 +21,7 @@ pub fn run() {
       commands::save_branch_project,
       commands::import_asset,
       commands::get_asset,
+      commands::export_html_bundle,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

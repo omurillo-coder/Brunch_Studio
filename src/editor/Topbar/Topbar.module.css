@@ -63,6 +63,44 @@
   cursor: default;
 }
 
+/* "Exportar HTML": acción de proyecto secundaria respecto a "Probar", así
+   que va en estilo neutro (borde + fondo de superficie) en vez del acento,
+   para que la barra siga teniendo un único botón dominante. */
+.exportButton {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--bs-space-1);
+  padding: var(--bs-space-1) var(--bs-space-3);
+  border: 1px solid var(--bs-color-border-strong);
+  border-radius: var(--bs-radius-sm);
+  background: var(--bs-color-bg);
+  color: var(--bs-color-text);
+  font-size: var(--bs-font-size-sm);
+  font-weight: 600;
+}
+
+.exportButton:hover:not(:disabled) {
+  border-color: var(--bs-color-accent);
+  color: var(--bs-color-text);
+}
+
+.exportButton:disabled {
+  color: var(--bs-color-text-faint);
+  cursor: default;
+}
+
+.exportStatus {
+  font-size: var(--bs-font-size-xs);
+  color: var(--bs-color-text-muted);
+  max-width: 320px;
+}
+
+.exportError {
+  font-size: var(--bs-font-size-xs);
+  color: var(--bs-color-danger);
+  max-width: 320px;
+}
+
 .playButton {
   display: inline-flex;
   align-items: center;
