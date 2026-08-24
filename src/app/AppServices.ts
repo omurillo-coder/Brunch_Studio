@@ -45,7 +45,7 @@ export interface AppServices {
   pickExportHtmlPath: (suggestedName?: string) => Promise<string | null>
   /**
    * Abre el diálogo nativo de "Guardar como…" para elegir dónde escribir el
-   * paquete SCORM 1.2 (`.zip`) de la exportación; `null` si el usuario
+   * paquete SCORM 2004 4ª edición (`.zip`) de la exportación; `null` si el usuario
    * cancela. `suggestedName` preselecciona el nombre de archivo propuesto,
    * con extensión `.zip`. Mismo patrón que `pickExportHtmlPath`.
    */

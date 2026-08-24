@@ -4,14 +4,14 @@ import type { ExportAssetMap } from '../exportAssets'
 import type { FinalNode, ProjectDocument, SlideNode } from '../../domain'
 
 /**
- * Tests de la comunicación con la API SCORM 1.2 del script exportado
- * (Milestone 3, fase 2).
+ * Tests de la comunicación con la API SCORM 2004 4ª edición del script
+ * exportado (Milestone 3, fase 2).
  *
  * El mismo `EXPORTED_PLAYER_SCRIPT` sirve para la exportación HTML suelta y
  * para el paquete SCORM, así que se ejercita aquí exactamente igual que
  * `htmlBundle.test.ts` (montando el HTML generado en jsdom y ejecutando su
- * `<script>` de verdad), simulando en `window.API` un objeto con
- * `LMSInitialize`/`LMSSetValue`/`LMSCommit`/`LMSFinish` como espías.
+ * `<script>` de verdad), simulando en `window.API_1484_11` un objeto con
+ * `Initialize`/`SetValue`/`Commit`/`Terminate` como espías.
  */
 
 const SLIDE_ID = '11111111-1111-4111-8111-111111111111'
@@ -124,17 +124,18 @@ function clickButton(text: string): void {
   button.click()
 }
 
-/** Espías de una API SCORM 1.2 mínima, tal cual la expondría un LMS real. */
+/** Espías de una API SCORM 2004 4ª edición mínima, tal cual la expondría un
+ *  LMS real. */
 function fakeScormAPI() {
   return {
-    LMSInitialize: vi.fn(() => 'true'),
-    LMSSetValue: vi.fn(() => 'true'),
-    LMSCommit: vi.fn(() => 'true'),
-    LMSFinish: vi.fn(() => 'true'),
+    Initialize: vi.fn(() => 'true'),
+    SetValue: vi.fn(() => 'true'),
+    Commit: vi.fn(() => 'true'),
+    Terminate: vi.fn(() => 'true'),
   }
 }
 
-describe('script exportado — SCORM 1.2', () => {
+describe('script exportado — SCORM 2004 4ª edición', () => {
   beforeEach(() => {
     document.body.innerHTML = ''
   })
@@ -142,7 +143,7 @@ describe('script exportado — SCORM 1.2', () => {
   afterEach(() => {
     // El script deja un listener de `beforeunload`; nada debe quedar entre
     // tests además de la propia API simulada, que cada test borra.
-    delete (window as { API?: unknown }).API
+    delete (window as { API_1484_11?: unknown }).API_1484_11
   })
 
   it('sin ninguna API SCORM en window, no lanza y no intenta llamar nada', () => {
@@ -156,51 +157,52 @@ describe('script exportado — SCORM 1.2', () => {
     expect(card?.querySelector('.title')?.textContent).toBe('Fin de la experiencia')
   })
 
-  it('llama a LMSInitialize al cargar cuando hay una API SCORM en window', () => {
+  it('llama a Initialize al cargar cuando hay una API SCORM en window', () => {
     const api = fakeScormAPI()
-    ;(window as unknown as { API: typeof api }).API = api
+    ;(window as unknown as { API_1484_11: typeof api }).API_1484_11 = api
 
     runExportedBundle(buildHtmlBundle(sampleProject(), emptyAssets))
 
-    expect(api.LMSInitialize).toHaveBeenCalledWith('')
+    expect(api.Initialize).toHaveBeenCalledWith('')
   })
 
-  it('al llegar a un Final informa "completed" y hace commit, sin puntuación si no hay ninguna', () => {
+  it('al llegar a un Final informa cmi.completion_status "completed" y hace commit, sin puntuación si no hay ninguna', () => {
     const api = fakeScormAPI()
-    ;(window as unknown as { API: typeof api }).API = api
+    ;(window as unknown as { API_1484_11: typeof api }).API_1484_11 = api
 
     runExportedBundle(buildHtmlBundle(sampleProject(), emptyAssets))
     clickButton('Continuar')
 
-    expect(api.LMSSetValue).toHaveBeenCalledWith('cmi.core.lesson_status', 'completed')
-    expect(api.LMSSetValue).not.toHaveBeenCalledWith('cmi.core.score.raw', expect.anything())
-    expect(api.LMSCommit).toHaveBeenCalledWith('')
+    expect(api.SetValue).toHaveBeenCalledWith('cmi.completion_status', 'completed')
+    expect(api.SetValue).not.toHaveBeenCalledWith('cmi.success_status', expect.anything())
+    expect(api.SetValue).not.toHaveBeenCalledWith('cmi.score.raw', expect.anything())
+    expect(api.Commit).toHaveBeenCalledWith('')
   })
 
-  it('al llegar a un Final con puntuación, también informa cmi.core.score.raw tal cual', () => {
+  it('al llegar a un Final con puntuación, también informa cmi.score.raw tal cual', () => {
     const api = fakeScormAPI()
-    ;(window as unknown as { API: typeof api }).API = api
+    ;(window as unknown as { API_1484_11: typeof api }).API_1484_11 = api
 
     runExportedBundle(buildHtmlBundle(sampleProjectWithPoints(), emptyAssets))
     clickButton('Continuar')
     clickButton('Avanzar')
 
-    expect(api.LMSSetValue).toHaveBeenCalledWith('cmi.core.lesson_status', 'completed')
-    expect(api.LMSSetValue).toHaveBeenCalledWith('cmi.core.score.raw', '10')
-    expect(api.LMSCommit).toHaveBeenCalledWith('')
+    expect(api.SetValue).toHaveBeenCalledWith('cmi.completion_status', 'completed')
+    expect(api.SetValue).toHaveBeenCalledWith('cmi.score.raw', '10')
+    expect(api.Commit).toHaveBeenCalledWith('')
   })
 
-  it('llama a LMSFinish al disparar beforeunload, solo si se había inicializado', () => {
+  it('llama a Terminate al disparar beforeunload, solo si se había inicializado', () => {
     const api = fakeScormAPI()
-    ;(window as unknown as { API: typeof api }).API = api
+    ;(window as unknown as { API_1484_11: typeof api }).API_1484_11 = api
 
     runExportedBundle(buildHtmlBundle(sampleProject(), emptyAssets))
     window.dispatchEvent(new Event('beforeunload'))
 
-    expect(api.LMSFinish).toHaveBeenCalledWith('')
+    expect(api.Terminate).toHaveBeenCalledWith('')
   })
 
-  it('no llama a LMSFinish en beforeunload si nunca hubo API (no-op de la fase 1)', () => {
+  it('no llama a Terminate en beforeunload si nunca hubo API (no-op de la fase 1)', () => {
     expect(() => {
       runExportedBundle(buildHtmlBundle(sampleProject(), emptyAssets))
       window.dispatchEvent(new Event('beforeunload'))
@@ -209,20 +211,20 @@ describe('script exportado — SCORM 1.2', () => {
 
   it('una API que lanza en cualquier llamada no rompe la reproducción', () => {
     const api = {
-      LMSInitialize: vi.fn(() => {
+      Initialize: vi.fn(() => {
         throw new Error('LMS roto')
       }),
-      LMSSetValue: vi.fn(() => {
+      SetValue: vi.fn(() => {
         throw new Error('LMS roto')
       }),
-      LMSCommit: vi.fn(() => {
+      Commit: vi.fn(() => {
         throw new Error('LMS roto')
       }),
-      LMSFinish: vi.fn(() => {
+      Terminate: vi.fn(() => {
         throw new Error('LMS roto')
       }),
     }
-    ;(window as unknown as { API: typeof api }).API = api
+    ;(window as unknown as { API_1484_11: typeof api }).API_1484_11 = api
 
     expect(() => {
       runExportedBundle(buildHtmlBundle(sampleProject(), emptyAssets))

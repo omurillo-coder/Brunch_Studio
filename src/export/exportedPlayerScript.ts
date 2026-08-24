@@ -26,34 +26,47 @@
  * `${` accidental en un texto se interprete como código.
  *
  * ---------------------------------------------------------------------------
- * SCORM 1.2 (Milestone 3, fase 2)
+ * SCORM 2004 4ª edición (Milestone 3, fase 2)
  * ---------------------------------------------------------------------------
  *
  * Este MISMO script sirve tanto para la exportación HTML suelta (fase 1)
  * como para el paquete SCORM (fase 2): en vez de mantener dos runtimes que
- * puedan divergir, la comunicación con la API SCORM 1.2 vive aquí, protegida
- * de arriba a abajo para que sea un no-op silencioso cuando no hay ningún
- * LMS alrededor (el caso normal de un `index.html` abierto suelto).
+ * puedan divergir, la comunicación con la API SCORM 2004 (RTE, IEEE
+ * 1484.11.2) vive aquí, protegida de arriba a abajo para que sea un no-op
+ * silencioso cuando no hay ningún LMS alrededor (el caso normal de un
+ * `index.html` abierto suelto), y también cuando el LMS solo soporta SCORM
+ * 1.2 (esta versión ya no lo intenta: no busca `window.API`, solo
+ * `window.API_1484_11`).
  *
- * `findAPI` es el patrón estándar y muy documentado de SCORM 1.2 (a veces
- * llamado `ISO_FindAPI`): la API la expone la ventana del LMS, no la del
- * contenido, así que hay que subir por `window.parent` hasta encontrar una
- * propiedad `API`, con un límite de saltos para no colgarse si algo forma un
- * bucle; si tras agotar los saltos no ha aparecido, se prueba una vez con
- * `window.opener` (caso del contenido abierto en una ventana/pestaña nueva
- * por el LMS en vez de en un `<iframe>`).
+ * `findAPI` es el patrón estándar y muy documentado de SCORM (a veces
+ * llamado `ISO_FindAPI`; el nombre de la propiedad global cambia entre
+ * versiones, pero el algoritmo de búsqueda es el mismo): la API la expone la
+ * ventana del LMS, no la del contenido, así que hay que subir por
+ * `window.parent` hasta encontrar una propiedad `API_1484_11` (el nombre
+ * fijado por SCORM 2004; `API` a secas es el de 1.2 y ya no se busca), con
+ * un límite de saltos para no colgarse si algo forma un bucle; si tras
+ * agotar los saltos no ha aparecido, se prueba una vez con `window.opener`
+ * (caso del contenido abierto en una ventana/pestaña nueva por el LMS en vez
+ * de en un `<iframe>`).
  *
  * Ciclo de vida:
- *  - Al cargar el script: se busca la API; si aparece, `LMSInitialize("")`.
- *  - Al llegar a un Final: `LMSSetValue("cmi.core.lesson_status", "completed")`
- *    y, solo si `state.totalPoints !== null`, también
- *    `LMSSetValue("cmi.core.score.raw", String(state.totalPoints))` — sin
- *    normalizar a 0-100 (el modelo de Brunch Studio no tiene concepto de
- *    "puntuación máxima posible": se informa el total tal cual, decisión de
- *    diseño documentada aquí y en el informe de la fase). Después
- *    `LMSCommit("")`.
+ *  - Al cargar el script: se busca la API; si aparece, `Initialize("")`.
+ *  - Al llegar a un Final: `SetValue("cmi.completion_status", "completed")`.
+ *    SCORM 2004 separa el estado de FINALIZACIÓN (`cmi.completion_status`)
+ *    del de SUPERACIÓN (`cmi.success_status`, valores `passed`/`failed`/
+ *    `unknown`): este último NO se fija porque el modelo de dominio de
+ *    Brunch Studio no tiene todavía ningún concepto de "aprobado/reprobado"
+ *    ni de umbral de superación — decisión de diseño documentada aquí y en
+ *    el informe de la fase; el LMS lo interpretará como `unknown` por
+ *    defecto (valor inicial del elemento según el estándar). Solo si
+ *    `state.totalPoints !== null` se informa también
+ *    `SetValue("cmi.score.raw", String(state.totalPoints))` — sin normalizar
+ *    a 0-100 ni fijar `cmi.score.scaled` (el modelo de Brunch Studio tampoco
+ *    tiene concepto de "puntuación máxima posible": se informa el total tal
+ *    cual, misma simplificación conocida que ya existía en SCORM 1.2).
+ *    Después `Commit("")`.
  *  - Al cerrar/salir (`beforeunload`): si se llegó a inicializar,
- *    `LMSFinish("")`.
+ *    `Terminate("")`.
  *
  * Cada llamada a la API va en su propio `try/catch`: si la API está pero
  * alguna llamada falla o lanza (LMS mal implementado, sesión ya cerrada…),
@@ -90,20 +103,28 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
   var texts = bundle.texts || {};
 
   // -------------------------------------------------------------------------
-  // SCORM 1.2 (no-op silencioso fuera de un LMS; ver cabecera del archivo)
+  // SCORM 2004 4ª edición (no-op silencioso fuera de un LMS; ver cabecera
+  // del archivo)
   // -------------------------------------------------------------------------
 
   var MAX_FIND_API_HOPS = 7;
 
-  /** Busca window.API subiendo por window.parent hasta MAX_FIND_API_HOPS
-   *  saltos. Patrón estándar de SCORM 1.2 ("ISO_FindAPI"). */
+  /** Busca window.API_1484_11 subiendo por window.parent hasta
+   *  MAX_FIND_API_HOPS saltos. Patrón estándar de SCORM ("ISO_FindAPI");
+   *  API_1484_11 es el nombre de propiedad global fijado por SCORM 2004
+   *  (IEEE 1484.11.2), distinto del "API" de SCORM 1.2. */
   function findAPIInWindow(win) {
     var attempts = 0;
-    while (!win.API && win.parent && win.parent !== win && attempts < MAX_FIND_API_HOPS) {
+    while (
+      !win.API_1484_11 &&
+      win.parent &&
+      win.parent !== win &&
+      attempts < MAX_FIND_API_HOPS
+    ) {
       attempts += 1;
       win = win.parent;
     }
-    return win.API || null;
+    return win.API_1484_11 || null;
   }
 
   /** Igual que findAPIInWindow, pero probando también window.opener
@@ -147,23 +168,25 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
       return;
     }
     callScormSafely(function (api) {
-      api.LMSInitialize('');
+      api.Initialize('');
       scormInitialized = true;
     });
   }
 
-  /** Se llama al alcanzar un Final: informa el estado "completed" y, si hay
-   *  puntuación, la puntuación tal cual (sin normalizar a 0-100). */
+  /** Se llama al alcanzar un Final: informa cmi.completion_status
+   *  "completed" y, si hay puntuación, cmi.score.raw tal cual (sin
+   *  normalizar a 0-100). No fija cmi.success_status: ver cabecera del
+   *  archivo. */
   function scormReportCompletion(totalPoints) {
     if (!scormAPI) {
       return;
     }
     callScormSafely(function (api) {
-      api.LMSSetValue('cmi.core.lesson_status', 'completed');
+      api.SetValue('cmi.completion_status', 'completed');
       if (totalPoints !== null) {
-        api.LMSSetValue('cmi.core.score.raw', String(totalPoints));
+        api.SetValue('cmi.score.raw', String(totalPoints));
       }
-      api.LMSCommit('');
+      api.Commit('');
     });
   }
 
@@ -172,7 +195,7 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
       return;
     }
     callScormSafely(function (api) {
-      api.LMSFinish('');
+      api.Terminate('');
     });
   }
 

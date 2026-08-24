@@ -1,4 +1,4 @@
-//! Empaquetado del paquete SCORM 1.2 generado por el frontend
+//! Empaquetado del paquete SCORM 2004 4ª edición generado por el frontend
 //! (Milestone 3, fase 2).
 //!
 //! Igual que `export::write_html_bundle`, este módulo no conoce nada del
@@ -86,7 +86,7 @@ mod tests {
 
     const SAMPLE_MANIFEST: &str = concat!(
         "<?xml version=\"1.0\" standalone=\"no\"?>\n",
-        "<manifest identifier=\"brunch-test\" version=\"1.2\">",
+        "<manifest identifier=\"brunch-test\">",
         "<organizations/><resources/></manifest>\n"
     );
 

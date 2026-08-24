@@ -3,7 +3,8 @@ import { buildScormManifest } from '../scormManifest'
 import type { ProjectDocument } from '../../domain'
 
 /**
- * Tests del generador del `imsmanifest.xml` (Milestone 3, fase 2).
+ * Tests del generador del `imsmanifest.xml` de SCORM 2004 4ª edición
+ * (Milestone 3, fase 2).
  */
 
 function sampleProject(overrides: Partial<ProjectDocument['metadata']> = {}): ProjectDocument {
@@ -57,10 +58,24 @@ describe('buildScormManifest', () => {
     const resource = doc.querySelector('resource')
     expect(resource?.getAttribute('href')).toBe('index.html')
     expect(resource?.getAttribute('type')).toBe('webcontent')
-    expect(resource?.getAttributeNS('http://www.adlnet.org/xsd/adlcp_rootv1p2', 'scormtype')).toBe(
+    expect(resource?.getAttributeNS('http://www.adlnet.org/xsd/adlcp_v1p3', 'scormType')).toBe(
       'sco',
     )
     expect(resource?.querySelector('file')?.getAttribute('href')).toBe('index.html')
+  })
+
+  it('usa los namespaces y el schemaversion de SCORM 2004 4ª edición', () => {
+    const xml = buildScormManifest(sampleProject())
+    const doc = parseXml(xml)
+
+    expect(doc.documentElement.getAttribute('xmlns')).toBe(
+      'http://www.imsglobal.org/xsd/imscp_v1p1',
+    )
+    expect(doc.documentElement.getAttribute('xmlns:adlcp')).toBe(
+      'http://www.adlnet.org/xsd/adlcp_v1p3',
+    )
+    expect(doc.querySelector('schema')?.textContent).toBe('ADL SCORM')
+    expect(doc.querySelector('schemaversion')?.textContent).toBe('2004 4th Edition')
   })
 
   it('usa el nombre del proyecto como título de organización e item', () => {

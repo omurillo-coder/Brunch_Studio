@@ -68,7 +68,7 @@ pub fn export_html_bundle(path: String, html: String) -> Result<(), PersistenceE
     persistence::write_html_bundle(Path::new(&path), &html)
 }
 
-/// Escribe en `path` el paquete SCORM 1.2 (`.zip`) generado a partir de los
+/// Escribe en `path` el paquete SCORM 2004 4ª edición (`.zip`) generado a partir de los
 /// dos textos ya construidos en TypeScript: el mismo `index.html` autónomo
 /// de `export_html_bundle` (`src/export/htmlBundle.ts`) y el
 /// `imsmanifest.xml` (`src/export/scormManifest.ts`).

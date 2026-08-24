@@ -1,5 +1,5 @@
 /**
- * Contrato de escritura del paquete SCORM 1.2 (`.zip`) exportado
+ * Contrato de escritura del paquete SCORM 2004 4ª edición (`.zip`) exportado
  * (Milestone 3, fase 2).
  *
  * Mismo criterio que `HtmlBundleWriter`: no persiste el `ProjectDocument` ni

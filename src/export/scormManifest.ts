@@ -6,26 +6,31 @@ import type { ProjectDocument } from '../domain'
  * ---------------------------------------------------------------------------
  *
  * `buildScormManifest` es una función PURA (nada de disco, nada de Tauri):
- * recibe el documento y devuelve el manifiesto SCORM 1.2 mínimo que describe
- * el `index.html` autónomo (`buildHtmlBundle`) como único SCO del paquete.
+ * recibe el documento y devuelve el manifiesto SCORM 2004 4ª edición mínimo
+ * que describe el `index.html` autónomo (`buildHtmlBundle`) como único SCO
+ * del paquete.
  *
- * SCORM 1.2 se eligió por ser la versión más simple y la más compatible con
- * LMS reales (incluido Moodle) — no hace falta modelar secuenciación ni
- * `cmi.interactions`, solo un SCO de contenido con estado
- * completado/puntuación.
+ * SCORM 2004 4ª edición no exige modelar secuenciación (`imsss`/`adlseq`/
+ * `adlnav`) ni `cmi.interactions` para un paquete de un único SCO sin reglas
+ * de navegación entre SCOs: con los namespaces base de content packaging
+ * (`imscp_v1p1`) más las extensiones ADL de content aggregation
+ * (`adlcp_v1p3`) es un manifiesto válido y lo acepta cualquier LMS conforme
+ * (Moodle incluido) — no se declaran `adlseq_v1p3`/`adlnav_v1p3`/`imsss`
+ * porque el documento no usa ningún elemento de esos namespaces.
  *
  * El manifiesto NO incluye `imsmanifest.xml` en la lista de `<file>` del
  * `<resource>`: esa lista describe los archivos que forman el CONTENIDO del
  * recurso (lo que hay que servir para reproducirlo), no el propio
  * manifiesto que lo declara — ningún LMS habitual (incluido Moodle) lo
- * exige, y así lo confirma el propio esquema `adlcp_rootv1p2`.
+ * exige, y así lo confirma el propio esquema `adlcp_v1p3`.
  */
 
-/** Namespace/esquema estándar de un `imsmanifest.xml` de SCORM 1.2. */
+/** Namespace/esquema estándar de un `imsmanifest.xml` de SCORM 2004 4ª
+ *  edición (content packaging base + extensiones ADL de content
+ *  aggregation; sin secuenciación explícita, ver cabecera del archivo). */
 const SCHEMA_LOCATION =
-  'http://www.imsproject.org/xsd/imscp_rootv1p1p2 imscp_rootv1p1p2.xsd ' +
-  'http://www.imsglobal.org/xsd/imsmd_rootv1p2p1 imsmd_rootv1p2p1.xsd ' +
-  'http://www.adlnet.org/xsd/adlcp_rootv1p2 adlcp_rootv1p2.xsd'
+  'http://www.imsglobal.org/xsd/imscp_v1p1 imscp_v1p1.xsd ' +
+  'http://www.adlnet.org/xsd/adlcp_v1p3 adlcp_v1p3.xsd'
 
 const ORGANIZATION_ID = 'brunch-organization'
 const ITEM_ID = 'brunch-item-1'
@@ -67,15 +72,19 @@ export function buildScormManifest(project: ProjectDocument): string {
   const title = project.metadata.name.trim() || 'Experiencia interactiva'
   const escapedTitle = escapeXml(title)
 
+  // El `<manifest>` no lleva atributo `version`: ese atributo (opcional en
+  // IMS CP) versiona el propio paquete de contenido, no el estándar SCORM —
+  // la versión de SCORM la declara `<schemaversion>` dentro de `<metadata>`.
+  // Se omite para no dejar un valor sin significado real.
   return `<?xml version="1.0" standalone="no"?>
-<manifest identifier="${identifier}" version="1.2"
-  xmlns="http://www.imsproject.org/xsd/imscp_rootv1p1p2"
-  xmlns:adlcp="http://www.adlnet.org/xsd/adlcp_rootv1p2"
+<manifest identifier="${identifier}"
+  xmlns="http://www.imsglobal.org/xsd/imscp_v1p1"
+  xmlns:adlcp="http://www.adlnet.org/xsd/adlcp_v1p3"
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
   xsi:schemaLocation="${SCHEMA_LOCATION}">
   <metadata>
     <schema>ADL SCORM</schema>
-    <schemaversion>1.2</schemaversion>
+    <schemaversion>2004 4th Edition</schemaversion>
   </metadata>
   <organizations default="${ORGANIZATION_ID}">
     <organization identifier="${ORGANIZATION_ID}">
@@ -86,7 +95,7 @@ export function buildScormManifest(project: ProjectDocument): string {
     </organization>
   </organizations>
   <resources>
-    <resource identifier="${RESOURCE_ID}" type="webcontent" adlcp:scormtype="sco" href="index.html">
+    <resource identifier="${RESOURCE_ID}" type="webcontent" adlcp:scormType="sco" href="index.html">
       <file href="index.html"/>
     </resource>
   </resources>
