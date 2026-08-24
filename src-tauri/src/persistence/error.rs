@@ -27,6 +27,10 @@ pub enum PersistenceError {
     /// reconocida como imagen o audio. El contenido es la ruta original
     /// (para poder mostrar al usuario qué archivo se rechazó).
     UnsupportedAssetType(String),
+    /// El archivo indicado para importar como asset supera
+    /// `assets::MAX_ASSET_BYTES`. Se detecta con `std::fs::metadata` (sin
+    /// leer el contenido) antes de intentar cargarlo en memoria.
+    AssetTooLarge { max_bytes: u64, actual_bytes: u64 },
     /// Error de E/S genérico.
     Io(String),
     /// Error de SQLite genérico no cubierto por las variantes anteriores.
@@ -53,6 +57,10 @@ impl fmt::Display for PersistenceError {
             PersistenceError::UnsupportedAssetType(path) => write!(
                 f,
                 "tipo de archivo no soportado como asset (ni imagen ni audio reconocidos): {path}"
+            ),
+            PersistenceError::AssetTooLarge { max_bytes, actual_bytes } => write!(
+                f,
+                "el archivo es demasiado grande para importarse como asset: {actual_bytes} bytes (máximo {max_bytes} bytes)"
             ),
             PersistenceError::Io(message) => write!(f, "error de E/S: {message}"),
             PersistenceError::Sqlite(message) => write!(f, "error de SQLite: {message}"),

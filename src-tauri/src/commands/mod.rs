@@ -56,6 +56,22 @@ pub fn get_asset(project_path: String, asset_id: String) -> Result<AssetDataDto,
     persistence::get_asset(Path::new(&project_path), &asset_id)
 }
 
+/// Elimina de la tabla `assets` del `.brunch` en `project_path` las filas
+/// cuyo `id` no esté en `keep_asset_ids`, y devuelve cuántas se eliminaron.
+///
+/// `keep_asset_ids` ya viene calculado desde TypeScript (recorriendo el
+/// documento con `collectReferencedAssetIds`, en `src/export/exportAssets.ts`):
+/// este comando, como el resto de `persistence`, no interpreta la forma del
+/// documento. Se llama tras cada guardado real (`useAutosave`); un fallo
+/// aquí no debe impedir que el documento se haya guardado ya.
+#[tauri::command]
+pub fn gc_orphan_assets(
+    project_path: String,
+    keep_asset_ids: Vec<String>,
+) -> Result<u32, PersistenceError> {
+    persistence::gc_orphan_assets(Path::new(&project_path), &keep_asset_ids)
+}
+
 /// Escribe en `path` el `index.html` autónomo generado en TypeScript
 /// (`src/export/htmlBundle.ts`): un único archivo con el documento, el
 /// runtime del Player y todos los assets embebidos como `data:` URI.

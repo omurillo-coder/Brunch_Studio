@@ -1,8 +1,22 @@
-import { useState } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import { AppServicesProvider } from './app/AppServicesContext'
 import type { AppServices } from './app/AppServices'
 import { HomeScreen } from './editor/HomeScreen/HomeScreen'
-import { EditorScreen } from './editor/EditorScreen/EditorScreen'
+import styles from './App.module.css'
+
+/**
+ * `EditorScreen` (y todo lo que arrastra: Tiptap/ProseMirror para el editor
+ * de texto enriquecido, `@xyflow/react` y `@dagrejs/dagre` para el lienzo)
+ * es, con diferencia, el bloque más pesado del bundle inicial — y
+ * `HomeScreen` ("Nuevo proyecto"/"Abrir proyecto"/"Importar .twee") no
+ * necesita nada de eso. Cargarlo con `React.lazy()` deja ese peso fuera del
+ * chunk principal: solo se descarga al crear/abrir un proyecto de verdad.
+ */
+const EditorScreen = lazy(() =>
+  import('./editor/EditorScreen/EditorScreen').then((module) => ({
+    default: module.EditorScreen,
+  })),
+)
 
 export interface AppProps {
   /**
@@ -35,7 +49,16 @@ function AppShell() {
     return <HomeScreen onProjectOpened={setOpenProjectPath} />
   }
 
-  return <EditorScreen filePath={openProjectPath} />
+  return (
+    <Suspense fallback={<EditorScreenLoadingFallback />}>
+      <EditorScreen filePath={openProjectPath} />
+    </Suspense>
+  )
+}
+
+/** Sustituto sobrio mientras se descarga el chunk de `EditorScreen`. */
+function EditorScreenLoadingFallback() {
+  return <p className={styles.loadingFallback}>Cargando…</p>
 }
 
 function App({ services }: AppProps) {

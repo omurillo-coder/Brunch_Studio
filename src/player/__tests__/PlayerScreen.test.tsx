@@ -373,6 +373,7 @@ describe('PlayerScreen: imagen/audio adjuntos', () => {
       getAsset: async () => {
         throw new Error('fallo simulado de carga de asset')
       },
+      gcOrphanAssets: async () => 0,
     }
 
     const startId = startNodeId()

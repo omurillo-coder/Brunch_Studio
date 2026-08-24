@@ -21,6 +21,7 @@ pub fn run() {
       commands::save_branch_project,
       commands::import_asset,
       commands::get_asset,
+      commands::gc_orphan_assets,
       commands::export_html_bundle,
       commands::export_scorm_package,
       commands::read_text_file,

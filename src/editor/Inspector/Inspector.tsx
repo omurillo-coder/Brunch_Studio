@@ -16,6 +16,7 @@ import type {
 } from '../../domain'
 import { useAppServices } from '../../app/AppServicesContext'
 import { useAssetDataUri } from '../../hooks/useAssetDataUri'
+import { PersistenceCommandError } from '../../persistence/wrapInvokeError'
 import { NODE_TYPE_LABEL } from '../Canvas/nodes/nodeTypes'
 import { RichTextEditor } from '../richText/RichTextEditor'
 import styles from './Inspector.module.css'
@@ -185,8 +186,15 @@ function MediaAttachment({
       }
       const meta = await assetRepository.importAsset(filePath, sourcePath)
       onAttach(meta.id)
-    } catch {
-      setPickError(`No se ha podido adjuntar el ${label}. Inténtalo de nuevo.`)
+    } catch (error) {
+      // `AssetTooLarge` (ver `PersistenceError` en Rust) es el único caso en
+      // el que damos un mensaje específico: el resto de fallos (E/S, tipo no
+      // soportado, etc.) comparten el mensaje genérico de siempre.
+      if (error instanceof PersistenceCommandError && error.kind === 'AssetTooLarge') {
+        setPickError('El archivo es demasiado grande (máximo 15 MB). Prueba con uno más ligero.')
+      } else {
+        setPickError(`No se ha podido adjuntar el ${label}. Inténtalo de nuevo.`)
+      }
     } finally {
       setBusy(false)
     }

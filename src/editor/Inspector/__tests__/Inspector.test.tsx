@@ -640,6 +640,7 @@ describe('Inspector — adjuntos de imagen/audio a nivel de nodo (fase 3, Milest
     const assetRepository = {
       importAsset: vi.fn().mockRejectedValue(new Error('boom')),
       getAsset: vi.fn(),
+      gcOrphanAssets: vi.fn(),
     }
 
     renderInspectorWithServices({ assetRepository, pickImportAssetPath })
@@ -662,6 +663,7 @@ describe('Inspector — adjuntos de imagen/audio a nivel de nodo (fase 3, Milest
     const assetRepository = {
       importAsset: vi.fn(),
       getAsset: vi.fn().mockRejectedValue(new Error('boom')),
+      gcOrphanAssets: vi.fn(),
     }
 
     renderInspectorWithServices({ assetRepository })

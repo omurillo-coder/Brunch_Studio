@@ -15,6 +15,7 @@ export type PersistenceErrorKind =
   | 'UnsupportedSchemaVersion'
   | 'InvalidDocument'
   | 'UnsupportedAssetType'
+  | 'AssetTooLarge'
   | 'Io'
   | 'Sqlite'
 

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { useAppServices } from '../../app/AppServicesContext'
 import { useProjectStore } from '../../store'
+import { collectReferencedAssetIds } from '../../export/exportAssets'
 
 /**
  * Retardo del debounce de autoguardado, en milisegundos.
@@ -93,9 +94,27 @@ export const AUTOSAVE_DEBOUNCE_MS = 700
  * hubiera en una clausura capturada cuando se programó el temporizador —
  * así un guardado disparado varios cientos de ms después de programarse
  * siempre escribe el estado más reciente, no uno obsoleto.
+ *
+ * ---------------------------------------------------------------------------
+ * Recolección de basura de assets huérfanos
+ * ---------------------------------------------------------------------------
+ * Justo después de que un guardado (programado o forzado) escriba con éxito,
+ * se recorre el documento recién guardado (`collectReferencedAssetIds`, el
+ * mismo cálculo que usa la exportación para decidir qué assets embeber) y se
+ * llama a `assetRepository.gcOrphanAssets` con esa lista de ids "a
+ * conservar": borra de la tabla `assets` cualquier fila que ya no referencie
+ * ningún nodo/respuesta (imagen o audio quitado, reemplazado, o el nodo que
+ * lo tenía borrado). Se hace en cada guardado exitoso, sin acumular ni
+ * debounce propio — la tabla de assets de un editor como este es pequeña,
+ * no hace falta optimizar para no repetirlo.
+ *
+ * Deliberadamente tolerante a fallos: un error de la recolección de basura
+ * se registra con `console.error` y no cambia `saveStatus` ni se relanza —
+ * el guardado del documento en sí ya se completó con éxito y no debe
+ * quedar marcado como fallido por culpa de una limpieza secundaria.
  */
 export function useAutosave(filePath: string): void {
-  const { repository } = useAppServices()
+  const { repository, assetRepository } = useAppServices()
 
   // Referencias siempre-frescas para que el listener de teclado y el
   // callback del `setTimeout` (creados una sola vez, ver el `useEffect` con
@@ -105,11 +124,13 @@ export function useAutosave(filePath: string): void {
   // Se escriben en un `useEffect` propio (no durante el render) para no
   // mutar un ref en fase de render.
   const repositoryRef = useRef(repository)
+  const assetRepositoryRef = useRef(assetRepository)
   const filePathRef = useRef(filePath)
   useEffect(() => {
     repositoryRef.current = repository
+    assetRepositoryRef.current = assetRepository
     filePathRef.current = filePath
-  }, [repository, filePath])
+  }, [repository, assetRepository, filePath])
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | null = null
@@ -130,6 +151,17 @@ export function useAutosave(filePath: string): void {
         useProjectStore.setState({ saveStatus: 'saved' })
       } catch {
         useProjectStore.setState({ saveStatus: 'error' })
+        return
+      }
+
+      // Recolección de basura de assets huérfanos (ver comentario de diseño
+      // arriba): solo tras un guardado con éxito, y sin que un fallo aquí
+      // afecte a `saveStatus` ni se propague.
+      try {
+        const keepAssetIds = collectReferencedAssetIds(project)
+        await assetRepositoryRef.current.gcOrphanAssets(filePathRef.current, keepAssetIds)
+      } catch (error) {
+        console.error('No se han podido recolectar los assets huérfanos del proyecto.', error)
       }
     }
 

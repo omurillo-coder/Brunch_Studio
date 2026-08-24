@@ -1,0 +1,15 @@
+/* Sustituto de carga mientras se descarga el chunk diferido de EditorScreen
+   (ver App.tsx). Deliberadamente discreto: sin espinner ni animación, texto
+   centrado con los mismos tokens de color/tipografía que el resto de la
+   app. */
+.loadingFallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  margin: 0;
+  background: var(--bs-color-bg);
+  color: var(--bs-color-text-muted);
+  font-family: var(--bs-font-sans);
+  font-size: var(--bs-font-size-md);
+}

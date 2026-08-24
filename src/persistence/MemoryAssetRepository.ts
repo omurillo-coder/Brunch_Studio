@@ -105,4 +105,17 @@ export class MemoryAssetRepository implements AssetRepository {
       dataBase64: bytesToBase64(stored.bytes),
     }
   }
+
+  async gcOrphanAssets(projectPath: string, keepAssetIds: string[]): Promise<number> {
+    void projectPath
+    const keep = new Set(keepAssetIds)
+    let deleted = 0
+    for (const [id, stored] of [...this.assetsById]) {
+      if (keep.has(id)) continue
+      this.assetsById.delete(id)
+      this.assetIdByFingerprint.delete(stored.sha256)
+      deleted += 1
+    }
+    return deleted
+  }
 }

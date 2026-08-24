@@ -19,6 +19,18 @@ use uuid::Uuid;
 use super::error::PersistenceError;
 use super::schema::verify_container_tables;
 
+/// Límite de tamaño de un archivo importable como asset: 15 MiB.
+///
+/// Por qué 15 MB: de sobra para una imagen o un clip de audio corto de buena
+/// calidad (los assets de este editor son ilustraciones/fotos de apoyo y
+/// clips breves, no vídeo ni pistas largas), pero lo bastante bajo para no
+/// permitir que un archivo enorme hinche sin control el `.brunch` (SQLite,
+/// que guarda los bytes tal cual en la columna `data`) ni las exportaciones
+/// (`export_html_bundle`/`export_scorm_package` embeben cada asset como
+/// `data:` URI en base64 dentro de un único HTML — la codificación base64 ya
+/// de por sí añade ~33% de tamaño).
+pub const MAX_ASSET_BYTES: u64 = 15 * 1024 * 1024;
+
 /// Metadatos de un asset recién importado (o ya existente, en el caso de
 /// deduplicación), devueltos al frontend.
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
@@ -102,6 +114,18 @@ pub fn import_asset(
     source_path: &Path,
 ) -> Result<AssetMetaDto, PersistenceError> {
     let (asset_type, mime_type) = detect_mime_type(source_path)?;
+
+    // Comprueba el tamaño con `std::fs::metadata` (no carga nada en memoria)
+    // ANTES de `std::fs::read`: un archivo que supere el límite se rechaza
+    // sin llegar a leerse por completo.
+    let actual_bytes = std::fs::metadata(source_path)?.len();
+    if actual_bytes > MAX_ASSET_BYTES {
+        return Err(PersistenceError::AssetTooLarge {
+            max_bytes: MAX_ASSET_BYTES,
+            actual_bytes,
+        });
+    }
+
     let bytes = std::fs::read(source_path)?;
     let sha256 = sha256_hex(&bytes);
     let filename = source_path
@@ -164,6 +188,36 @@ pub fn get_asset(project_path: &Path, asset_id: &str) -> Result<AssetDataDto, Pe
         filename,
         data_base64: STANDARD.encode(data),
     })
+}
+
+/// Elimina, dentro de una única transacción, las filas de `assets` cuyo `id`
+/// NO esté en `keep_asset_ids` — assets que ningún nodo/respuesta del
+/// documento referencia ya (nodo borrado, imagen/audio quitado o
+/// reemplazado). Devuelve cuántas filas se eliminaron.
+///
+/// Mismo principio ya establecido en este módulo: Rust trata el
+/// `ProjectDocument` como opaco, así que no recorre su JSON para decidir qué
+/// asset sigue en uso. Es TypeScript quien ya sabe recorrerlo
+/// (`collectReferencedAssetIds` en `src/export/exportAssets.ts`) y pasa aquí
+/// la lista de ids "a conservar" ya calculada.
+pub fn gc_orphan_assets(
+    project_path: &Path,
+    keep_asset_ids: &[String],
+) -> Result<u32, PersistenceError> {
+    let conn = open_existing_project(project_path)?;
+    let tx = conn.unchecked_transaction()?;
+
+    let deleted = if keep_asset_ids.is_empty() {
+        // Sin ningún id a conservar: cualquier asset presente es huérfano.
+        tx.execute("DELETE FROM assets", [])?
+    } else {
+        let placeholders = keep_asset_ids.iter().map(|_| "?").collect::<Vec<_>>().join(", ");
+        let sql = format!("DELETE FROM assets WHERE id NOT IN ({placeholders})");
+        tx.execute(&sql, rusqlite::params_from_iter(keep_asset_ids.iter()))?
+    };
+
+    tx.commit()?;
+    Ok(deleted as u32)
 }
 
 #[cfg(test)]
@@ -305,5 +359,114 @@ mod tests {
 
         let result = import_asset(&project_path, &source_path);
         assert!(matches!(result, Err(PersistenceError::NotFound(_))));
+    }
+
+    #[test]
+    fn import_asset_at_or_under_size_limit_succeeds() {
+        let dir = TempDir::new().unwrap();
+        let project_path = setup_project(&dir, "under-limit");
+
+        let source_path = dir.path().join("pequena.png");
+        std::fs::write(&source_path, vec![0u8; 1024]).unwrap();
+
+        let result = import_asset(&project_path, &source_path);
+        assert!(result.is_ok(), "un archivo bajo el límite debe importarse");
+        assert_eq!(count_assets(&project_path), 1);
+    }
+
+    #[test]
+    fn import_asset_over_size_limit_returns_controlled_error_without_reading_it_fully() {
+        let dir = TempDir::new().unwrap();
+        let project_path = setup_project(&dir, "too-large");
+
+        // `set_len` crea un archivo "sparse" del tamaño exacto que hace
+        // falta para el test sin escribir contenido real de 15 MB: rápido y
+        // suficiente para probar la comprobación de tamaño.
+        let source_path = dir.path().join("enorme.png");
+        let file = std::fs::File::create(&source_path).unwrap();
+        file.set_len(MAX_ASSET_BYTES + 1).unwrap();
+
+        let result = import_asset(&project_path, &source_path);
+        match result {
+            Err(PersistenceError::AssetTooLarge { max_bytes, actual_bytes }) => {
+                assert_eq!(max_bytes, MAX_ASSET_BYTES);
+                assert_eq!(actual_bytes, MAX_ASSET_BYTES + 1);
+            }
+            other => panic!("se esperaba AssetTooLarge, se obtuvo: {other:?}"),
+        }
+        // No debe haberse insertado ninguna fila: se rechazó antes de leer.
+        assert_eq!(count_assets(&project_path), 0);
+    }
+
+    fn insert_raw_asset(project_path: &Path, id: &str) {
+        let conn = Connection::open(project_path).unwrap();
+        conn.execute(
+            "INSERT INTO assets (id, type, filename, mime_type, sha256, data) \
+             VALUES (?1, 'image', 'x.png', 'image/png', ?1, X'00')",
+            [id],
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn gc_orphan_assets_deletes_rows_not_in_keep_list() {
+        let dir = TempDir::new().unwrap();
+        let project_path = setup_project(&dir, "gc-orphans");
+        insert_raw_asset(&project_path, "keep-1");
+        insert_raw_asset(&project_path, "orphan-1");
+        insert_raw_asset(&project_path, "orphan-2");
+
+        let deleted = gc_orphan_assets(&project_path, &["keep-1".to_string()]).unwrap();
+
+        assert_eq!(deleted, 2);
+        assert_eq!(count_assets(&project_path), 1);
+        let conn = Connection::open(&project_path).unwrap();
+        let remaining: String = conn
+            .query_row("SELECT id FROM assets", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(remaining, "keep-1");
+    }
+
+    #[test]
+    fn gc_orphan_assets_with_empty_keep_list_deletes_everything() {
+        let dir = TempDir::new().unwrap();
+        let project_path = setup_project(&dir, "gc-empty-keep-list");
+        insert_raw_asset(&project_path, "orphan-1");
+        insert_raw_asset(&project_path, "orphan-2");
+
+        let deleted = gc_orphan_assets(&project_path, &[]).unwrap();
+
+        assert_eq!(deleted, 2);
+        assert_eq!(count_assets(&project_path), 0);
+    }
+
+    #[test]
+    fn gc_orphan_assets_when_all_survive_deletes_nothing() {
+        let dir = TempDir::new().unwrap();
+        let project_path = setup_project(&dir, "gc-all-survive");
+        insert_raw_asset(&project_path, "keep-1");
+        insert_raw_asset(&project_path, "keep-2");
+
+        let deleted = gc_orphan_assets(
+            &project_path,
+            &["keep-1".to_string(), "keep-2".to_string()],
+        )
+        .unwrap();
+
+        assert_eq!(deleted, 0);
+        assert_eq!(count_assets(&project_path), 2);
+    }
+
+    #[test]
+    fn gc_orphan_assets_on_project_with_no_assets_does_not_fail() {
+        let dir = TempDir::new().unwrap();
+        let project_path = setup_project(&dir, "gc-no-assets");
+
+        let deleted = gc_orphan_assets(&project_path, &[]).unwrap();
+        assert_eq!(deleted, 0);
+
+        let deleted_with_keep =
+            gc_orphan_assets(&project_path, &["nonexistent".to_string()]).unwrap();
+        assert_eq!(deleted_with_keep, 0);
     }
 }

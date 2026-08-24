@@ -38,4 +38,15 @@ export interface AssetData {
 export interface AssetRepository {
   importAsset(projectPath: string, sourceFilePath: string): Promise<AssetMeta>
   getAsset(projectPath: string, assetId: string): Promise<AssetData>
+  /**
+   * Elimina de la tabla `assets` del `.brunch` en `projectPath` las filas
+   * cuyo `id` no esté en `keepAssetIds` — assets que ya ningún nodo/respuesta
+   * del documento referencia (nodo borrado, imagen/audio quitado o
+   * reemplazado). Devuelve cuántas filas se eliminaron.
+   *
+   * `keepAssetIds` lo calcula quien llama (normalmente
+   * `collectReferencedAssetIds` de `src/export/exportAssets.ts`) recorriendo
+   * el documento; esta operación no lo hace por su cuenta.
+   */
+  gcOrphanAssets(projectPath: string, keepAssetIds: string[]): Promise<number>
 }

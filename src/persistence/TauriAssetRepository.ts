@@ -44,4 +44,13 @@ export class TauriAssetRepository implements AssetRepository {
       wrapInvokeError(error)
     }
   }
+
+  async gcOrphanAssets(projectPath: string, keepAssetIds: string[]): Promise<number> {
+    try {
+      const result = await invoke('gc_orphan_assets', { projectPath, keepAssetIds })
+      return z.number().int().nonnegative().parse(result)
+    } catch (error) {
+      wrapInvokeError(error)
+    }
+  }
 }
