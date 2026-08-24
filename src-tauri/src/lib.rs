@@ -22,6 +22,7 @@ pub fn run() {
       commands::import_asset,
       commands::get_asset,
       commands::export_html_bundle,
+      commands::export_scorm_package,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

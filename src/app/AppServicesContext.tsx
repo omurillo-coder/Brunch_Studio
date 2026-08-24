@@ -5,6 +5,7 @@ import {
   TauriAssetRepository,
   TauriHtmlBundleWriter,
   TauriProjectRepository,
+  TauriScormPackageWriter,
 } from '../persistence'
 import type { AppServices } from './AppServices'
 
@@ -13,6 +14,9 @@ const BRUNCH_FILE_FILTERS = [{ name: 'Proyecto Brunch Studio', extensions: ['bru
 
 /** Filtro del diálogo de guardado de la exportación a HTML autónomo. */
 const HTML_FILE_FILTERS = [{ name: 'Página web', extensions: ['html'] }]
+
+/** Filtro del diálogo de guardado de la exportación a paquete SCORM. */
+const SCORM_FILE_FILTERS = [{ name: 'Paquete SCORM', extensions: ['zip'] }]
 
 /** Extensiones de imagen/audio reconocidas al importar un asset. */
 const ASSET_FILE_FILTERS: Record<'image' | 'audio', { name: string; extensions: string[] }> = {
@@ -67,6 +71,12 @@ async function pickExportHtmlPathWithNativeDialog(suggestedName?: string): Promi
   return path ?? null
 }
 
+async function pickExportScormPathWithNativeDialog(suggestedName?: string): Promise<string | null> {
+  const defaultPath = suggestedName ? `${sanitizeFileName(suggestedName)}.zip` : undefined
+  const path = await save({ filters: SCORM_FILE_FILTERS, defaultPath })
+  return path ?? null
+}
+
 /**
  * Servicios "reales" por defecto: repositorio respaldado por los comandos
  * Tauri y diálogos nativos del sistema operativo.
@@ -81,8 +91,10 @@ export const defaultAppServices: AppServices = {
   pickOpenProjectPath: pickOpenProjectPathWithNativeDialog,
   pickImportAssetPath: pickImportAssetPathWithNativeDialog,
   pickExportHtmlPath: pickExportHtmlPathWithNativeDialog,
+  pickExportScormPath: pickExportScormPathWithNativeDialog,
   assetRepository: new TauriAssetRepository(),
   htmlBundleWriter: new TauriHtmlBundleWriter(),
+  scormPackageWriter: new TauriScormPackageWriter(),
 }
 
 const AppServicesContext = createContext<AppServices>(defaultAppServices)

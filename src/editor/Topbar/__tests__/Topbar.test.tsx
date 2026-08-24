@@ -4,7 +4,11 @@ import type { ReactElement } from 'react'
 import { Topbar } from '../Topbar'
 import { AppServicesProvider } from '../../../app/AppServicesContext'
 import type { AppServices } from '../../../app/AppServices'
-import { MemoryAssetRepository, MemoryHtmlBundleWriter } from '../../../persistence'
+import {
+  MemoryAssetRepository,
+  MemoryHtmlBundleWriter,
+  MemoryScormPackageWriter,
+} from '../../../persistence'
 import { useProjectStore } from '../../../store'
 import { resetProjectStore } from '../../../store/testHelpers'
 
@@ -182,5 +186,94 @@ describe('Topbar — Exportar HTML', () => {
       )
     })
     expect(htmlBundleWriter.writtenPaths()).toEqual([])
+  })
+})
+
+describe('Topbar — Exportar SCORM', () => {
+  it('pide la ruta, genera el HTML y el manifiesto, y empaqueta el .zip', async () => {
+    const scormPackageWriter = new MemoryScormPackageWriter()
+    const pickExportScormPath = vi.fn(async () => '/tmp/experiencia.zip')
+    renderTopbar({
+      pickExportScormPath,
+      scormPackageWriter,
+      assetRepository: new MemoryAssetRepository(),
+    })
+
+    fireEvent.click(screen.getByText('Exportar SCORM'))
+
+    await waitFor(() => {
+      expect(screen.getByText('Paquete SCORM exportado.')).toBeInTheDocument()
+    })
+
+    // El nombre del proyecto se propone como nombre de archivo.
+    expect(pickExportScormPath).toHaveBeenCalledWith('Untitled')
+    expect(scormPackageWriter.writtenPaths()).toEqual(['/tmp/experiencia.zip'])
+    const written = scormPackageWriter.read('/tmp/experiencia.zip')
+    expect(written?.html).toContain('<!doctype html>')
+    expect(written?.manifest).toContain('<manifest')
+    expect(written?.manifest).toContain('index.html')
+  })
+
+  it('si el usuario cancela el diálogo, no escribe nada ni muestra error', async () => {
+    const scormPackageWriter = new MemoryScormPackageWriter()
+    renderTopbar({
+      pickExportScormPath: async () => null,
+      scormPackageWriter,
+      assetRepository: new MemoryAssetRepository(),
+    })
+
+    fireEvent.click(screen.getByText('Exportar SCORM'))
+
+    await waitFor(() => {
+      expect(screen.getByText('Exportar SCORM')).not.toBeDisabled()
+    })
+    expect(scormPackageWriter.writtenPaths()).toEqual([])
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('muestra un mensaje honesto y sin jerga si la escritura falla', async () => {
+    const scormPackageWriter = new MemoryScormPackageWriter()
+    scormPackageWriter.failNextWrite()
+    renderTopbar({
+      pickExportScormPath: async () => '/tmp/experiencia.zip',
+      scormPackageWriter,
+      assetRepository: new MemoryAssetRepository(),
+    })
+
+    fireEvent.click(screen.getByText('Exportar SCORM'))
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        'No se ha podido exportar el paquete SCORM. Prueba con otra carpeta u otro nombre de archivo.',
+      )
+    })
+    expect(scormPackageWriter.writtenPaths()).toEqual([])
+  })
+
+  it('un asset que falla no rompe la exportación (mensaje honesto, pero éxito)', async () => {
+    const scormPackageWriter = new MemoryScormPackageWriter()
+    // El proyecto de partida referencia un `imageAssetId` que el
+    // repositorio de assets NO tiene: `resolveExportAssets` lo cuenta como
+    // fallido (ver `exportAssets.test.ts`) en vez de abortar toda la
+    // exportación.
+    act(() => {
+      const startNodeId = useProjectStore.getState().project.graph.startNodeId
+      useProjectStore.getState().updateNode(startNodeId, { imageAssetId: 'asset-inexistente' })
+    })
+    renderTopbar({
+      pickExportScormPath: async () => '/tmp/experiencia.zip',
+      scormPackageWriter,
+      assetRepository: new MemoryAssetRepository(),
+    })
+
+    fireEvent.click(screen.getByText('Exportar SCORM'))
+
+    await waitFor(() => {
+      expect(
+        screen.getByText('Paquete SCORM exportado, pero una imagen o audio no se ha podido incluir.'),
+      ).toBeInTheDocument()
+    })
+    expect(scormPackageWriter.writtenPaths()).toEqual(['/tmp/experiencia.zip'])
+    expect(scormPackageWriter.read('/tmp/experiencia.zip')?.html).not.toContain('data:image')
   })
 })

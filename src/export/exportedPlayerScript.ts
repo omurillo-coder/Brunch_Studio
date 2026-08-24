@@ -24,6 +24,41 @@
  * el propio HTML, que este script lee de `#brunch-bundle`. Así no hay ningún
  * riesgo de romper el script al escapar contenido del usuario, ni de que un
  * `${` accidental en un texto se interprete como código.
+ *
+ * ---------------------------------------------------------------------------
+ * SCORM 1.2 (Milestone 3, fase 2)
+ * ---------------------------------------------------------------------------
+ *
+ * Este MISMO script sirve tanto para la exportación HTML suelta (fase 1)
+ * como para el paquete SCORM (fase 2): en vez de mantener dos runtimes que
+ * puedan divergir, la comunicación con la API SCORM 1.2 vive aquí, protegida
+ * de arriba a abajo para que sea un no-op silencioso cuando no hay ningún
+ * LMS alrededor (el caso normal de un `index.html` abierto suelto).
+ *
+ * `findAPI` es el patrón estándar y muy documentado de SCORM 1.2 (a veces
+ * llamado `ISO_FindAPI`): la API la expone la ventana del LMS, no la del
+ * contenido, así que hay que subir por `window.parent` hasta encontrar una
+ * propiedad `API`, con un límite de saltos para no colgarse si algo forma un
+ * bucle; si tras agotar los saltos no ha aparecido, se prueba una vez con
+ * `window.opener` (caso del contenido abierto en una ventana/pestaña nueva
+ * por el LMS en vez de en un `<iframe>`).
+ *
+ * Ciclo de vida:
+ *  - Al cargar el script: se busca la API; si aparece, `LMSInitialize("")`.
+ *  - Al llegar a un Final: `LMSSetValue("cmi.core.lesson_status", "completed")`
+ *    y, solo si `state.totalPoints !== null`, también
+ *    `LMSSetValue("cmi.core.score.raw", String(state.totalPoints))` — sin
+ *    normalizar a 0-100 (el modelo de Brunch Studio no tiene concepto de
+ *    "puntuación máxima posible": se informa el total tal cual, decisión de
+ *    diseño documentada aquí y en el informe de la fase). Después
+ *    `LMSCommit("")`.
+ *  - Al cerrar/salir (`beforeunload`): si se llegó a inicializar,
+ *    `LMSFinish("")`.
+ *
+ * Cada llamada a la API va en su propio `try/catch`: si la API está pero
+ * alguna llamada falla o lanza (LMS mal implementado, sesión ya cerrada…),
+ * el error se ignora y la reproducción del contenido para quien lo esté
+ * usando sigue intacta.
  */
 
 /**
@@ -53,6 +88,96 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
   var assetUris = bundle.assetUris || {};
   var letters = bundle.responseLetters || [];
   var texts = bundle.texts || {};
+
+  // -------------------------------------------------------------------------
+  // SCORM 1.2 (no-op silencioso fuera de un LMS; ver cabecera del archivo)
+  // -------------------------------------------------------------------------
+
+  var MAX_FIND_API_HOPS = 7;
+
+  /** Busca window.API subiendo por window.parent hasta MAX_FIND_API_HOPS
+   *  saltos. Patrón estándar de SCORM 1.2 ("ISO_FindAPI"). */
+  function findAPIInWindow(win) {
+    var attempts = 0;
+    while (!win.API && win.parent && win.parent !== win && attempts < MAX_FIND_API_HOPS) {
+      attempts += 1;
+      win = win.parent;
+    }
+    return win.API || null;
+  }
+
+  /** Igual que findAPIInWindow, pero probando también window.opener
+   *  (contenido abierto en una ventana/pestaña nueva por el LMS). Todo el
+   *  acceso a window.parent/window.opener va protegido: en un iframe con
+   *  origen distinto puede lanzar SecurityError en vez de devolver
+   *  undefined. */
+  function findAPI() {
+    try {
+      var api = findAPIInWindow(window);
+      if (api) {
+        return api;
+      }
+      if (window.opener && window.opener !== window) {
+        return findAPIInWindow(window.opener);
+      }
+    } catch (error) {
+      return null;
+    }
+    return null;
+  }
+
+  var scormAPI = findAPI();
+  var scormInitialized = false;
+
+  /** Llama a fn sobre la API SCORM protegida en su propio try/catch: un
+   *  LMS que falle o lance nunca debe romper la reproducción. */
+  function callScormSafely(fn) {
+    if (!scormAPI) {
+      return;
+    }
+    try {
+      fn(scormAPI);
+    } catch (error) {
+      // Silencioso a propósito: ver cabecera del archivo.
+    }
+  }
+
+  function scormInitialize() {
+    if (!scormAPI) {
+      return;
+    }
+    callScormSafely(function (api) {
+      api.LMSInitialize('');
+      scormInitialized = true;
+    });
+  }
+
+  /** Se llama al alcanzar un Final: informa el estado "completed" y, si hay
+   *  puntuación, la puntuación tal cual (sin normalizar a 0-100). */
+  function scormReportCompletion(totalPoints) {
+    if (!scormAPI) {
+      return;
+    }
+    callScormSafely(function (api) {
+      api.LMSSetValue('cmi.core.lesson_status', 'completed');
+      if (totalPoints !== null) {
+        api.LMSSetValue('cmi.core.score.raw', String(totalPoints));
+      }
+      api.LMSCommit('');
+    });
+  }
+
+  function scormFinish() {
+    if (!scormAPI || !scormInitialized) {
+      return;
+    }
+    callScormSafely(function (api) {
+      api.LMSFinish('');
+    });
+  }
+
+  scormInitialize();
+  window.addEventListener('beforeunload', scormFinish);
 
   // -------------------------------------------------------------------------
   // Runtime (traducción literal de src/player/runtime.ts)
@@ -287,6 +412,7 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
     }
 
     if (view.kind === 'final') {
+      scormReportCompletion(state.totalPoints);
       var heading = el('h1', 'title');
       heading.textContent = texts.finalTitle;
       card.appendChild(heading);

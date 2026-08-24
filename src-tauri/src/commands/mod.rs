@@ -67,3 +67,21 @@ pub fn get_asset(project_path: String, asset_id: String) -> Result<AssetDataDto,
 pub fn export_html_bundle(path: String, html: String) -> Result<(), PersistenceError> {
     persistence::write_html_bundle(Path::new(&path), &html)
 }
+
+/// Escribe en `path` el paquete SCORM 1.2 (`.zip`) generado a partir de los
+/// dos textos ya construidos en TypeScript: el mismo `index.html` autónomo
+/// de `export_html_bundle` (`src/export/htmlBundle.ts`) y el
+/// `imsmanifest.xml` (`src/export/scormManifest.ts`).
+///
+/// `html` y `manifest` son texto opaco para Rust: este comando no los
+/// interpreta ni los valida, solo los mete en el `.zip`. La ruta la elige el
+/// usuario con el diálogo nativo de guardar (`pickExportScormPath` en
+/// `AppServices`).
+#[tauri::command]
+pub fn export_scorm_package(
+    path: String,
+    html: String,
+    manifest: String,
+) -> Result<(), PersistenceError> {
+    persistence::write_scorm_package(Path::new(&path), &html, &manifest)
+}

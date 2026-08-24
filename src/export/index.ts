@@ -4,3 +4,6 @@ export type { ExportAsset, ExportAssetMap, ResolveExportAssetsResult } from './e
 export { useHtmlExport } from './useHtmlExport'
 export type { HtmlExportState, HtmlExportStatus } from './useHtmlExport'
 export { BUNDLE_ELEMENT_ID, ROOT_ELEMENT_ID } from './exportedPlayerScript'
+export { buildScormManifest } from './scormManifest'
+export { useScormExport } from './useScormExport'
+export type { ScormExportState, ScormExportStatus } from './useScormExport'

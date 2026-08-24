@@ -1,4 +1,9 @@
-import type { AssetRepository, HtmlBundleWriter, ProjectRepository } from '../persistence'
+import type {
+  AssetRepository,
+  HtmlBundleWriter,
+  ProjectRepository,
+  ScormPackageWriter,
+} from '../persistence'
 
 /**
  * Dependencias externas de la aplicación que dependen del entorno de
@@ -38,8 +43,17 @@ export interface AppServices {
    * `pickSaveProjectPath`.
    */
   pickExportHtmlPath: (suggestedName?: string) => Promise<string | null>
+  /**
+   * Abre el diálogo nativo de "Guardar como…" para elegir dónde escribir el
+   * paquete SCORM 1.2 (`.zip`) de la exportación; `null` si el usuario
+   * cancela. `suggestedName` preselecciona el nombre de archivo propuesto,
+   * con extensión `.zip`. Mismo patrón que `pickExportHtmlPath`.
+   */
+  pickExportScormPath: (suggestedName?: string) => Promise<string | null>
   /** Importa/lee assets binarios (imagen/audio) de un `.brunch`. */
   assetRepository: AssetRepository
   /** Escribe en disco el HTML autónomo generado por `src/export`. */
   htmlBundleWriter: HtmlBundleWriter
+  /** Escribe en disco el paquete SCORM (`.zip`) generado por `src/export`. */
+  scormPackageWriter: ScormPackageWriter
 }

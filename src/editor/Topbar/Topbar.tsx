@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { useCanRedo, useCanUndo, useProject, useProjectStore } from '../../store'
 import type { SaveStatus } from '../../store'
-import { useHtmlExport } from '../../export'
+import { useHtmlExport, useScormExport } from '../../export'
 import styles from './Topbar.module.css'
 
 /**
@@ -43,13 +43,14 @@ export interface TopbarProps {
 
 /**
  * Barra superior del editor: nombre del proyecto, estado de guardado,
- * deshacer/rehacer (con atajo de teclado), "Exportar HTML" y el botón
- * "Probar".
+ * deshacer/rehacer (con atajo de teclado), "Exportar HTML", "Exportar
+ * SCORM" y el botón "Probar".
  *
- * "Exportar HTML" vive aquí (y no en el panel izquierdo ni en el Inspector)
- * porque es una acción de proyecto, no de nodo: al lado del nombre del
- * proyecto, del estado de guardado y de "Probar" — las otras tres cosas de
- * la interfaz que hablan del documento entero y no de la selección actual.
+ * "Exportar HTML"/"Exportar SCORM" viven aquí (y no en el panel izquierdo ni
+ * en el Inspector) porque son acciones de proyecto, no de nodo: al lado del
+ * nombre del proyecto, del estado de guardado y de "Probar" — las otras
+ * cosas de la interfaz que hablan del documento entero y no de la selección
+ * actual.
  */
 export function Topbar({ filePath }: TopbarProps) {
   const project = useProject()
@@ -60,6 +61,7 @@ export function Topbar({ filePath }: TopbarProps) {
   const redo = useProjectStore((state) => state.redo)
   const setPreviewMode = useProjectStore((state) => state.setPreviewMode)
   const htmlExport = useHtmlExport(filePath)
+  const scormExport = useScormExport(filePath)
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -134,6 +136,26 @@ export function Topbar({ filePath }: TopbarProps) {
           disabled={htmlExport.status === 'exporting'}
         >
           {htmlExport.status === 'exporting' ? 'Exportando…' : 'Exportar HTML'}
+        </button>
+        {/* Mismo criterio de mensaje honesto y sin jerga que "Exportar
+            HTML" de arriba. */}
+        {scormExport.message && (
+          <span
+            role={scormExport.status === 'error' ? 'alert' : 'status'}
+            className={
+              scormExport.status === 'error' ? styles.exportError : styles.exportStatus
+            }
+          >
+            {scormExport.message}
+          </span>
+        )}
+        <button
+          type="button"
+          className={styles.exportButton}
+          onClick={scormExport.exportScorm}
+          disabled={scormExport.status === 'exporting'}
+        >
+          {scormExport.status === 'exporting' ? 'Exportando…' : 'Exportar SCORM'}
         </button>
         <button type="button" className={styles.playButton} onClick={() => setPreviewMode(true)}>
           ▶ Probar
