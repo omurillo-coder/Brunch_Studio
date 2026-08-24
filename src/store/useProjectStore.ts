@@ -16,6 +16,7 @@ import {
 } from '../domain'
 import type {
   CreateNodeExtra,
+  NodeMove,
   NodeType,
   UpdateNodePatch,
   UpdateResponsePatch,
@@ -116,6 +117,19 @@ import type {
  *     de dominio, y que deshace/rehace el movimiento de todos los nodos a
  *     la vez, no solo el del nodo "principal" bajo el puntero.
  *
+ * Auto-layout del lienzo (`applyLayout`), botón "Ordenar automáticamente":
+ * `Canvas` calcula el layout con la función pura `computeAutoLayout`
+ * (`src/editor/Canvas/layout/autoLayout.ts`, basada en `@dagrejs/dagre`) a
+ * partir del `project` actual y pasa el resultado tal cual a esta acción,
+ * que solo delega en `moveNodes` de dominio (mismo patrón que
+ * `endNodeDrag`: una única llamada, una única entrada de historial
+ * deshacible con un solo `Ctrl/Cmd+Z`). A diferencia del arrastre, no hay
+ * fase "en caliente" (`beginNodeDrag`/`updateNodeDragPosition`): es una
+ * acción directa, sin snapshot intermedio, porque no hay ningún gesto de
+ * puntero que seguir en pantalla. Si `moves` llega vacío (proyecto sin
+ * nodos, caso que no debería darse en la práctica) no hace nada, para no
+ * generar una entrada de historial vacía.
+ *
  * Foco de lienzo (`ui.focusRequestNodeId`), fase 5:
  * `LeftPanel` no debe conocer `@xyflow/react` ni la instancia de React Flow,
  * así que la comunicación "centra la vista en este nodo" pasa por este
@@ -184,6 +198,11 @@ export interface ProjectStoreActions {
   beginNodeDrag: (nodeIds: string[]) => void
   updateNodeDragPosition: (positions: { nodeId: string; position: NodePosition }[]) => void
   endNodeDrag: () => void
+
+  // -- Auto-layout del lienzo: aplica un layout calculado externamente
+  // -- (`computeAutoLayout`) en una única entrada de historial. Sin fase de
+  // -- arrastre en caliente, ver comentario de diseño más arriba.
+  applyLayout: (moves: NodeMove[]) => void
 
   // -- Historial --
   undo: () => void
@@ -423,6 +442,16 @@ export const useProjectStore = create<ProjectStoreState>()(
         state.history.future = []
         state.project = next
         state.drag = null
+      })
+    },
+
+    applyLayout: (moves) => {
+      if (moves.length === 0) return
+      const next = domainMoveNodes(get().project, moves)
+      set((state) => {
+        state.history.past.push(state.project as ProjectDocument)
+        state.history.future = []
+        state.project = next
       })
     },
 

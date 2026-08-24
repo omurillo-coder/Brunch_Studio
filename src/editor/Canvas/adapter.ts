@@ -108,9 +108,14 @@ function sortByLetter(responses: DecisionResponse[]): DecisionResponse[] {
  * como aproximación para centrar la vista sobre un nodo no medido
  * (`FALLBACK_NODE_WIDTH`/`FALLBACK_NODE_HEIGHT`), por coherencia entre
  * ambos usos.
+ *
+ * Exportadas (no solo un detalle interno de este fichero) para que
+ * `layout/autoLayout.ts` calcule el espaciado del auto-layout con el mismo
+ * tamaño de tarjeta que asume el resto del lienzo, en vez de duplicar estos
+ * valores como un segundo número mágico que pudiera desincronizarse.
  */
-const INITIAL_NODE_WIDTH = 180
-const INITIAL_NODE_HEIGHT = 60
+export const INITIAL_NODE_WIDTH = 180
+export const INITIAL_NODE_HEIGHT = 60
 
 export type CanvasFlowNode = XyNode<CanvasNodeData>
 export type CanvasFlowEdge = XyEdge<CanvasEdgeData>

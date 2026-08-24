@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef } from 'react'
 import {
   Background,
   BackgroundVariant,
+  ControlButton,
   Controls,
   ReactFlow,
 } from '@xyflow/react'
@@ -25,10 +26,38 @@ import type { NodeType } from '../../domain'
 import type { CanvasFlowEdge, CanvasFlowNode } from './adapter'
 import { resolveConnection, toFlowEdges, toFlowNodes } from './adapter'
 import { resolveEmptyPaneDrop } from './handles'
+import { computeAutoLayout } from './layout/autoLayout'
 import { nodeTypes } from './nodes/nodeTypes'
 import { edgeTypes } from './edges/edgeTypes'
 import { ConnectionMenu } from './ConnectionMenu'
 import styles from './Canvas.module.css'
+
+/** Etiqueta accesible del botón de auto-layout, reutilizada como `title`
+ *  (tooltip) y `aria-label` del control — ver `handleAutoLayout` más abajo. */
+const AUTO_LAYOUT_LABEL = 'Ordenar automáticamente'
+
+/**
+ * Icono del botón de auto-layout: un nodo origen a la izquierda con dos
+ * ramas hacia dos nodos destino a la derecha, evocando "reorganizar según
+ * las conexiones" sin depender de ningún set de iconos externo (mismo
+ * criterio que los iconos ya incluidos en `@xyflow/react`, ver
+ * `ControlButton`/`FitViewIcon` de la propia librería).
+ */
+function AutoLayoutIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+      <rect x="1" y="9" width="6" height="6" rx="1" fill="currentColor" />
+      <rect x="17" y="1" width="6" height="6" rx="1" fill="currentColor" />
+      <rect x="17" y="17" width="6" height="6" rx="1" fill="currentColor" />
+      <path
+        d="M7 12h3l4-7h3M10 12h4l3 7h3"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+      />
+    </svg>
+  )
+}
 
 /**
  * Extrae la posición de pantalla (viewport) de un evento de fin de gesto de
@@ -81,6 +110,7 @@ export function Canvas() {
   const openContextMenu = useProjectStore((state) => state.openContextMenu)
   const closeContextMenu = useProjectStore((state) => state.closeContextMenu)
   const createConnectedNodeFromMenu = useProjectStore((state) => state.createConnectedNodeFromMenu)
+  const applyLayout = useProjectStore((state) => state.applyLayout)
 
   const nodes = toFlowNodes(project, selectedNodeIds)
   const edges = toFlowEdges(project, selectedNodeIds)
@@ -259,6 +289,22 @@ export function Canvas() {
     [contextMenu, createConnectedNodeFromMenu, closeContextMenu],
   )
 
+  // -- Auto-layout del lienzo ("Ordenar automáticamente"): calcula el
+  // layout jerárquico a partir del `project` actual con la función pura
+  // `computeAutoLayout` (basada en `@dagrejs/dagre`) y lo aplica en una
+  // única operación de dominio (`store.applyLayout`, una sola entrada de
+  // historial deshacible con un solo `Ctrl/Cmd+Z`). Sin diálogo de
+  // confirmación: no es una operación destructiva y el undo ya cubre
+  // "me equivoqué", mismo criterio que el resto de acciones directas de
+  // esta app. Tras aplicarlo se centra la vista (`fitView`) para que se
+  // vea de inmediato el resultado completo, no solo la parte que ya estaba
+  // encuadrada.
+  const handleAutoLayout = useCallback(() => {
+    const moves = computeAutoLayout(project)
+    applyLayout(moves)
+    instanceRef.current?.fitView({ duration: 300 })
+  }, [project, applyLayout])
+
   // -- Viewport: fuera del historial (ver store). Solo se persiste al
   // terminar un gesto de pan/zoom, nunca en cada frame.
   const handleMoveEnd = useCallback(
@@ -317,7 +363,15 @@ export function Canvas() {
         maxZoom={2}
       >
         <Background variant={BackgroundVariant.Dots} gap={24} size={1.5} color="var(--bs-color-canvas-dot)" />
-        <Controls showInteractive={false} />
+        <Controls showInteractive={false}>
+          <ControlButton
+            onClick={handleAutoLayout}
+            title={AUTO_LAYOUT_LABEL}
+            aria-label={AUTO_LAYOUT_LABEL}
+          >
+            <AutoLayoutIcon />
+          </ControlButton>
+        </Controls>
       </ReactFlow>
       {contextMenu.open && contextMenu.position && (
         <ConnectionMenu

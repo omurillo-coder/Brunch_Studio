@@ -305,6 +305,63 @@ describe('drag de nodos', () => {
   })
 })
 
+describe('applyLayout (auto-layout del lienzo)', () => {
+  it('produce exactamente una entrada de historial, sin fase de arrastre en caliente', () => {
+    useProjectStore.getState().createNode('slide', { x: 100, y: 0 })
+    useProjectStore.getState().createNode('final', { x: 200, y: 0 })
+    const startId = startNodeId()
+    const slideId = nodeIdOf('slide')
+    const finalId = nodeIdOf('final')
+    const historyBefore = useProjectStore.getState().history.past.length
+
+    useProjectStore.getState().applyLayout([
+      { nodeId: startId, position: { x: 0, y: 0 } },
+      { nodeId: slideId, position: { x: 300, y: 0 } },
+      { nodeId: finalId, position: { x: 600, y: 0 } },
+    ])
+
+    expect(useProjectStore.getState().history.past.length).toBe(historyBefore + 1)
+    const nodes = useProjectStore.getState().project.graph.nodes
+    expect(nodes.find((n) => n.id === startId)?.position).toEqual({ x: 0, y: 0 })
+    expect(nodes.find((n) => n.id === slideId)?.position).toEqual({ x: 300, y: 0 })
+    expect(nodes.find((n) => n.id === finalId)?.position).toEqual({ x: 600, y: 0 })
+  })
+
+  it('undo() devuelve todas las posiciones exactamente a como estaban antes, en un solo paso', () => {
+    useProjectStore.getState().createNode('slide', { x: 100, y: 0 })
+    useProjectStore.getState().createNode('final', { x: 200, y: 0 })
+    const startId = startNodeId()
+    const slideId = nodeIdOf('slide')
+    const finalId = nodeIdOf('final')
+
+    const before = useProjectStore.getState().project.graph.nodes.map((n) => ({
+      id: n.id,
+      position: { ...n.position },
+    }))
+
+    useProjectStore.getState().applyLayout([
+      { nodeId: startId, position: { x: 10, y: 20 } },
+      { nodeId: slideId, position: { x: 310, y: 20 } },
+      { nodeId: finalId, position: { x: 610, y: 20 } },
+    ])
+
+    useProjectStore.getState().undo()
+
+    const after = useProjectStore.getState().project.graph.nodes
+    for (const previous of before) {
+      expect(after.find((n) => n.id === previous.id)?.position).toEqual(previous.position)
+    }
+  })
+
+  it('con un array de movimientos vacío no genera ninguna entrada de historial', () => {
+    const historyBefore = useProjectStore.getState().history.past.length
+
+    useProjectStore.getState().applyLayout([])
+
+    expect(useProjectStore.getState().history.past.length).toBe(historyBefore)
+  })
+})
+
 describe('deleteNode: higiene de selección y guarda de la diapositiva de inicio', () => {
   it('borrar el nodo seleccionado lo quita de selection.selectedNodeIds', () => {
     useProjectStore.getState().createNode('final', { x: 0, y: 0 })

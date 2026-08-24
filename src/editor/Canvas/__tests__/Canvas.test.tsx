@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { Canvas } from '../Canvas'
 import { useProjectStore } from '../../../store'
@@ -72,5 +72,51 @@ describe('Canvas (montaje real de @xyflow/react)', () => {
     render(<Canvas />)
 
     expect(await screen.findByText('Sin texto')).toBeInTheDocument()
+  })
+})
+
+/**
+ * Botón de auto-layout ("Ordenar automáticamente"): smoke test sobre el
+ * montaje real de `@xyflow/react` (igual que el resto de este fichero, ver
+ * comentario superior). Comprueba que el control existe con la etiqueta
+ * accesible esperada y que pulsarlo reordena los nodos en una única
+ * entrada de historial deshacible — no vuelve a probar `computeAutoLayout`
+ * en sí (ya cubierto en `layout/__tests__/autoLayout.test.ts`) ni
+ * `applyLayout` (cubierto en `useProjectStore.test.ts`).
+ */
+describe('Canvas — botón de auto-layout ("Ordenar automáticamente")', () => {
+  it('existe con la etiqueta accesible esperada', async () => {
+    render(<Canvas />)
+    expect(await screen.findByRole('button', { name: 'Ordenar automáticamente' })).toBeInTheDocument()
+  })
+
+  it('al pulsarlo reordena los nodos en una única entrada de historial deshacible', async () => {
+    useProjectStore.getState().createNode('slide', { x: 999, y: 999 }, { title: 'Otra' })
+    useProjectStore.getState().createNode('final', { x: 999, y: 999 }, { title: 'Fin' })
+    const historyBefore = useProjectStore.getState().history.past.length
+    const positionsBefore = useProjectStore
+      .getState()
+      .project.graph.nodes.map((n) => ({ id: n.id, position: { ...n.position } }))
+
+    render(<Canvas />)
+
+    const button = await screen.findByRole('button', { name: 'Ordenar automáticamente' })
+    fireEvent.click(button)
+
+    expect(useProjectStore.getState().history.past.length).toBe(historyBefore + 1)
+    const positionsAfter = useProjectStore.getState().project.graph.nodes
+    // Al menos una posición cambió (los tres nodos partían de solapados en
+    // (999,999) salvo el de inicio en (0,0); el layout los separa).
+    const changed = positionsBefore.some((before) => {
+      const after = positionsAfter.find((n) => n.id === before.id)
+      return after?.position.x !== before.position.x || after?.position.y !== before.position.y
+    })
+    expect(changed).toBe(true)
+
+    useProjectStore.getState().undo()
+    const restored = useProjectStore.getState().project.graph.nodes
+    for (const before of positionsBefore) {
+      expect(restored.find((n) => n.id === before.id)?.position).toEqual(before.position)
+    }
   })
 })
