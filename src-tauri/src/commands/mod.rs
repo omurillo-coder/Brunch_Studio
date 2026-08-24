@@ -85,3 +85,12 @@ pub fn export_scorm_package(
 ) -> Result<(), PersistenceError> {
     persistence::write_scorm_package(Path::new(&path), &html, &manifest)
 }
+
+/// Lee el contenido de texto de un archivo arbitrario elegido por el usuario
+/// (p.ej. un `.twee` a importar). Rust no interpreta el contenido: solo lee
+/// bytes UTF-8 tal cual; la ruta la elige el usuario con el diálogo nativo de
+/// abrir (`pickImportTweePath` en `AppServices`).
+#[tauri::command]
+pub fn read_text_file(path: String) -> Result<String, PersistenceError> {
+    persistence::read_text_file(Path::new(&path))
+}

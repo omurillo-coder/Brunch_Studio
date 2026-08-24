@@ -3,6 +3,7 @@ import type {
   HtmlBundleWriter,
   ProjectRepository,
   ScormPackageWriter,
+  TextFileReader,
 } from '../persistence'
 
 /**
@@ -56,4 +57,12 @@ export interface AppServices {
   htmlBundleWriter: HtmlBundleWriter
   /** Escribe en disco el paquete SCORM (`.zip`) generado por `src/export`. */
   scormPackageWriter: ScormPackageWriter
+  /**
+   * Abre el diálogo nativo de "Abrir…" filtrado a archivos `.twee`/`.tw`,
+   * para importar un archivo Twee como proyecto nuevo (ver `src/import/twee`).
+   * `null` si el usuario cancela.
+   */
+  pickImportTweePath: () => Promise<string | null>
+  /** Lee el texto de un archivo arbitrario del disco (p.ej. el `.twee` elegido con `pickImportTweePath`). */
+  textFileReader: TextFileReader
 }

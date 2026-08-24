@@ -115,6 +115,24 @@ button:disabled {
   margin-top: var(--bs-space-2);
 }
 
+.tweeWarnings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--bs-space-2);
+}
+
+.warningsList {
+  margin: 0;
+  padding-left: var(--bs-space-5);
+  max-height: 220px;
+  overflow-y: auto;
+  font-size: var(--bs-font-size-sm);
+  color: var(--bs-color-text);
+  display: flex;
+  flex-direction: column;
+  gap: var(--bs-space-2);
+}
+
 .error {
   margin: var(--bs-space-4) 0 0;
   padding: var(--bs-space-2) var(--bs-space-3);

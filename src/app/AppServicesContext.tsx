@@ -6,6 +6,7 @@ import {
   TauriHtmlBundleWriter,
   TauriProjectRepository,
   TauriScormPackageWriter,
+  TauriTextFileReader,
 } from '../persistence'
 import type { AppServices } from './AppServices'
 
@@ -17,6 +18,9 @@ const HTML_FILE_FILTERS = [{ name: 'Página web', extensions: ['html'] }]
 
 /** Filtro del diálogo de guardado de la exportación a paquete SCORM. */
 const SCORM_FILE_FILTERS = [{ name: 'Paquete SCORM', extensions: ['zip'] }]
+
+/** Filtro del diálogo de abrir para importar un archivo Twee (ver `src/import/twee`). */
+const TWEE_FILE_FILTERS = [{ name: 'Archivo Twee', extensions: ['twee', 'tw'] }]
 
 /** Extensiones de imagen/audio reconocidas al importar un asset. */
 const ASSET_FILE_FILTERS: Record<'image' | 'audio', { name: string; extensions: string[] }> = {
@@ -77,6 +81,11 @@ async function pickExportScormPathWithNativeDialog(suggestedName?: string): Prom
   return path ?? null
 }
 
+async function pickImportTweePathWithNativeDialog(): Promise<string | null> {
+  const selected = await open({ filters: TWEE_FILE_FILTERS, multiple: false, directory: false })
+  return typeof selected === 'string' ? selected : null
+}
+
 /**
  * Servicios "reales" por defecto: repositorio respaldado por los comandos
  * Tauri y diálogos nativos del sistema operativo.
@@ -95,6 +104,8 @@ export const defaultAppServices: AppServices = {
   assetRepository: new TauriAssetRepository(),
   htmlBundleWriter: new TauriHtmlBundleWriter(),
   scormPackageWriter: new TauriScormPackageWriter(),
+  pickImportTweePath: pickImportTweePathWithNativeDialog,
+  textFileReader: new TauriTextFileReader(),
 }
 
 const AppServicesContext = createContext<AppServices>(defaultAppServices)

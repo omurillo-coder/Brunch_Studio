@@ -17,12 +17,14 @@ mod export;
 mod repository;
 mod schema;
 mod scorm;
+mod text_file;
 
 pub use assets::{get_asset, import_asset, AssetDataDto, AssetMetaDto};
 pub use error::PersistenceError;
 pub use export::write_html_bundle;
 pub use repository::{create_project_file, open_project_file, save_project_file};
 pub use scorm::write_scorm_package;
+pub use text_file::read_text_file;
 // Reexportado para uso futuro (p.ej. comandos que informen de la versión de
 // esquema soportada); no se consume todavía desde `commands`.
 #[allow(unused_imports)]

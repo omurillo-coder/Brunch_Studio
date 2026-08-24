@@ -23,6 +23,7 @@ pub fn run() {
       commands::get_asset,
       commands::export_html_bundle,
       commands::export_scorm_package,
+      commands::read_text_file,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
