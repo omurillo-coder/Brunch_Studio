@@ -40,6 +40,17 @@
   --bs-color-danger-hover: #a32230;
   --bs-color-danger-bg: rgba(194, 43, 58, 0.08);
   --bs-color-danger-contrast: #ffffff;
+  /* Aviso (ámbar), deliberadamente distinto del rojo de `--bs-color-danger`:
+     el rojo se reserva para acciones destructivas ("eliminar",
+     "Reintentar"); el ámbar es para "falta algo por conectar" — un aviso,
+     no un peligro. Usado en el lienzo para el borde de una diapositiva sin
+     ninguna salida conectada (ver `NodeCard.module.css`).
+     Contraste: `--bs-color-warning-contrast` sobre `--bs-color-warning`
+     da 6.19:1 (AA para texto normal). */
+  --bs-color-warning: #f59e0b;
+  --bs-color-warning-hover: #fbbf24;
+  --bs-color-warning-bg: rgba(245, 158, 11, 0.14);
+  --bs-color-warning-contrast: #402c02;
   --bs-color-focus-ring: rgba(0, 174, 199, 0.45);
   --bs-color-canvas-dot: #d7d7de;
 
@@ -87,6 +98,13 @@
     --bs-color-danger-hover: #f78b99;
     --bs-color-danger-bg: rgba(240, 103, 122, 0.12);
     --bs-color-danger-contrast: #2a0b10;
+    /* Mismo ámbar de aviso, aclarado para fondo oscuro (igual criterio que
+       `--bs-color-accent` arriba): `--bs-color-warning-contrast` sobre
+       `--bs-color-warning` da 10.09:1. */
+    --bs-color-warning: #fbbf24;
+    --bs-color-warning-hover: #fcd34d;
+    --bs-color-warning-bg: rgba(251, 191, 36, 0.18);
+    --bs-color-warning-contrast: #2a1a02;
     --bs-color-focus-ring: rgba(44, 199, 222, 0.5);
     --bs-color-canvas-dot: #34343a;
     --bs-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);

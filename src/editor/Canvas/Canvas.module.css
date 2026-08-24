@@ -12,3 +12,31 @@
   width: 100%;
   height: 100%;
 }
+
+/*
+ * Punto 2: las aristas deben verse siempre por delante de los nodos.
+ *
+ * Por defecto `@xyflow/react` pinta la capa `.react-flow__edges` (el SVG de
+ * todas las aristas) ANTES que `.react-flow__nodes` (las tarjetas) dentro
+ * del mismo `.react-flow__viewport` — como ninguna de las dos declara
+ * `z-index` de fábrica y `.react-flow__nodes` no está posicionada (no
+ * forma su propio contexto de apilamiento), el orden de pintado lo decide
+ * el orden en el DOM, que deja las tarjetas por encima de las aristas. Es
+ * un comportamiento conocido y documentado del layout interno de la
+ * librería (no un bug de esta app), con la solución igualmente conocida:
+ * dar a `.react-flow__edges` (que SÍ está posicionada, `position: absolute`
+ * en su propia hoja de estilos) un `z-index` explícito y positivo, lo que
+ * la mueve a apilarse por encima de las tarjetas sin tocar nada del propio
+ * `<ReactFlow>` ni de los nodos.
+ *
+ * Esto no rompe la interacción del lienzo: el SVG de aristas mantiene
+ * `pointer-events: none` de fábrica y solo el trazo de cada arista
+ * (`.react-flow__edge`, `pointer-events: visibleStroke`) captura el
+ * puntero, así que arrastrar nodos, seleccionarlos con un clic o arrastrar
+ * desde un handle sigue funcionando igual — el único caso "capturado" por
+ * la arista es un clic exactamente sobre el trazo de la línea, que ya
+ * ocurría igual antes de este cambio.
+ */
+.canvas :global(.react-flow__edges) {
+  z-index: 1000;
+}

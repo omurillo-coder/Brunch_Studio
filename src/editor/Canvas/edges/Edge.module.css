@@ -1,0 +1,22 @@
+/**
+ * Estilo de la arista personalizada del lienzo (`edgeTypes.tsx`). El trazo
+ * base es discreto (color de borde neutro); el resaltado de selección
+ * (punto 4) usa el color de acento con trazo más grueso, y el resto de
+ * aristas se atenúa cuando hay una selección activa para dar contraste.
+ */
+
+.path {
+  stroke: var(--bs-color-border-strong);
+  stroke-width: 1.5px;
+  fill: none;
+  transition: stroke 0.15s ease, stroke-width 0.15s ease, opacity 0.15s ease;
+}
+
+.highlighted {
+  stroke: var(--bs-color-accent);
+  stroke-width: 2.5px;
+}
+
+.dimmed {
+  opacity: 0.35;
+}

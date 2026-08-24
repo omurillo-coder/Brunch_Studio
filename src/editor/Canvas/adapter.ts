@@ -1,7 +1,9 @@
 import type { Edge as XyEdge, Node as XyNode } from '@xyflow/react'
 import { deriveEdges, RESPONSE_LETTERS } from '../../domain'
-import type { DecisionResponse, Node as DomainNode, NodeType, ProjectDocument } from '../../domain'
+import type { DecisionResponse, Edge as DomainEdge, Node as DomainNode, NodeType, ProjectDocument } from '../../domain'
 import { IN_HANDLE_ID, OUT_HANDLE_ID, parseResponseHandleId, responseHandleId } from './handles'
+import { BRUNCH_EDGE_TYPE } from './edges/edgeTypes'
+import { computeEdgeLanes } from './edges/edgeGeometry'
 
 /**
  * Adaptador dominio → `@xyflow/react`.
@@ -26,8 +28,19 @@ export interface CanvasResponseSummary {
   text: string
 }
 
-/** Datos que lleva cada nodo de `@xyflow/react` en su campo `data`. */
-export interface CanvasNodeData extends Record<string, unknown> {
+/**
+ * Subconjunto de `CanvasNodeData` que depende solo del propio nodo de
+ * dominio (`toNodeData`), sin la información transversal del lienzo entero
+ * (aristas, selección) que añade `toFlowNodes` después.
+ *
+ * Deliberadamente una interfaz propia y no `Omit<CanvasNodeData, ...>`:
+ * como `CanvasNodeData` extiende `Record<string, unknown>` (lo exige el
+ * tipo `data` de `@xyflow/react`), `keyof CanvasNodeData` colapsa a
+ * `string` y `Omit`/`Pick` sobre ella pierden la forma de las propiedades
+ * concretas — de ahí que se declaren los campos compartidos una sola vez
+ * aquí y `CanvasNodeData` los herede.
+ */
+interface BaseCanvasNodeData {
   nodeType: NodeType
   number: number
   title: string
@@ -36,6 +49,32 @@ export interface CanvasNodeData extends Record<string, unknown> {
   responses?: CanvasResponseSummary[]
   /** `true` solo para la diapositiva de inicio (`graph.startNodeId`). */
   isStart: boolean
+}
+
+/** Datos que lleva cada nodo de `@xyflow/react` en su campo `data`. */
+export interface CanvasNodeData extends BaseCanvasNodeData, Record<string, unknown> {
+  /**
+   * `true` cuando esta diapositiva no tiene NINGUNA arista saliente en
+   * `deriveEdges(project)` — ni el destino de "Continuar", ni el de
+   * ninguna respuesta. Siempre `false` para nodos `final` (no tienen
+   * salida por diseño; que no la tengan no es un aviso, es lo esperado).
+   * Alimenta el borde de aviso del nodo (ver `NodeCard.module.css`).
+   */
+  hasNoOutgoing: boolean
+  /**
+   * `true` cuando hay una selección activa (`selectedNodeIds` no vacío) y
+   * este nodo es el destino de al menos una arista saliente de un nodo
+   * seleccionado. Alimenta el anillo de resaltado (ver punto 4 del lienzo).
+   * Nunca es `true` simultáneamente con `selected` (un nodo seleccionado ya
+   * se resalta con su propio estilo de selección).
+   */
+  isHighlighted: boolean
+  /**
+   * `true` cuando hay una selección activa y este nodo no es ni el
+   * seleccionado ni uno de sus destinos resaltados — se atenúa (opacidad
+   * reducida) para dar contraste sin ocultarlo.
+   */
+  isDimmed: boolean
 }
 
 /** Ordena las respuestas por letra (A→D), igual que el Inspector y el
@@ -74,10 +113,10 @@ const INITIAL_NODE_WIDTH = 180
 const INITIAL_NODE_HEIGHT = 60
 
 export type CanvasFlowNode = XyNode<CanvasNodeData>
-export type CanvasFlowEdge = XyEdge
+export type CanvasFlowEdge = XyEdge<CanvasEdgeData>
 
-function toNodeData(node: DomainNode, startNodeId: string): CanvasNodeData {
-  const base: CanvasNodeData = {
+function toNodeData(node: DomainNode, startNodeId: string): BaseCanvasNodeData {
+  const base: BaseCanvasNodeData = {
     nodeType: node.type,
     number: node.number,
     title: node.title,
@@ -109,15 +148,77 @@ export function toFlowNodes(
   selectedNodeIds: readonly string[],
 ): CanvasFlowNode[] {
   const selected = new Set(selectedNodeIds)
-  return project.graph.nodes.map((node) => ({
-    id: node.id,
-    type: node.type,
-    position: node.position,
-    selected: selected.has(node.id),
-    data: toNodeData(node, project.graph.startNodeId),
-    initialWidth: INITIAL_NODE_WIDTH,
-    initialHeight: INITIAL_NODE_HEIGHT,
-  }))
+  const edges = deriveEdges(project)
+  const nodesWithOutgoing = nodeIdsWithOutgoingEdge(edges)
+  const highlightedTargets = highlightedTargetNodeIds(edges, selected)
+  const hasSelection = selected.size > 0
+
+  return project.graph.nodes.map((node) => {
+    const isSelected = selected.has(node.id)
+    const isHighlighted = !isSelected && highlightedTargets.has(node.id)
+    return {
+      id: node.id,
+      type: node.type,
+      position: node.position,
+      selected: isSelected,
+      data: {
+        ...toNodeData(node, project.graph.startNodeId),
+        hasNoOutgoing: node.type === 'slide' && !nodesWithOutgoing.has(node.id),
+        isHighlighted,
+        isDimmed: hasSelection && !isSelected && !isHighlighted,
+      },
+      initialWidth: INITIAL_NODE_WIDTH,
+      initialHeight: INITIAL_NODE_HEIGHT,
+    }
+  })
+}
+
+/**
+ * Ids de todos los nodos que son origen de al menos una arista derivada
+ * (`deriveEdges`). Pura, sin dependencia de `@xyflow/react`: es la base del
+ * cálculo de "sin salida" (punto 1) — un nodo `slide` que NO está en este
+ * conjunto no tiene ninguna salida conectada, sea porque es "de continuar"
+ * sin `targetNodeId`, porque es "de decisión" sin ninguna respuesta, o
+ * porque tiene respuestas pero ninguna con destino.
+ */
+function nodeIdsWithOutgoingEdge(edges: readonly DomainEdge[]): Set<string> {
+  return new Set(edges.map((edge) => edge.source))
+}
+
+/**
+ * Ids de los nodos destino de una arista saliente de algún nodo
+ * seleccionado (punto 4: resaltar las conexiones de la diapositiva
+ * seleccionada). Vacío si no hay selección.
+ */
+function highlightedTargetNodeIds(
+  edges: readonly DomainEdge[],
+  selectedNodeIds: ReadonlySet<string>,
+): Set<string> {
+  const targets = new Set<string>()
+  for (const edge of edges) {
+    if (selectedNodeIds.has(edge.source)) {
+      targets.add(edge.target)
+    }
+  }
+  return targets
+}
+
+/** Datos que lleva cada arista de `@xyflow/react` en su campo `data`,
+ *  consumidos por el tipo de arista personalizado (`edges/edgeTypes.tsx`). */
+export interface CanvasEdgeData extends Record<string, unknown> {
+  /** Posición (0-based) de esta arista dentro de su grupo de aristas
+   *  "paralelas" (ver `computeEdgeLanes` en `edges/edgeGeometry.ts`). `0` =
+   *  sin desplazamiento. */
+  laneIndex: number
+  /** Tamaño total del grupo al que pertenece esta arista. `1` si va sola
+   *  (nada con lo que solaparse). */
+  laneSize: number
+  /** `true` cuando el nodo origen de esta arista está seleccionado (punto
+   *  4): se pinta con el color de acento y trazo más grueso. */
+  isHighlighted: boolean
+  /** `true` cuando hay una selección activa y esta arista no sale de un
+   *  nodo seleccionado: se atenúa para dar contraste. */
+  isDimmed: boolean
 }
 
 /**
@@ -130,15 +231,41 @@ export function toFlowNodes(
  * Las aristas no llevan `label`: antes mostraban la letra de la respuesta
  * (A/B/C/D) sobre la línea, y las letras ya no se muestran nunca al
  * usuario.
+ *
+ * Todas las aristas usan el tipo personalizado `BRUNCH_EDGE_TYPE` (punto 2
+ * y 3: siempre por delante de los nodos y con desplazamiento lateral
+ * determinista cuando hay paralelismo/convergencia) y llevan en `data` el
+ * carril calculado por `computeEdgeLanes` y el resaltado derivado de
+ * `selectedNodeIds` (punto 4).
  */
-export function toFlowEdges(project: ProjectDocument): CanvasFlowEdge[] {
-  return deriveEdges(project).map((edge) => ({
-    id: edge.id,
-    source: edge.source,
-    target: edge.target,
-    sourceHandle: edge.sourceHandle ? responseHandleId(edge.sourceHandle) : OUT_HANDLE_ID,
-    targetHandle: IN_HANDLE_ID,
-  }))
+export function toFlowEdges(
+  project: ProjectDocument,
+  selectedNodeIds: readonly string[] = [],
+): CanvasFlowEdge[] {
+  const edges = deriveEdges(project)
+  const lanes = computeEdgeLanes(edges)
+  const selected = new Set(selectedNodeIds)
+  const hasSelection = selected.size > 0
+
+  return edges.map((edge) => {
+    const lane = lanes.get(edge.id) ?? { laneIndex: 0, laneSize: 1 }
+    const isHighlighted = selected.has(edge.source)
+    const data: CanvasEdgeData = {
+      laneIndex: lane.laneIndex,
+      laneSize: lane.laneSize,
+      isHighlighted,
+      isDimmed: hasSelection && !isHighlighted,
+    }
+    return {
+      id: edge.id,
+      source: edge.source,
+      target: edge.target,
+      sourceHandle: edge.sourceHandle ? responseHandleId(edge.sourceHandle) : OUT_HANDLE_ID,
+      targetHandle: IN_HANDLE_ID,
+      type: BRUNCH_EDGE_TYPE,
+      data,
+    }
+  })
 }
 
 /** Argumentos resueltos para `store.connect` a partir de un `onConnect`. */

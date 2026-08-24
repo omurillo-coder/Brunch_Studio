@@ -26,6 +26,7 @@ import type { CanvasFlowEdge, CanvasFlowNode } from './adapter'
 import { resolveConnection, toFlowEdges, toFlowNodes } from './adapter'
 import { resolveEmptyPaneDrop } from './handles'
 import { nodeTypes } from './nodes/nodeTypes'
+import { edgeTypes } from './edges/edgeTypes'
 import { ConnectionMenu } from './ConnectionMenu'
 import styles from './Canvas.module.css'
 
@@ -82,7 +83,7 @@ export function Canvas() {
   const createConnectedNodeFromMenu = useProjectStore((state) => state.createConnectedNodeFromMenu)
 
   const nodes = toFlowNodes(project, selectedNodeIds)
-  const edges = toFlowEdges(project)
+  const edges = toFlowEdges(project, selectedNodeIds)
 
   // Instancia de React Flow, capturada vía `onInit` (evita necesitar un
   // `<ReactFlowProvider>` + `useReactFlow()` solo para esto). Vive en un
@@ -299,6 +300,7 @@ export function Canvas() {
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
         defaultViewport={project.editor.viewport}
         onInit={handleInit}
         onNodeDragStart={handleNodeDragStart}

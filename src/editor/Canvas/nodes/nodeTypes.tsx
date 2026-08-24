@@ -40,6 +40,36 @@ function displayTitle(title: string): string {
   return title.trim() || 'Sin título'
 }
 
+/** Texto accesible de la insignia de aviso "sin salida" (punto 1),
+ *  reutilizado como `title` del `<span>` — ver `NodeCard.module.css`. */
+const NO_OUTGOING_WARNING_TEXT = 'Esta diapositiva no tiene ninguna salida conectada'
+
+/** Combina las clases modificadoras de `.card` según el resaltado calculado
+ *  en `adapter.ts` (puntos 1 y 4). Centralizado aquí para que
+ *  `SlideNodeView`/`FinalNodeView` no dupliquen la combinación. */
+function cardClassName(data: CanvasNodeData): string {
+  return [
+    styles.card,
+    data.hasNoOutgoing && styles.cardWarning,
+    data.isHighlighted && styles.cardHighlighted,
+    data.isDimmed && styles.cardDimmed,
+  ]
+    .filter(Boolean)
+    .join(' ')
+}
+
+/** Insignia de aviso "sin salida" (punto 1): solo se pinta para
+ *  `data.hasNoOutgoing`, que `adapter.ts` ya garantiza `false` para nodos
+ *  `final`. */
+function NoOutgoingBadge({ data }: { data: CanvasNodeData }) {
+  if (!data.hasNoOutgoing) return null
+  return (
+    <span className={styles.warningBadge} title={NO_OUTGOING_WARNING_TEXT} aria-label={NO_OUTGOING_WARNING_TEXT}>
+      !
+    </span>
+  )
+}
+
 function Header({ data }: { data: CanvasNodeData }) {
   return (
     <div className={styles.header}>
@@ -102,7 +132,8 @@ export function SlideNodeView({ data }: NodeProps<CanvasFlowNode>) {
   const responses = (data.responses ?? []).slice(0, MAX_SUMMARIZED_RESPONSES)
 
   return (
-    <div className={styles.card}>
+    <div className={cardClassName(data)}>
+      <NoOutgoingBadge data={data} />
       <InHandle />
       <Header data={data} />
       {responses.length > 0 ? (
@@ -122,7 +153,7 @@ export function SlideNodeView({ data }: NodeProps<CanvasFlowNode>) {
 
 export function FinalNodeView({ data }: NodeProps<CanvasFlowNode>) {
   return (
-    <div className={styles.card}>
+    <div className={cardClassName(data)}>
       <InHandle />
       <Header data={data} />
     </div>
