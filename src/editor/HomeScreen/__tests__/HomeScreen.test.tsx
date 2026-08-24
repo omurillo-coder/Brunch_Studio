@@ -41,6 +41,30 @@ describe('HomeScreen', () => {
     const stored = await repository.openProject('/tmp/nuevo.brunch')
     expect(stored.metadata.name).toBe('Mi escenario')
     expect(useProjectStore.getState().project.metadata.name).toBe('Mi escenario')
+    // Plantilla por defecto ("En blanco"): un único nodo, igual que antes.
+    expect(stored.graph.nodes).toHaveLength(1)
+  })
+
+  it('elegir la plantilla "Decisión simple" crea un documento con esa estructura', async () => {
+    const repository = new MemoryProjectRepository()
+    const pickSaveProjectPath = vi.fn().mockResolvedValue('/tmp/decision.brunch')
+    const onProjectOpened = renderHomeScreen({ repository, pickSaveProjectPath })
+
+    fireEvent.click(screen.getByText('Nuevo proyecto'))
+    fireEvent.change(screen.getByLabelText('Nombre del proyecto'), {
+      target: { value: 'Con plantilla' },
+    })
+    fireEvent.click(screen.getByLabelText('Decisión simple'))
+    fireEvent.click(screen.getByText('Crear'))
+
+    await vi.waitFor(() => expect(onProjectOpened).toHaveBeenCalledWith('/tmp/decision.brunch'))
+
+    const stored = await repository.openProject('/tmp/decision.brunch')
+    expect(stored.metadata.name).toBe('Con plantilla')
+    // Inicio + decisión + 2 finales.
+    expect(stored.graph.nodes).toHaveLength(4)
+    const finals = stored.graph.nodes.filter((node) => node.type === 'final')
+    expect(finals).toHaveLength(2)
   })
 
   it('cancelar el diálogo de guardar no crea nada ni notifica', async () => {

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
-import { createProject } from '../../domain'
+import { DEFAULT_PROJECT_TEMPLATE_ID, PROJECT_TEMPLATES, getProjectTemplate } from '../../domain'
 import type { ProjectDocument } from '../../domain'
 import { convertTweeToProject } from '../../import/twee'
 import { useAppServices } from '../../app/AppServicesContext'
@@ -46,6 +46,7 @@ export function HomeScreen({ onProjectOpened }: HomeScreenProps) {
 
   const [mode, setMode] = useState<Mode>('idle')
   const [projectName, setProjectName] = useState('')
+  const [templateId, setTemplateId] = useState(DEFAULT_PROJECT_TEMPLATE_ID)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [pendingTwee, setPendingTwee] = useState<PendingTweeImport | null>(null)
@@ -62,7 +63,7 @@ export function HomeScreen({ onProjectOpened }: HomeScreenProps) {
         setBusy(false)
         return
       }
-      const document = createProject(name)
+      const document = getProjectTemplate(templateId).build(name)
       await repository.createProject(path, document)
       loadProject(document)
       onProjectOpened(path)
@@ -210,6 +211,29 @@ export function HomeScreen({ onProjectOpened }: HomeScreenProps) {
               placeholder="Mi escenario"
               disabled={busy}
             />
+            <fieldset className={styles.templateFieldset}>
+              <legend className={styles.label}>Plantilla</legend>
+              {PROJECT_TEMPLATES.map((template) => {
+                const inputId = `project-template-${template.id}`
+                return (
+                  <div key={template.id} className={styles.templateOption}>
+                    <label className={styles.templateOptionHeader} htmlFor={inputId}>
+                      <input
+                        id={inputId}
+                        type="radio"
+                        name="project-template"
+                        value={template.id}
+                        checked={templateId === template.id}
+                        onChange={() => setTemplateId(template.id)}
+                        disabled={busy}
+                      />
+                      <span className={styles.templateOptionName}>{template.name}</span>
+                    </label>
+                    <p className={styles.templateOptionDescription}>{template.description}</p>
+                  </div>
+                )
+              })}
+            </fieldset>
             <div className={styles.namingActions}>
               <button
                 type="button"

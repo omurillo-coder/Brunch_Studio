@@ -108,6 +108,48 @@ button:disabled {
   border-color: var(--bs-color-accent);
 }
 
+.templateFieldset {
+  display: flex;
+  flex-direction: column;
+  gap: var(--bs-space-2);
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.templateOption {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--bs-space-2);
+  border: 1px solid var(--bs-color-border);
+  border-radius: var(--bs-radius-sm);
+}
+
+.templateOption:has(input:checked) {
+  border-color: var(--bs-color-accent);
+}
+
+.templateOptionHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--bs-space-2);
+  cursor: pointer;
+}
+
+.templateOptionName {
+  font-size: var(--bs-font-size-sm);
+  color: var(--bs-color-text);
+  font-weight: 600;
+}
+
+.templateOptionDescription {
+  margin: 0;
+  padding-left: calc(var(--bs-space-2) + 16px);
+  font-size: var(--bs-font-size-xs);
+  color: var(--bs-color-text-muted);
+}
+
 .namingActions {
   display: flex;
   justify-content: flex-end;
