@@ -33,6 +33,14 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "fileAssociations": [
+      {
+        "ext": ["brunch"],
+        "name": "Proyecto Brunch Studio",
+        "description": "Proyecto Brunch Studio",
+        "role": "Editor"
+      }
+    ],
     "android": {
       "debugApplicationIdSuffix": ".debug"
     }

@@ -8,17 +8,18 @@ import { usePreviewMode } from '../../store'
 import { loadLeftPanelVisible, saveLeftPanelVisible } from '../uiPreferences'
 import { useAutosave } from './useAutosave'
 import { useWindowCloseGuard } from './useWindowCloseGuard'
+import { useNativeMenuActions } from './useNativeMenuActions'
 import styles from './EditorScreen.module.css'
 
 export interface EditorScreenProps {
   /** Ruta absoluta del `.brunch` abierto; destino del autoguardado (fase 9). */
   filePath: string
   /**
-   * Vuelve a `HomeScreen` en la misma ventana ("Cerrar proyecto" de
-   * `Topbar`). `EditorScreen` no lo invoca directamente: primero fuerza
-   * cualquier guardado pendiente (ver `handleCloseProject`) y solo entonces
-   * llama a este callback, que en `App.tsx` (`AppShell`) pone
-   * `openProjectPath` de vuelta a `null`.
+   * Vuelve a `HomeScreen` en la misma ventana ("Cerrar proyecto" del menú
+   * nativo "Archivo", ver `useNativeMenuActions`). `EditorScreen` no lo
+   * invoca directamente: primero fuerza cualquier guardado pendiente (ver
+   * `handleCloseProject`) y solo entonces llama a este callback, que en
+   * `App.tsx` (`AppShell`) pone `openProjectPath` de vuelta a `null`.
    */
   onCloseProject: () => void
 }
@@ -80,6 +81,13 @@ export function EditorScreen({ filePath, onCloseProject }: EditorScreenProps) {
     onCloseProject()
   }
 
+  // Menú nativo "Archivo" (tarea 2): "Nueva ventana"/"Cerrar proyecto" viven
+  // ahora ahí en vez de como botones en `Topbar` — ver el comentario de
+  // diseño en `useNativeMenuActions.ts`. Mismo criterio de colocación que
+  // `useAutosave`/`useWindowCloseGuard`: antes del `if (previewMode)`, para
+  // que los listeners sigan activos mientras el usuario está en el Player.
+  useNativeMenuActions({ onCloseProject: () => void handleCloseProject() })
+
   if (previewMode) {
     return <PlayerScreen filePath={filePath} />
   }
@@ -88,7 +96,6 @@ export function EditorScreen({ filePath, onCloseProject }: EditorScreenProps) {
     <div className={styles.screen}>
       <Topbar
         filePath={filePath}
-        onCloseProject={() => void handleCloseProject()}
         leftPanelVisible={leftPanelVisible}
         onToggleLeftPanel={() => setLeftPanelVisible((visible) => !visible)}
       />

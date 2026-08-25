@@ -12,26 +12,6 @@ import {
 import { useProjectStore } from '../../../store'
 import { resetProjectStore } from '../../../store/testHelpers'
 
-/**
- * "Nueva ventana" usa `WebviewWindow` de `@tauri-apps/api/webviewWindow`
- * (ver `src/app/openNewProjectWindow.ts`). Se mockea el módulo entero: en
- * jsdom no hay ningún backend Tauri real detrás de `invoke`, así que sin
- * este mock el constructor real dispararía una llamada IPC que solo puede
- * rechazar (inofensivo para el test, pero no hay forma de aserto contra un
- * backend inexistente). El mock permite comprobar con qué argumentos se
- * pediría la ventana nueva sin depender de ningún runtime de Tauri.
- */
-const webviewWindowConstructor = vi.fn()
-vi.mock('@tauri-apps/api/webviewWindow', () => ({
-  WebviewWindow: class {
-    label: string
-    constructor(label: string, options: unknown) {
-      this.label = label
-      webviewWindowConstructor(label, options)
-    }
-  },
-}))
-
 const TEST_FILE_PATH = '/tmp/topbar-test.brunch'
 
 /**
@@ -40,28 +20,23 @@ const TEST_FILE_PATH = '/tmp/topbar-test.brunch'
  * para el diálogo de guardado y la escritura del archivo, así que se envuelve
  * siempre en `AppServicesProvider` con dobles en memoria — nunca el backend
  * Tauri real, inexistente en este entorno.
+ *
+ * "Nueva ventana"/"Cerrar proyecto" ya no viven aquí (tarea 2: se movieron
+ * al menú nativo "Archivo" — ver `useNativeMenuActions.test.tsx`), así que
+ * `Topbar` no necesita ningún mock de `@tauri-apps/api/webviewWindow` ni de
+ * `@tauri-apps/api/event`.
  */
-function renderTopbar(
-  services: Partial<AppServices> = {},
-  extra?: ReactElement,
-  onCloseProject: () => void = vi.fn(),
-) {
+function renderTopbar(services: Partial<AppServices> = {}, extra?: ReactElement) {
   return render(
     <AppServicesProvider services={services}>
       {extra}
-      <Topbar
-        filePath={TEST_FILE_PATH}
-        onCloseProject={onCloseProject}
-        leftPanelVisible
-        onToggleLeftPanel={vi.fn()}
-      />
+      <Topbar filePath={TEST_FILE_PATH} leftPanelVisible onToggleLeftPanel={vi.fn()} />
     </AppServicesProvider>,
   )
 }
 
 beforeEach(() => {
   resetProjectStore()
-  webviewWindowConstructor.mockClear()
 })
 
 describe('Topbar', () => {
@@ -159,22 +134,12 @@ describe('Topbar', () => {
     expect(useProjectStore.getState().ui.previewMode).toBe(true)
   })
 
-  it('"Cerrar proyecto" invoca el callback onCloseProject', () => {
-    const onCloseProject = vi.fn()
-    renderTopbar({}, undefined, onCloseProject)
-
-    expect(onCloseProject).not.toHaveBeenCalled()
-    fireEvent.click(screen.getByText('Cerrar proyecto'))
-    expect(onCloseProject).toHaveBeenCalledTimes(1)
-  })
-
   it('el botón de panel izquierdo (tarea 1) refleja leftPanelVisible y llama a onToggleLeftPanel', () => {
     const onToggleLeftPanel = vi.fn()
     render(
       <AppServicesProvider services={{}}>
         <Topbar
           filePath={TEST_FILE_PATH}
-          onCloseProject={vi.fn()}
           leftPanelVisible
           onToggleLeftPanel={onToggleLeftPanel}
         />
@@ -191,33 +156,12 @@ describe('Topbar', () => {
   it('el botón de panel izquierdo muestra "Mostrar" cuando está oculto', () => {
     render(
       <AppServicesProvider services={{}}>
-        <Topbar
-          filePath={TEST_FILE_PATH}
-          onCloseProject={vi.fn()}
-          leftPanelVisible={false}
-          onToggleLeftPanel={vi.fn()}
-        />
+        <Topbar filePath={TEST_FILE_PATH} leftPanelVisible={false} onToggleLeftPanel={vi.fn()} />
       </AppServicesProvider>,
     )
 
     const button = screen.getByLabelText('Mostrar panel izquierdo')
     expect(button).toHaveAttribute('aria-pressed', 'false')
-  })
-
-  it('"Nueva ventana" abre una WebviewWindow con label único y la misma URL raíz', () => {
-    renderTopbar()
-
-    fireEvent.click(screen.getByText('Nueva ventana'))
-
-    expect(webviewWindowConstructor).toHaveBeenCalledTimes(1)
-    const [label, options] = webviewWindowConstructor.mock.calls[0] as [string, { url?: string }]
-    expect(label).toMatch(/^project-/)
-    expect(options.url).toBe('/')
-
-    // Un segundo clic pide una ventana distinta (label único cada vez).
-    fireEvent.click(screen.getByText('Nueva ventana'))
-    const [secondLabel] = webviewWindowConstructor.mock.calls[1] as [string, unknown]
-    expect(secondLabel).not.toBe(label)
   })
 })
 

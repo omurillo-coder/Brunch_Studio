@@ -20,7 +20,33 @@ import { resetProjectStore } from '../../../store/testHelpers'
  * `MemoryProjectRepository` en vez del `TauriProjectRepository` real por
  * defecto, para que el autoguardado de fondo no intente invocar comandos
  * Tauri inexistentes en este entorno de test.
+ *
+ * "Cerrar proyecto" ya no es un botón (tarea 2: se movió al menú nativo
+ * "Archivo", ver `useNativeMenuActions`, montado dentro de `EditorScreen`).
+ * Se mockea `@tauri-apps/api/event` con un registro en memoria de
+ * `evento -> callbacks`, controlable con `emitMenuEvent(...)`, para simular
+ * "el usuario ha pulsado 'Cerrar proyecto' en el menú nativo" sin ningún
+ * backend Tauri real.
  */
+const menuEventListeners = new Map<string, Set<() => void>>()
+
+function emitMenuEvent(event: string) {
+  menuEventListeners.get(event)?.forEach((callback) => callback())
+}
+
+vi.mock('@tauri-apps/api/event', () => ({
+  listen: vi.fn((event: string, callback: () => void) => {
+    let callbacks = menuEventListeners.get(event)
+    if (!callbacks) {
+      callbacks = new Set()
+      menuEventListeners.set(event, callbacks)
+    }
+    callbacks.add(callback)
+    return Promise.resolve(() => {
+      callbacks?.delete(callback)
+    })
+  }),
+}))
 
 const TEST_FILE_PATH = '/tmp/editor-screen-test.brunch'
 
@@ -46,6 +72,7 @@ function createStubRepository(overrides: Partial<ProjectRepository> = {}): Proje
 
 beforeEach(() => {
   resetProjectStore()
+  menuEventListeners.clear()
 })
 
 describe('EditorScreen — conmutación shell/Player (previewMode)', () => {
@@ -149,7 +176,11 @@ describe('EditorScreen — "Cerrar proyecto"', () => {
     )
 
     await act(async () => {
-      fireEvent.click(screen.getByText('Cerrar proyecto'))
+      await vi.advanceTimersByTimeAsync(0)
+    })
+
+    await act(async () => {
+      emitMenuEvent('menu-close-project')
       await vi.advanceTimersByTimeAsync(0)
     })
 
@@ -166,6 +197,10 @@ describe('EditorScreen — "Cerrar proyecto"', () => {
       </AppServicesProvider>,
     )
 
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0)
+    })
+
     act(() => {
       useProjectStore.getState().createNode('final', { x: 0, y: 0 })
     })
@@ -176,7 +211,7 @@ describe('EditorScreen — "Cerrar proyecto"', () => {
     expect(repository.saveProject).not.toHaveBeenCalled()
 
     await act(async () => {
-      fireEvent.click(screen.getByText('Cerrar proyecto'))
+      emitMenuEvent('menu-close-project')
       await vi.advanceTimersByTimeAsync(0)
     })
 

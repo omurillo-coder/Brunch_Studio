@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { DEFAULT_PROJECT_TEMPLATE_ID, PROJECT_TEMPLATES, getProjectTemplate } from '../../domain'
 import type { ProjectDocument } from '../../domain'
@@ -11,6 +11,15 @@ import styles from './HomeScreen.module.css'
 export interface HomeScreenProps {
   /** Se llama con la ruta del archivo `.brunch` en cuanto queda listo (recién creado o recién abierto). */
   onProjectOpened: (path: string) => void
+  /**
+   * Error a mostrar nada más montar, con el mismo `role="alert"` que
+   * cualquier otro error de esta pantalla — lo usa `AppShell` (`src/App.tsx`)
+   * cuando falla la apertura de la ruta `.brunch` inicial (recibida del
+   * sistema operativo o de Rust, ver `getInitialOpenPath` en `AppServices`)
+   * antes de volver a mostrar esta pantalla. `null`/`undefined` (el caso
+   * normal) no muestra nada.
+   */
+  initialError?: string | null
 }
 
 type Mode = 'idle' | 'naming' | 'twee-warnings'
@@ -39,7 +48,7 @@ function fileStemFromPath(path: string): string {
  * modal (overlay, foco atrapado, botón de cierre) no aporta nada aquí; la
  * expansión inline con "Cancelar" cubre el mismo caso con menos piezas.
  */
-export function HomeScreen({ onProjectOpened }: HomeScreenProps) {
+export function HomeScreen({ onProjectOpened, initialError }: HomeScreenProps) {
   const { repository, pickSaveProjectPath, pickOpenProjectPath, pickImportTweePath, textFileReader } =
     useAppServices()
   const loadProject = useProjectStore((state) => state.loadProject)
@@ -50,6 +59,21 @@ export function HomeScreen({ onProjectOpened }: HomeScreenProps) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [pendingTwee, setPendingTwee] = useState<PendingTweeImport | null>(null)
+
+  // `initialError` llega, si llega, un instante después del primer render
+  // (viene de un intento de apertura asíncrono en `AppShell`, ver
+  // `App.tsx`): no hay ningún evento de UI de esta pantalla al que "colgar"
+  // ese error (ocurre antes de que el usuario toque nada aquí), así que un
+  // efecto que lo copie al estado local en cuanto cambie es la herramienta
+  // correcta pese al aviso de la regla — no un valor derivable en el
+  // render, porque a partir de ahí el error debe poder limpiarse/sustituirse
+  // con las acciones normales de esta pantalla (`setError(null)` en
+  // `handleOpen`, etc.) sin que `initialError` (que no vuelve a cambiar) lo
+  // resucite.
+  useEffect(() => {
+    // oxlint-disable-next-line react/set-state-in-effect
+    if (initialError) setError(initialError)
+  }, [initialError])
 
   async function handleCreate(event: FormEvent) {
     event.preventDefault()

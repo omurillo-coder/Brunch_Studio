@@ -1,6 +1,8 @@
 import { createContext, useContext } from 'react'
 import type { ReactNode } from 'react'
 import { open, save } from '@tauri-apps/plugin-dialog'
+import { invoke } from '@tauri-apps/api/core'
+import { getCurrentWindow } from '@tauri-apps/api/window'
 import {
   TauriAssetRepository,
   TauriHtmlBundleWriter,
@@ -87,6 +89,27 @@ async function pickImportTweePathWithNativeDialog(): Promise<string | null> {
 }
 
 /**
+ * Consulta al backend Rust (`take_pending_open_path`, ver
+ * `src-tauri/src/open_file.rs`) si ESTA ventana (identificada por
+ * `getCurrentWindow().label`) tiene una ruta `.brunch` pendiente de abrir al
+ * arrancar. Envuelto en `try/catch`, igual criterio que
+ * `useWindowCloseGuard`: sin backend Tauri real detrás (tests en jsdom,
+ * `npm run dev` fuera de un webview Tauri) `invoke`/`getCurrentWindow`
+ * simplemente rechazan o lanzan, y aquí se trata como "no hay ninguna ruta
+ * pendiente" en vez de tirar la app abajo.
+ */
+async function getInitialOpenPathFromTauri(): Promise<string | null> {
+  try {
+    const windowLabel = getCurrentWindow().label
+    const path = await invoke<string | null>('take_pending_open_path', { windowLabel })
+    return path ?? null
+  } catch (error) {
+    console.warn('[getInitialOpenPathFromTauri] No se pudo consultar la ruta inicial a abrir.', error)
+    return null
+  }
+}
+
+/**
  * Servicios "reales" por defecto: repositorio respaldado por los comandos
  * Tauri y diálogos nativos del sistema operativo.
  *
@@ -106,6 +129,7 @@ export const defaultAppServices: AppServices = {
   scormPackageWriter: new TauriScormPackageWriter(),
   pickImportTweePath: pickImportTweePathWithNativeDialog,
   textFileReader: new TauriTextFileReader(),
+  getInitialOpenPath: getInitialOpenPathFromTauri,
 }
 
 const AppServicesContext = createContext<AppServices>(defaultAppServices)

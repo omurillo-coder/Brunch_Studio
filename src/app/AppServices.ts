@@ -65,4 +65,15 @@ export interface AppServices {
   pickImportTweePath: () => Promise<string | null>
   /** Lee el texto de un archivo arbitrario del disco (p.ej. el `.twee` elegido con `pickImportTweePath`). */
   textFileReader: TextFileReader
+  /**
+   * Ruta `.brunch` que ESTA ventana debe abrir directamente al arrancar, en
+   * vez de mostrar `HomeScreen` — `null` si no hay ninguna. Cubre dos
+   * orígenes: el sistema operativo invocó el ejecutable con la ruta de un
+   * `.brunch` como argumento (Windows/Linux, asociación de tipo de archivo
+   * del instalador), o el usuario hizo doble clic en un `.brunch` en macOS y
+   * el backend Rust decidió que esta ventana concreta debía abrirlo (ver
+   * `src-tauri/src/open_file.rs`). Se consume una única vez: llamadas
+   * posteriores devuelven `null` aunque la primera haya encontrado algo.
+   */
+  getInitialOpenPath: () => Promise<string | null>
 }

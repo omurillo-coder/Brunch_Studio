@@ -1,12 +1,41 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../App'
 import { MemoryProjectRepository } from '../persistence'
 import { createProject } from '../domain'
 import { resetProjectStore } from '../store/testHelpers'
 
+/**
+ * "Cerrar proyecto" ya no es un botón (tarea 2: se movió al menú nativo
+ * "Archivo" — ver `useNativeMenuActions`, montado dentro de `EditorScreen`).
+ * Se mockea `@tauri-apps/api/event` con un registro en memoria de
+ * `evento -> callbacks`, controlable con `emitMenuEvent(...)`, para simular
+ * "el usuario ha pulsado 'Cerrar proyecto' en el menú nativo" sin ningún
+ * backend Tauri real.
+ */
+const menuEventListeners = new Map<string, Set<() => void>>()
+
+function emitMenuEvent(event: string) {
+  menuEventListeners.get(event)?.forEach((callback) => callback())
+}
+
+vi.mock('@tauri-apps/api/event', () => ({
+  listen: vi.fn((event: string, callback: () => void) => {
+    let callbacks = menuEventListeners.get(event)
+    if (!callbacks) {
+      callbacks = new Set()
+      menuEventListeners.set(event, callbacks)
+    }
+    callbacks.add(callback)
+    return Promise.resolve(() => {
+      callbacks?.delete(callback)
+    })
+  }),
+}))
+
 beforeEach(() => {
   resetProjectStore()
+  menuEventListeners.clear()
 })
 
 describe('App: navegación HomeScreen -> EditorScreen', () => {
@@ -70,6 +99,59 @@ describe('App: navegación HomeScreen -> EditorScreen', () => {
     expect(screen.queryByText('▶ Probar')).not.toBeInTheDocument()
   })
 
+  it('con una ruta inicial pendiente (getInitialOpenPath), salta directo a EditorScreen sin pasar por HomeScreen', async () => {
+    const repository = new MemoryProjectRepository()
+    const existing = createProject('Proyecto abierto desde el sistema')
+    await repository.createProject('/tmp/desde-finder.brunch', existing)
+
+    const pickSaveProjectPath = vi.fn().mockResolvedValue(null)
+    const pickOpenProjectPath = vi.fn().mockResolvedValue(null)
+    const getInitialOpenPath = vi.fn().mockResolvedValue('/tmp/desde-finder.brunch')
+
+    render(
+      <App services={{ repository, pickSaveProjectPath, pickOpenProjectPath, getInitialOpenPath }} />,
+    )
+
+    await screen.findByText('▶ Probar')
+    expect(screen.getAllByText('Proyecto abierto desde el sistema').length).toBeGreaterThan(0)
+    // Nunca llegó a pasar por HomeScreen.
+    expect(screen.queryByText('Nuevo proyecto')).not.toBeInTheDocument()
+  })
+
+  it('con una ruta inicial que no se puede abrir, se queda en HomeScreen mostrando el mismo error que "Abrir proyecto"', async () => {
+    const repository = new MemoryProjectRepository()
+    const pickSaveProjectPath = vi.fn().mockResolvedValue(null)
+    const pickOpenProjectPath = vi.fn().mockResolvedValue(null)
+    const getInitialOpenPath = vi.fn().mockResolvedValue('/tmp/no-existe.brunch')
+
+    render(
+      <App services={{ repository, pickSaveProjectPath, pickOpenProjectPath, getInitialOpenPath }} />,
+    )
+
+    await screen.findByRole('alert')
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'No se ha podido abrir ese archivo. Comprueba que es un proyecto de Brunch Studio válido.',
+    )
+    // Sigue en HomeScreen: no hay rastro del shell del editor.
+    expect(screen.getByText('Nuevo proyecto')).toBeInTheDocument()
+    expect(screen.queryByText('▶ Probar')).not.toBeInTheDocument()
+  })
+
+  it('sin ninguna ruta inicial pendiente, muestra HomeScreen con normalidad', async () => {
+    const repository = new MemoryProjectRepository()
+    const pickSaveProjectPath = vi.fn().mockResolvedValue(null)
+    const pickOpenProjectPath = vi.fn().mockResolvedValue(null)
+    const getInitialOpenPath = vi.fn().mockResolvedValue(null)
+
+    render(
+      <App services={{ repository, pickSaveProjectPath, pickOpenProjectPath, getInitialOpenPath }} />,
+    )
+
+    await vi.waitFor(() => expect(getInitialOpenPath).toHaveBeenCalled())
+    expect(screen.getByText('Nuevo proyecto')).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
   it('"Cerrar proyecto" desde el editor vuelve a mostrar HomeScreen en la misma ventana', async () => {
     const repository = new MemoryProjectRepository()
     const pickSaveProjectPath = vi.fn().mockResolvedValue('/tmp/proyecto-a-cerrar.brunch')
@@ -84,14 +166,19 @@ describe('App: navegación HomeScreen -> EditorScreen', () => {
     fireEvent.click(screen.getByText('Crear'))
 
     await screen.findByText('▶ Probar')
+    // El listener del evento del menú nativo se registra de forma asíncrona
+    // (`await listen(...)` dentro de `useNativeMenuActions`): se espera a
+    // que quede instalado antes de emitir el evento simulado.
+    await vi.waitFor(() => expect(menuEventListeners.get('menu-close-project')?.size).toBe(1))
 
-    fireEvent.click(screen.getByText('Cerrar proyecto'))
+    await act(async () => {
+      emitMenuEvent('menu-close-project')
+    })
 
     // Vuelve a HomeScreen sin cerrar la aplicación: los botones iniciales
     // reaparecen y no queda ningún rastro del shell del editor.
     await screen.findByText('Nuevo proyecto')
     expect(screen.getByText('Abrir proyecto')).toBeInTheDocument()
     expect(screen.queryByText('▶ Probar')).not.toBeInTheDocument()
-    expect(screen.queryByText('Cerrar proyecto')).not.toBeInTheDocument()
   })
 })
