@@ -107,6 +107,36 @@ describe('LeftPanel', () => {
 
     expect(useProjectStore.getState().ui.focusRequestNodeId).toBe(created.id)
   })
+
+  it('ilumina en la lista la diapositiva actualmente seleccionada (sistema de guiaje)', () => {
+    render(<LeftPanel />)
+    // A través del botón "+ Diapositiva" (no de la acción de dominio
+    // directamente): es `LeftPanel.handleCreate` quien selecciona el nodo
+    // recién creado, la acción de dominio por sí sola no selecciona nada.
+    fireEvent.click(screen.getByText('+ Diapositiva'))
+    const created = lastNode()
+
+    const createdItem = screen.getByText(created.number.toString()).closest('button')
+    expect(createdItem).not.toBeNull()
+    expect(createdItem).toHaveAttribute('aria-current', 'true')
+
+    // El resto de ítems de la lista no están marcados como actuales.
+    const start = useProjectStore.getState().project.graph.startNodeId
+    const startNode = useProjectStore.getState().project.graph.nodes.find((n) => n.id === start)
+    if (!startNode) throw new Error('No se encontró la diapositiva de inicio')
+    const startItem = screen.getByText(startNode.number.toString()).closest('button')
+    expect(startItem).not.toHaveAttribute('aria-current')
+
+    // Al seleccionar otra diapositiva, la iluminación se mueve con ella.
+    fireEvent.click(screen.getByText(startNode.number.toString()))
+    expect(screen.getByText(startNode.number.toString()).closest('button')).toHaveAttribute(
+      'aria-current',
+      'true',
+    )
+    expect(screen.getByText(created.number.toString()).closest('button')).not.toHaveAttribute(
+      'aria-current',
+    )
+  })
 })
 
 describe('LeftPanel — buscador del proyecto (fase 8)', () => {

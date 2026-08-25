@@ -88,6 +88,19 @@
   border-color: var(--bs-color-border);
 }
 
+/* Sistema de guiaje (fase 9): ilumina en la lista la diapositiva que se
+   está editando ahora mismo, mismo criterio de color que el resaltado del
+   lienzo (`NodeCard.module.css`, `.react-flow__node.selected .card`). */
+.nodeItemSelected,
+.nodeItemSelected:hover {
+  background: color-mix(in srgb, var(--bs-color-accent) 14%, var(--bs-color-surface));
+  border-color: var(--bs-color-accent);
+}
+
+.nodeItemSelected .nodeTitle {
+  font-weight: 600;
+}
+
 .nodeType {
   flex: 0 0 auto;
   font-size: var(--bs-font-size-xs);

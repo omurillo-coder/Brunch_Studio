@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { useProject, useProjectStore, useViewportCenter } from '../../store'
+import { useProject, useProjectStore, useSelectedNodeIds, useViewportCenter } from '../../store'
 import type { Node, NodePosition, NodeType } from '../../domain'
 import { NODE_TYPE_LABEL, START_NODE_LABEL } from '../Canvas/nodes/nodeTypes'
 import { extractPlainText, parseRichBody } from '../richText/richTextContent'
@@ -66,6 +66,10 @@ export function LeftPanel() {
   const selectNode = useProjectStore((state) => state.selectNode)
   const focusNode = useProjectStore((state) => state.focusNode)
   const viewportCenter = useViewportCenter()
+  // Sistema de guiaje: qué diapositiva está seleccionada ahora mismo, para
+  // iluminarla en la lista (mismo criterio que el lienzo, que ya resalta la
+  // tarjeta seleccionada con `.selected` de `@xyflow/react`).
+  const selectedNodeIds = useSelectedNodeIds()
 
   const [searchQuery, setSearchQuery] = useState('')
   const normalizedQuery = searchQuery.trim().toLowerCase()
@@ -131,7 +135,16 @@ export function LeftPanel() {
                 este componente conozca `@xyflow/react` — ver
                 `ui.focusRequestNodeId` en `src/store`. Reutilizado tal cual
                 sobre la lista ya filtrada por el buscador. */}
-            <button type="button" className={styles.nodeItem} onClick={() => focusNode(node.id)}>
+            <button
+              type="button"
+              className={
+                selectedNodeIds.includes(node.id)
+                  ? `${styles.nodeItem} ${styles.nodeItemSelected}`
+                  : styles.nodeItem
+              }
+              aria-current={selectedNodeIds.includes(node.id) ? 'true' : undefined}
+              onClick={() => focusNode(node.id)}
+            >
               <span className={styles.nodeType}>{NODE_TYPE_LABEL[node.type]}</span>
               {/* Marca discreta del punto de partida del recorrido. Mismo
                   criterio (y misma etiqueta) que en la tarjeta del lienzo:
