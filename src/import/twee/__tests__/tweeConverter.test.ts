@@ -234,6 +234,23 @@ describe('convertTweeToProject', () => {
       expect(JSON.stringify(doc)).not.toContain('<strong>')
     })
 
+    it('convierte <mark> en la marca de destacado real (fase 8), no en texto con etiquetas', () => {
+      const source = ':: Inicio\n<p>Hola <mark>mundo</mark> importante.</p>'
+      const { document } = convertTweeToProject(source, 'Historia')
+      const inicio = document.graph.nodes.find((n) => n.title === 'Inicio') as FinalNode
+      const doc = parseRichBody(inicio.body)
+      const textNodes = (doc.content?.[0]?.content ?? []) as Array<{
+        text?: string
+        marks?: Array<{ type: string }>
+      }>
+
+      const highlightNode = textNodes.find((node) =>
+        node.marks?.some((mark) => mark.type === 'highlight'),
+      )
+      expect(highlightNode?.text).toBe('mundo')
+      expect(JSON.stringify(doc)).not.toContain('<mark>')
+    })
+
     it('no confunde una macro SugarCube (doble ángulo) con HTML y sigue avisando de la lógica de Twine', () => {
       const source = ':: ConMacro\n<<set $vida = 10>> Sigue leyendo. [[Siguiente]]\n\n:: Siguiente\nFin.'
       const { document, warnings } = convertTweeToProject(source, 'Historia')

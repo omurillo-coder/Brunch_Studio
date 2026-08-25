@@ -58,7 +58,9 @@ export function collectReferencedAssetIds(project: ProjectDocument): string[] {
 
   for (const node of project.graph.nodes) {
     if (node.type !== 'slide') continue
-    push(node.imageAssetId)
+    for (const imageAssetId of node.imageAssetIds) {
+      push(imageAssetId)
+    }
     push(node.audioAssetId)
     for (const response of node.responses) {
       push(response.imageAssetId)

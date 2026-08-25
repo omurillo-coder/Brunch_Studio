@@ -1,6 +1,7 @@
 import type { Edge as XyEdge, Node as XyNode } from '@xyflow/react'
 import { deriveEdges, RESPONSE_LETTERS } from '../../domain'
 import type { DecisionResponse, Edge as DomainEdge, Node as DomainNode, NodeType, ProjectDocument } from '../../domain'
+import { extractPlainText, parseRichBody } from '../richText/richTextContent'
 import { IN_HANDLE_ID, OUT_HANDLE_ID, parseResponseHandleId, responseHandleId } from './handles'
 import { BRUNCH_EDGE_TYPE } from './edges/edgeTypes'
 import { computeEdgeLanes } from './edges/edgeGeometry'
@@ -49,6 +50,19 @@ interface BaseCanvasNodeData {
   responses?: CanvasResponseSummary[]
   /** `true` solo para la diapositiva de inicio (`graph.startNodeId`). */
   isStart: boolean
+  /**
+   * Nota interna recortada y no vacía (ver `bodyPreviewFor`/`toNodeData`), o
+   * `undefined` si el nodo no tiene ninguna. Alimenta el icono de pin
+   * discreto de la tarjeta (tarea 6) — nunca viaja al export, ver
+   * `stripEditorOnlyFields` en `src/export/htmlBundle.ts`.
+   */
+  internalNote?: string
+  /**
+   * Fragmento corto de texto plano del `body` del nodo (tarea 8), para ver
+   * de un vistazo qué contiene la diapositiva sin abrir el Inspector.
+   * `undefined` si el nodo todavía no tiene contenido.
+   */
+  bodyPreview?: string
 }
 
 /** Datos que lleva cada nodo de `@xyflow/react` en su campo `data`. */
@@ -120,12 +134,48 @@ export const INITIAL_NODE_HEIGHT = 60
 export type CanvasFlowNode = XyNode<CanvasNodeData>
 export type CanvasFlowEdge = XyEdge<CanvasEdgeData>
 
+/** Longitud máxima (en caracteres) del fragmento de contenido que se pinta
+ *  en la tarjeta del lienzo (tarea 8): suficiente para "saber de un vistazo
+ *  qué hay" sin que un `body` largo rompa el layout compacto de la tarjeta
+ *  (además la propia tarjeta lo trunca visualmente con CSS si no cupiera). */
+const BODY_PREVIEW_MAX_LENGTH = 90
+
+/** Caché de fragmentos de contenido ya calculados, indexada por el propio
+ *  `body` (string) del nodo. `toFlowNodes` se recalcula en cada render de
+ *  `Canvas` a partir de `project` (ver comentario de cabecera del módulo);
+ *  extraer texto plano de un documento Tiptap es barato pero no gratis, así
+ *  que se evita repetirlo para nodos cuyo `body` no ha cambiado entre
+ *  renders — el body de un nodo concreto solo cambia cuando se edita de
+ *  verdad, así que esta caché no crece de forma descontrolada en una sesión
+ *  de edición normal. */
+const bodyPreviewCache = new Map<string, string | undefined>()
+
+function computeBodyPreview(body: string): string | undefined {
+  const plain = extractPlainText(parseRichBody(body)).trim()
+  if (!plain) return undefined
+  if (plain.length <= BODY_PREVIEW_MAX_LENGTH) return plain
+  return `${plain.slice(0, BODY_PREVIEW_MAX_LENGTH).trimEnd()}…`
+}
+
+function bodyPreviewFor(body: string): string | undefined {
+  const cached = bodyPreviewCache.get(body)
+  if (cached !== undefined || bodyPreviewCache.has(body)) {
+    return cached
+  }
+  const preview = computeBodyPreview(body)
+  bodyPreviewCache.set(body, preview)
+  return preview
+}
+
 function toNodeData(node: DomainNode, startNodeId: string): BaseCanvasNodeData {
+  const trimmedNote = node.internalNote?.trim()
   const base: BaseCanvasNodeData = {
     nodeType: node.type,
     number: node.number,
     title: node.title,
     isStart: node.id === startNodeId,
+    internalNote: trimmedNote ? trimmedNote : undefined,
+    bodyPreview: bodyPreviewFor(node.body),
   }
   if (node.type === 'slide') {
     base.responses = sortByLetter(node.responses).map((response) => ({

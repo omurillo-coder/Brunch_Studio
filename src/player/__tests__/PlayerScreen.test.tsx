@@ -352,7 +352,7 @@ describe('PlayerScreen: imagen/audio adjuntos', () => {
     act(() => {
       useProjectStore.getState().updateNode(startId, {
         title: 'Con media',
-        imageAssetId: imageId,
+        imageAssetIds: [imageId],
         audioAssetId: audioId,
       })
       useProjectStore.getState().createNode('final', { x: 200, y: 0 })
@@ -420,7 +420,7 @@ describe('PlayerScreen: imagen/audio adjuntos', () => {
       useProjectStore.getState().updateNode(startId, {
         title: 'Diapositiva con media rota',
         body: 'El texto sigue aquí.',
-        imageAssetId: 'asset-inexistente',
+        imageAssetIds: ['asset-inexistente'],
       })
       useProjectStore.getState().createNode('final', { x: 200, y: 0 })
     })
@@ -439,6 +439,109 @@ describe('PlayerScreen: imagen/audio adjuntos', () => {
     expect(screen.getByText('Continuar')).toBeInTheDocument()
     expect(screen.getByText('↺ Reiniciar experiencia')).toBeInTheDocument()
     expect(screen.queryByAltText('Imagen de esta pantalla')).not.toBeInTheDocument()
+  })
+})
+
+describe('PlayerScreen: varias imágenes por diapositiva y orden de contenido (tarea 5)', () => {
+  it('pinta TODAS las imágenes de imageAssetIds, apiladas, en el orden del array', async () => {
+    const assetRepository = new MemoryAssetRepository()
+    const imageAId = await importFakeAsset(assetRepository, '/tmp/a.png', [1], 'image/png')
+    const imageBId = await importFakeAsset(assetRepository, '/tmp/b.png', [2], 'image/png')
+
+    const startId = startNodeId()
+    act(() => {
+      useProjectStore.getState().updateNode(startId, {
+        title: 'Con varias imágenes',
+        imageAssetIds: [imageAId, imageBId],
+      })
+      useProjectStore.getState().createNode('final', { x: 200, y: 0 })
+    })
+    const finalId = otherNodeIdOf('final')
+    act(() => {
+      useProjectStore.getState().connect(startId, finalId)
+    })
+
+    const { container } = renderPlayer({ assetRepository })
+
+    await waitFor(() => {
+      const images = container.querySelectorAll('img[alt="Imagen de esta pantalla"]')
+      expect(images).toHaveLength(2)
+    })
+    const images = [
+      ...container.querySelectorAll<HTMLImageElement>('img[alt="Imagen de esta pantalla"]'),
+    ]
+    // Ambas cargadas (assets distintos), en el mismo orden del array.
+    await waitFor(() => {
+      expect(images.every((img) => img.getAttribute('src')?.startsWith('data:image/png;base64,'))).toBe(
+        true,
+      )
+    })
+  })
+
+  it('contentOrder "text-first" (por defecto) pinta el cuerpo antes que las imágenes', async () => {
+    const assetRepository = new MemoryAssetRepository()
+    const imageId = await importFakeAsset(assetRepository, '/tmp/c.png', [3], 'image/png')
+
+    const startId = startNodeId()
+    act(() => {
+      useProjectStore.getState().updateNode(startId, {
+        body: 'Cuerpo de la diapositiva',
+        imageAssetIds: [imageId],
+        contentOrder: 'text-first',
+      })
+      useProjectStore.getState().createNode('final', { x: 200, y: 0 })
+    })
+    const finalId = otherNodeIdOf('final')
+    act(() => {
+      useProjectStore.getState().connect(startId, finalId)
+    })
+
+    const { container } = renderPlayer({ assetRepository })
+
+    await waitFor(() => {
+      expect(container.querySelector('img[alt="Imagen de esta pantalla"]')).toBeInTheDocument()
+    })
+    const card = container.querySelector(`.${styles.card}`)
+    const body = card?.querySelector(`.${styles.body}`)
+    const media = card?.querySelector(`.${styles.mediaSection}`)
+    expect(body).toBeTruthy()
+    expect(media).toBeTruthy()
+    expect(
+      body!.compareDocumentPosition(media!) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+  })
+
+  it('contentOrder "image-first" pinta las imágenes antes que el cuerpo', async () => {
+    const assetRepository = new MemoryAssetRepository()
+    const imageId = await importFakeAsset(assetRepository, '/tmp/d.png', [4], 'image/png')
+
+    const startId = startNodeId()
+    act(() => {
+      useProjectStore.getState().updateNode(startId, {
+        body: 'Cuerpo de la diapositiva',
+        imageAssetIds: [imageId],
+        contentOrder: 'image-first',
+      })
+      useProjectStore.getState().createNode('final', { x: 200, y: 0 })
+    })
+    const finalId = otherNodeIdOf('final')
+    act(() => {
+      useProjectStore.getState().connect(startId, finalId)
+    })
+
+    const { container } = renderPlayer({ assetRepository })
+
+    await waitFor(() => {
+      expect(container.querySelector('img[alt="Imagen de esta pantalla"]')).toBeInTheDocument()
+    })
+    const card = container.querySelector(`.${styles.card}`)
+    const body = card?.querySelector(`.${styles.body}`)
+    const media = card?.querySelector(`.${styles.mediaSection}`)
+    expect(body).toBeTruthy()
+    expect(media).toBeTruthy()
+    expect(
+      media!.compareDocumentPosition(body!) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
   })
 })
 

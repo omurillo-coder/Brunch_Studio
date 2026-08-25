@@ -6,6 +6,7 @@ import {
   ProjectSettingsSchema,
   DecisionResponseSchema,
   NodePositionSchema,
+  DEFAULT_CONTENT_ORDER,
 } from './schemas'
 import type { FinalNode, Node, ProjectDocument, SlideNode } from './schemas'
 
@@ -120,15 +121,19 @@ function legacyNodeToNode(node: Exclude<LegacyNode, { type: 'start' }>): Node {
   switch (node.type) {
     case 'content': {
       // Una Pantalla se convierte en una diapositiva "de continuar":
-      // conserva su `targetNodeId` y nace sin respuestas.
+      // conserva su `targetNodeId` y nace sin respuestas. Su `imageAssetId`
+      // singular (forma antigua) se convierte directamente en la lista
+      // `imageAssetIds` de la forma nueva, mismo criterio que la migración
+      // intermedia de imagen única a varias, ver `migrateSingularImageDocument`.
       const slide: SlideNode = {
         ...common,
         type: 'slide',
         targetNodeId: node.targetNodeId,
         continueLabel: undefined,
         responses: [],
-        imageAssetId: node.imageAssetId,
+        imageAssetIds: node.imageAssetId ? [node.imageAssetId] : [],
         audioAssetId: node.audioAssetId,
+        contentOrder: DEFAULT_CONTENT_ORDER,
       }
       return slide
     }
@@ -142,8 +147,9 @@ function legacyNodeToNode(node: Exclude<LegacyNode, { type: 'start' }>): Node {
         targetNodeId: undefined,
         continueLabel: undefined,
         responses: node.responses,
-        imageAssetId: node.imageAssetId,
+        imageAssetIds: node.imageAssetId ? [node.imageAssetId] : [],
         audioAssetId: node.audioAssetId,
+        contentOrder: DEFAULT_CONTENT_ORDER,
       }
       return slide
     }
@@ -167,8 +173,9 @@ function startNodeToSlide(node: z.infer<typeof LegacyStartNodeSchema>): SlideNod
     targetNodeId: node.targetNodeId,
     continueLabel: undefined,
     responses: [],
-    imageAssetId: undefined,
+    imageAssetIds: [],
     audioAssetId: undefined,
+    contentOrder: DEFAULT_CONTENT_ORDER,
   }
 }
 
@@ -234,25 +241,145 @@ function migrateLegacyDocument(legacy: LegacyProjectDocument): ProjectDocument {
 }
 
 // ---------------------------------------------------------------------------
+// Migración de la forma "actual hasta hoy" (imagen única) a la forma NUEVA
+// (varias imágenes ordenables + orden de contenido)
+// ---------------------------------------------------------------------------
+//
+// Antes de admitir varias imágenes por diapositiva, `SlideNode` tenía
+// `imageAssetId?: string` (una sola imagen) y no existía `contentOrder`. Los
+// documentos `.brunch` ya guardados con esa forma (que en su día era la
+// forma "nueva" de la migración de arriba) se reconocen aquí y se
+// transforman: `imageAssetId` con valor pasa a `imageAssetIds: [ese id]`, sin
+// valor pasa a `imageAssetIds: []`, y `contentOrder` se fija siempre a
+// `DEFAULT_CONTENT_ORDER` ('text-first'), que es como se comportaba la app
+// antes de esta fase — así un proyecto migrado se ve exactamente igual que
+// antes.
+//
+// Mismo patrón que la migración legado de arriba: un esquema Zod privado que
+// solo sirve para RECONOCER la forma, una función de transformación pura, y
+// una revalidación final contra `ProjectDocumentSchema` antes de devolver el
+// resultado.
+
+const singularImageBaseNodeFields = {
+  id: z.string().uuid(),
+  number: z.number().int().positive(),
+  position: NodePositionSchema,
+  title: z.string(),
+  body: z.string(),
+}
+
+const SingularImageSlideNodeSchema = z.object({
+  ...singularImageBaseNodeFields,
+  type: z.literal('slide'),
+  targetNodeId: z.string().uuid().optional(),
+  continueLabel: z.string().optional(),
+  responses: z.array(DecisionResponseSchema).max(4),
+  imageAssetId: z.string().uuid().optional(),
+  audioAssetId: z.string().uuid().optional(),
+})
+
+const SingularImageFinalNodeSchema = z.object({
+  ...singularImageBaseNodeFields,
+  type: z.literal('final'),
+})
+
+const SingularImageNodeSchema = z.discriminatedUnion('type', [
+  SingularImageSlideNodeSchema,
+  SingularImageFinalNodeSchema,
+])
+
+const SingularImageProjectDocumentSchema = z.object({
+  schemaVersion: z.literal(1),
+  metadata: ProjectMetadataSchema,
+  settings: ProjectSettingsSchema,
+  graph: z.object({
+    nodes: z.array(SingularImageNodeSchema),
+    startNodeId: z.string().uuid(),
+  }),
+  editor: EditorStateSchema,
+})
+
+type SingularImageNode = z.infer<typeof SingularImageNodeSchema>
+type SingularImageProjectDocument = z.infer<typeof SingularImageProjectDocumentSchema>
+
+function singularImageNodeToNode(node: SingularImageNode): Node {
+  const common = {
+    id: node.id,
+    number: node.number,
+    position: node.position,
+    title: node.title,
+    body: node.body,
+  }
+
+  if (node.type === 'final') {
+    const final: FinalNode = { ...common, type: 'final' }
+    return final
+  }
+
+  const slide: SlideNode = {
+    ...common,
+    type: 'slide',
+    targetNodeId: node.targetNodeId,
+    continueLabel: node.continueLabel,
+    responses: node.responses,
+    imageAssetIds: node.imageAssetId ? [node.imageAssetId] : [],
+    audioAssetId: node.audioAssetId,
+    contentOrder: DEFAULT_CONTENT_ORDER,
+  }
+  return slide
+}
+
+function migrateSingularImageDocument(doc: SingularImageProjectDocument): ProjectDocument {
+  return {
+    schemaVersion: 1,
+    metadata: doc.metadata,
+    settings: doc.settings,
+    graph: {
+      nodes: doc.graph.nodes.map(singularImageNodeToNode),
+      startNodeId: doc.graph.startNodeId,
+    },
+    editor: doc.editor,
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Punto de entrada
 // ---------------------------------------------------------------------------
 
 /**
  * Valida y, si hace falta, migra el JSON ya parseado de un `.brunch`.
  *
- * - Si tiene la forma NUEVA (la valida `ProjectDocumentSchema`), se devuelve
- *   tal cual.
- * - Si no, se intenta reconocer como la forma ANTIGUA y se transforma. El
- *   resultado se vuelve a validar contra `ProjectDocumentSchema` antes de
- *   devolverlo, para no confiar en la transformación a ciegas.
- * - Si no es reconocible como ninguna de las dos, lanza
- *   `ProjectMigrationError` con un mensaje claro (nunca se reintenta en
- *   silencio con datos corruptos).
+ * Se intenta, en orden, contra tres formas:
+ * 1. La forma NUEVA (`ProjectDocumentSchema`, varias imágenes por
+ *    diapositiva + orden de contenido) -> se devuelve tal cual.
+ * 2. La forma "actual hasta hoy" (una sola `imageAssetId` por diapositiva,
+ *    sin `contentOrder`) -> se transforma con `migrateSingularImageDocument`.
+ * 3. La forma ANTIGUA (`start`/`content`/`decision`/`final`, sin
+ *    `graph.startNodeId`) -> se transforma con `migrateLegacyDocument`.
+ *
+ * Cada transformación se vuelve a validar contra `ProjectDocumentSchema`
+ * antes de devolverse, para no confiar en la transformación a ciegas. Si el
+ * documento no es reconocible como ninguna de las tres formas, lanza
+ * `ProjectMigrationError` con un mensaje claro (nunca se reintenta en
+ * silencio con datos corruptos).
  */
 export function parseOrMigrateProjectDocument(raw: unknown): ProjectDocument {
   const asNew = ProjectDocumentSchema.safeParse(raw)
   if (asNew.success) {
     return asNew.data
+  }
+
+  const asSingularImage = SingularImageProjectDocumentSchema.safeParse(raw)
+  if (asSingularImage.success) {
+    const migrated = migrateSingularImageDocument(asSingularImage.data)
+    const revalidated = ProjectDocumentSchema.safeParse(migrated)
+    if (!revalidated.success) {
+      throw new ProjectMigrationError(
+        'El proyecto se ha reconocido en la forma con una sola imagen por diapositiva, pero el resultado de la migración a varias imágenes no es válido.',
+        { cause: revalidated.error },
+      )
+    }
+    return revalidated.data
   }
 
   const asLegacy = LegacyProjectDocumentSchema.safeParse(raw)

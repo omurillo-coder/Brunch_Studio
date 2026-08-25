@@ -122,11 +122,12 @@ describe('parseOrMigrateProjectDocument — documento con forma antigua', () => 
     if (slide?.type !== 'slide') throw new Error('esperaba una diapositiva')
     expect(slide.responses).toEqual([])
     expect(slide.targetNodeId).toBe(DECISION_ID)
-    expect(slide.imageAssetId).toBe(IMAGE_ID)
+    expect(slide.imageAssetIds).toEqual([IMAGE_ID])
     expect(slide.audioAssetId).toBe(AUDIO_ID)
     expect(slide.title).toBe('Bienvenida')
     expect(slide.body).toBe('<p>Hola</p>')
     expect(slide.continueLabel).toBeUndefined()
+    expect(slide.contentOrder).toBe('text-first')
   })
 
   it('un decision se convierte en diapositiva con sus respuestas intactas', () => {
@@ -238,6 +239,121 @@ describe('parseOrMigrateProjectDocument — documento ya en forma nueva', () => 
 
     expect(parsed).toEqual(JSON.parse(JSON.stringify(document)))
     expect(parsed.graph.startNodeId).toBe(document.graph.startNodeId)
+  })
+})
+
+/**
+ * Documento en la forma "actual hasta hoy": `SlideNode.imageAssetId`
+ * singular, sin `contentOrder` ni `internalNote` — la forma que tenía la app
+ * justo antes de admitir varias imágenes por diapositiva. Debe migrarse a
+ * `imageAssetIds`/`contentOrder`, ver `migrateSingularImageDocument`.
+ */
+function singularImageDocument(overrides?: { imageAssetId?: string }): unknown {
+  return {
+    ...legacyBase(),
+    graph: {
+      startNodeId: CONTENT_ID,
+      nodes: [
+        {
+          id: CONTENT_ID,
+          number: 1,
+          type: 'slide',
+          position: { x: 0, y: 0 },
+          title: 'Bienvenida',
+          body: '<p>Hola</p>',
+          targetNodeId: DECISION_ID,
+          continueLabel: 'Siguiente',
+          responses: [],
+          imageAssetId: overrides?.imageAssetId,
+          audioAssetId: AUDIO_ID,
+        },
+        {
+          id: DECISION_ID,
+          number: 2,
+          type: 'slide',
+          position: { x: 200, y: 0 },
+          title: '¿Qué haces?',
+          body: '',
+          responses: [
+            {
+              id: RESPONSE_A_ID,
+              letter: 'A',
+              text: 'Opción buena',
+              points: 10,
+              targetNodeId: FINAL_ID,
+              imageAssetId: IMAGE_ID,
+            },
+          ],
+        },
+        {
+          id: FINAL_ID,
+          number: 3,
+          type: 'final',
+          position: { x: 400, y: 0 },
+          title: 'Fin',
+          body: '',
+        },
+      ],
+    },
+  }
+}
+
+describe('parseOrMigrateProjectDocument — documento en la forma "actual hasta hoy" (imagen singular)', () => {
+  it('migra imageAssetId (con valor) a imageAssetIds: [ese id], y fija contentOrder a text-first', () => {
+    const migrated = parseOrMigrateProjectDocument(singularImageDocument({ imageAssetId: IMAGE_ID }))
+    const slide = migrated.graph.nodes.find((node) => node.id === CONTENT_ID)
+
+    expect(slide?.type).toBe('slide')
+    if (slide?.type !== 'slide') throw new Error('esperaba una diapositiva')
+    expect(slide.imageAssetIds).toEqual([IMAGE_ID])
+    expect(slide.contentOrder).toBe('text-first')
+    // El resto de campos se conserva intacto.
+    expect(slide.audioAssetId).toBe(AUDIO_ID)
+    expect(slide.targetNodeId).toBe(DECISION_ID)
+    expect(slide.continueLabel).toBe('Siguiente')
+    expect(slide.title).toBe('Bienvenida')
+    expect(slide.body).toBe('<p>Hola</p>')
+  })
+
+  it('sin imageAssetId (undefined), migra a imageAssetIds: []', () => {
+    const migrated = parseOrMigrateProjectDocument(singularImageDocument())
+    const slide = migrated.graph.nodes.find((node) => node.id === CONTENT_ID)
+
+    expect(slide?.type).toBe('slide')
+    if (slide?.type !== 'slide') throw new Error('esperaba una diapositiva')
+    expect(slide.imageAssetIds).toEqual([])
+    expect(slide.contentOrder).toBe('text-first')
+  })
+
+  it('el resto de nodos (respuestas, final) y el startNodeId se conservan intactos', () => {
+    const migrated = parseOrMigrateProjectDocument(singularImageDocument({ imageAssetId: IMAGE_ID }))
+
+    expect(migrated.graph.startNodeId).toBe(CONTENT_ID)
+    const decision = migrated.graph.nodes.find((node) => node.id === DECISION_ID)
+    expect(decision?.type).toBe('slide')
+    if (decision?.type !== 'slide') throw new Error('esperaba una diapositiva')
+    // Las respuestas (con su propio imageAssetId singular, sin cambios) se
+    // conservan tal cual: la migración solo afecta a la imagen de nivel de
+    // nodo.
+    expect(decision.responses).toEqual([
+      {
+        id: RESPONSE_A_ID,
+        letter: 'A',
+        text: 'Opción buena',
+        points: 10,
+        targetNodeId: FINAL_ID,
+        imageAssetId: IMAGE_ID,
+      },
+    ])
+    const final = migrated.graph.nodes.find((node) => node.id === FINAL_ID)
+    expect(final?.type).toBe('final')
+    expect(final?.title).toBe('Fin')
+  })
+
+  it('el resultado migrado vuelve a validar contra el schema nuevo (varias imágenes)', () => {
+    // No debe lanzar: `parseOrMigrateProjectDocument` ya revalida
+    // internamente contra `ProjectDocumentSchema` antes de devolver.
+    expect(() => parseOrMigrateProjectDocument(singularImageDocument({ imageAssetId: IMAGE_ID }))).not.toThrow()
   })
 })
 

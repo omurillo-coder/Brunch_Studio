@@ -1,9 +1,8 @@
 import { generateJSON } from '@tiptap/core'
 import type { JSONContent } from '@tiptap/core'
-import StarterKit from '@tiptap/starter-kit'
-import { createId, MAX_RESPONSES, RESPONSE_LETTERS } from '../../domain'
+import { createId, DEFAULT_CONTENT_ORDER, MAX_RESPONSES, RESPONSE_LETTERS } from '../../domain'
 import type { DecisionResponse, FinalNode, Node, ProjectDocument, SlideNode } from '../../domain'
-import { serializeRichBody } from '../../editor/richText/richTextContent'
+import { RICH_TEXT_EXTENSIONS, serializeRichBody } from '../../editor/richText/richTextContent'
 import { parseTweeSource } from './tweeParser'
 import type { TweePassage } from './tweeParser'
 
@@ -109,13 +108,6 @@ function containsTwineLogic(rawBody: string): boolean {
 // ---------------------------------------------------------------------------
 // Cuerpo enriquecido
 // ---------------------------------------------------------------------------
-
-/** Extensiones Tiptap usadas para interpretar el HTML embebido en pasajes de
- *  Twine, exactamente las mismas que usa el editor real
- *  (`RichTextEditor.tsx`, `extensions: [StarterKit]`) — así el HTML
- *  convertido en la importación admite ni más ni menos marcado del que el
- *  usuario podría producir editando el cuerpo a mano. */
-const RICH_TEXT_EXTENSIONS = [StarterKit]
 
 /** Detecta una etiqueta HTML "de verdad" en el texto de un pasaje: un único
  *  `<` (no precedido de otro `<`) seguido directamente de una letra (o de
@@ -359,8 +351,9 @@ export function convertTweeToProject(source: string, fallbackName: string): Conv
         targetNodeId: resolveTarget(link.target, passage.name),
         continueLabel: resolveContinueLabel(link.display, link.target),
         responses: [],
-        imageAssetId: undefined,
+        imageAssetIds: [],
         audioAssetId: undefined,
+        contentOrder: DEFAULT_CONTENT_ORDER,
       }
       return slide
     }
@@ -398,8 +391,9 @@ export function convertTweeToProject(source: string, fallbackName: string): Conv
       targetNodeId: undefined,
       continueLabel: undefined,
       responses,
-      imageAssetId: undefined,
+      imageAssetIds: [],
       audioAssetId: undefined,
+      contentOrder: DEFAULT_CONTENT_ORDER,
     }
     return slide
   })

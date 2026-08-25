@@ -70,6 +70,14 @@ const baseNodeFields = {
   title: z.string(),
   /** Contenido enriquecido serializado (ver `src/editor/richText`). */
   body: z.string(),
+  /**
+   * Nota interna del diseñador instruccional (p.ej. "pedir gráfico a
+   * diseño"). Puramente de uso interno del equipo: NUNCA viaja al HTML/SCORM
+   * exportado (ver `stripEditorOnlyFields` en `src/export/htmlBundle.ts`,
+   * mismo criterio que ya se aplica al título de nodo). Disponible en
+   * cualquier tipo de nodo, incluidos los `final`.
+   */
+  internalNote: z.string().optional(),
 }
 
 /**
@@ -85,6 +93,16 @@ const baseNodeFields = {
  *   ni se borran) y vuelven a tener efecto si se eliminan todas las
  *   respuestas.
  */
+/**
+ * Orden relativo entre el bloque de imágenes y el cuerpo de texto de una
+ * diapositiva. `'text-first'` es el valor por defecto (y el único
+ * comportamiento que existía antes de admitir varias imágenes): así los
+ * proyectos migrados desde la forma anterior (una sola `imageAssetId`) se ven
+ * exactamente igual que antes, ver `src/domain/migration.ts`.
+ */
+export const CONTENT_ORDERS = ['text-first', 'image-first'] as const
+export const ContentOrderSchema = z.enum(CONTENT_ORDERS)
+
 export const SlideNodeSchema = z.object({
   ...baseNodeFields,
   type: z.literal('slide'),
@@ -93,8 +111,15 @@ export const SlideNodeSchema = z.object({
   /** Texto personalizado del botón de continuar; por defecto "Continuar". */
   continueLabel: z.string().optional(),
   responses: z.array(DecisionResponseSchema).max(4),
-  imageAssetId: z.string().uuid().optional(),
+  /**
+   * Imágenes adjuntas a la diapositiva, en el orden en que se apilan (una
+   * debajo de otra, a ancho completo) en el Player/export. Puede estar
+   * vacío. Sustituye al antiguo `imageAssetId` singular (ver migración).
+   */
+  imageAssetIds: z.array(z.string().uuid()),
   audioAssetId: z.string().uuid().optional(),
+  /** Orden entre el bloque de imágenes y el cuerpo de texto. */
+  contentOrder: ContentOrderSchema,
 })
 
 /** Nodo terminal del recorrido: no tiene ninguna salida. */
@@ -161,6 +186,10 @@ export const ProjectDocumentSchema = z.object({
 export type NodePosition = z.infer<typeof NodePositionSchema>
 export type ResponseLetter = z.infer<typeof ResponseLetterSchema>
 export type DecisionResponse = z.infer<typeof DecisionResponseSchema>
+export type ContentOrder = z.infer<typeof ContentOrderSchema>
+
+/** Valor por defecto de `SlideNode.contentOrder` (ver comentario del schema). */
+export const DEFAULT_CONTENT_ORDER: ContentOrder = 'text-first'
 
 export type SlideNode = z.infer<typeof SlideNodeSchema>
 export type FinalNode = z.infer<typeof FinalNodeSchema>

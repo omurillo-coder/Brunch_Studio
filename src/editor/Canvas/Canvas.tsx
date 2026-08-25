@@ -111,6 +111,7 @@ export function Canvas() {
   const closeContextMenu = useProjectStore((state) => state.closeContextMenu)
   const createConnectedNodeFromMenu = useProjectStore((state) => state.createConnectedNodeFromMenu)
   const applyLayout = useProjectStore((state) => state.applyLayout)
+  const setViewportCenter = useProjectStore((state) => state.setViewportCenter)
 
   const nodes = toFlowNodes(project, selectedNodeIds)
   const edges = toFlowEdges(project, selectedNodeIds)
@@ -120,9 +121,49 @@ export function Canvas() {
   // ref, no en estado: no debe disparar un re-render propio.
   const instanceRef = useRef<ReactFlowInstance<CanvasFlowNode, CanvasFlowEdge> | null>(null)
 
-  const handleInit = useCallback((instance: ReactFlowInstance<CanvasFlowNode, CanvasFlowEdge>) => {
-    instanceRef.current = instance
-  }, [])
+  // Contenedor del lienzo: su `getBoundingClientRect` es lo único que hace
+  // falta (además de la instancia) para saber dónde está, en coordenadas de
+  // pantalla, el centro de la parte VISIBLE del lienzo (tarea 4). Un `ref`,
+  // no estado: solo se lee en el momento de recalcular el centro.
+  const wrapperRef = useRef<HTMLDivElement | null>(null)
+
+  // -- Centro visible del lienzo (tarea 4): se recalcula al iniciar la
+  // instancia y cada vez que termina un gesto de pan/zoom (`onMoveEnd`), y
+  // se publica al store (`ui.viewportCenter`) para que `LeftPanel` pueda
+  // crear un nodo nuevo justo ahí sin conocer `@xyflow/react`. Si el
+  // contenedor todavía no tiene tamaño real (rect 0×0 — no debería pasar en
+  // la app real, pero es un estado transitorio válido en tests que no
+  // montan layout) no se publica nada: mejor dejar el valor anterior (o
+  // `null`) que uno claramente incorrecto.
+  const updateViewportCenter = useCallback(() => {
+    const instance = instanceRef.current
+    const wrapper = wrapperRef.current
+    // `typeof instance.screenToFlowPosition === 'function'` en vez de solo
+    // `!instance`: varios tests de este fichero (`Canvas.wiring.test.tsx`)
+    // inyectan vía `onInit` una instancia "de pega" que solo implementa los
+    // métodos que ese test concreto necesita (p.ej. solo `setCenter`/
+    // `getZoom`/`getNode` para probar `focusNode`, o solo
+    // `screenToFlowPosition` para probar el menú contextual) — no un mock
+    // completo de `ReactFlowInstance`. Sin esta guarda, calcular el centro
+    // visible en cualquier `onInit`/`onMoveEnd` lanzaría en esos tests por
+    // llamar a un método que su instancia de pega no implementa.
+    if (!instance || typeof instance.screenToFlowPosition !== 'function' || !wrapper) return
+    const rect = wrapper.getBoundingClientRect()
+    if (rect.width === 0 || rect.height === 0) return
+    const center = instance.screenToFlowPosition({
+      x: rect.left + rect.width / 2,
+      y: rect.top + rect.height / 2,
+    })
+    setViewportCenter(center)
+  }, [setViewportCenter])
+
+  const handleInit = useCallback(
+    (instance: ReactFlowInstance<CanvasFlowNode, CanvasFlowEdge>) => {
+      instanceRef.current = instance
+      updateViewportCenter()
+    },
+    [updateViewportCenter],
+  )
 
   // -- Arrastre de nodos: una única entrada de historial (ver store) -----
   // El array `nodes` se recalcula cada render a partir de `project`, que
@@ -306,12 +347,14 @@ export function Canvas() {
   }, [project, applyLayout])
 
   // -- Viewport: fuera del historial (ver store). Solo se persiste al
-  // terminar un gesto de pan/zoom, nunca en cada frame.
+  // terminar un gesto de pan/zoom, nunca en cada frame. Recalcula también el
+  // centro visible (tarea 4): el pan/zoom es justo lo que puede desplazarlo.
   const handleMoveEnd = useCallback(
     (_event: unknown, viewport: Viewport) => {
       setViewport(viewport)
+      updateViewportCenter()
     },
-    [setViewport],
+    [setViewport, updateViewportCenter],
   )
 
   // -- Foco desde `LeftPanel` (`ui.focusRequestNodeId`, ver store). Centra
@@ -340,7 +383,7 @@ export function Canvas() {
   }, [focusRequestNodeId, clearFocusRequest])
 
   return (
-    <div className={styles.canvas}>
+    <div className={styles.canvas} ref={wrapperRef}>
       <ReactFlow
         className={styles.flow}
         nodes={nodes}

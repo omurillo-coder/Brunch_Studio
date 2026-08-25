@@ -37,8 +37,9 @@ function sampleProject(): ProjectDocument {
     targetNodeId: FINAL_ID,
     continueLabel: 'Continuar',
     responses: [],
-    imageAssetId: undefined,
+    imageAssetIds: [],
     audioAssetId: undefined,
+    contentOrder: 'text-first',
   }
 
   const final: FinalNode = {
@@ -91,8 +92,9 @@ function sampleProjectWithPoints(): ProjectDocument {
         targetNodeId: FINAL_ID,
       },
     ],
-    imageAssetId: undefined,
+    imageAssetIds: [],
     audioAssetId: undefined,
+    contentOrder: 'text-first',
   }
 
   return {

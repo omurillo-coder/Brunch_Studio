@@ -1,13 +1,19 @@
 import { useEffect, useRef, useState } from 'react'
-import type { ChangeEvent, KeyboardEvent } from 'react'
+import type { ChangeEvent, KeyboardEvent, PointerEvent as ReactPointerEvent } from 'react'
 import {
   useProject,
   useProjectStore,
   useSelectedNodeIds,
   useTitleFocusRequestNodeId,
 } from '../../store'
-import { DEFAULT_CONTINUE_LABEL, MAX_RESPONSES, RESPONSE_LETTERS } from '../../domain'
+import {
+  DEFAULT_CONTINUE_LABEL,
+  MAX_RESPONSES,
+  RESPONSE_LETTERS,
+  deriveEdges,
+} from '../../domain'
 import type {
+  ContentOrder,
   DecisionResponse,
   Node,
   NodeType,
@@ -19,6 +25,11 @@ import { useAssetDataUri } from '../../hooks/useAssetDataUri'
 import { PersistenceCommandError } from '../../persistence/wrapInvokeError'
 import { NODE_TYPE_LABEL } from '../Canvas/nodes/nodeTypes'
 import { RichTextEditor } from '../richText/RichTextEditor'
+import {
+  clampInspectorWidth,
+  loadInspectorWidth,
+  saveInspectorWidth,
+} from '../uiPreferences'
 import styles from './Inspector.module.css'
 
 /** Vista sin selección: información básica de solo lectura del proyecto. */
@@ -256,24 +267,167 @@ function MediaAttachment({
 }
 
 /**
- * Adjuntos de imagen/audio a nivel de nodo (solo Diapositiva). Se muestra
- * justo debajo de título/contenido.
+ * Lista de imágenes de una diapositiva: botón "Añadir imagen" (reutiliza el
+ * mismo flujo de importación que el resto de adjuntos — límite de 15 MB y
+ * deduplicación por contenido los gestiona `assetRepository.importAsset`,
+ * igual que para la imagen única de antes), una miniatura por imagen con su
+ * posición, y controles para quitarla o moverla en el orden (↑/↓ — el orden
+ * del array es el orden de aparición en el Player/export, apiladas en
+ * columna a ancho completo).
+ *
+ * `updateNode(node.id, { imageAssetIds: [...] })` siempre reemplaza la lista
+ * completa (ver `UpdateNodePatch` en `src/domain/project.ts`): añadir/quitar/
+ * mover una imagen se hace leyendo `node.imageAssetIds` y escribiendo la
+ * lista ya modificada.
+ */
+function NodeImagesSection({ node, filePath }: { node: SlideNode; filePath: string }) {
+  const updateNode = useProjectStore((state) => state.updateNode)
+  const { pickImportAssetPath, assetRepository } = useAppServices()
+
+  const [busy, setBusy] = useState(false)
+  const [pickError, setPickError] = useState<string | null>(null)
+
+  async function handleAdd() {
+    setPickError(null)
+    setBusy(true)
+    try {
+      const sourcePath = await pickImportAssetPath('image')
+      if (!sourcePath) {
+        // Cancelado por el usuario: sin error visible, sin cambios.
+        return
+      }
+      const meta = await assetRepository.importAsset(filePath, sourcePath)
+      updateNode(node.id, { imageAssetIds: [...node.imageAssetIds, meta.id] })
+    } catch (error) {
+      if (error instanceof PersistenceCommandError && error.kind === 'AssetTooLarge') {
+        setPickError('El archivo es demasiado grande (máximo 15 MB). Prueba con uno más ligero.')
+      } else {
+        setPickError('No se ha podido adjuntar la imagen. Inténtalo de nuevo.')
+      }
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function handleRemove(assetId: string) {
+    updateNode(node.id, { imageAssetIds: node.imageAssetIds.filter((id) => id !== assetId) })
+  }
+
+  function handleMove(index: number, direction: -1 | 1) {
+    const target = index + direction
+    if (target < 0 || target >= node.imageAssetIds.length) return
+    const next = [...node.imageAssetIds]
+    const [moved] = next.splice(index, 1)
+    if (moved === undefined) return
+    next.splice(target, 0, moved)
+    updateNode(node.id, { imageAssetIds: next })
+  }
+
+  return (
+    <div className={styles.nodeImagesSection}>
+      <div className={styles.nodeImagesHeader}>
+        <span className={styles.label}>Imágenes</span>
+        <button
+          type="button"
+          className={styles.attachButton}
+          onClick={handleAdd}
+          disabled={busy}
+        >
+          + Añadir imagen
+        </button>
+      </div>
+      {pickError && (
+        <p role="alert" className={styles.mediaError}>
+          {pickError}
+        </p>
+      )}
+      {node.imageAssetIds.length > 0 && (
+        <ul className={styles.imageList}>
+          {node.imageAssetIds.map((assetId, index) => (
+            <li key={assetId} className={styles.imageListItem}>
+              <AssetPreview
+                key={assetId}
+                kind="image"
+                assetId={assetId}
+                filePath={filePath}
+                suffix={` ${index + 1}`}
+              />
+              <span className={styles.imageListPosition}>{index + 1}</span>
+              <div className={styles.imageListControls}>
+                <button
+                  type="button"
+                  className={styles.imageMoveButton}
+                  onClick={() => handleMove(index, -1)}
+                  disabled={index === 0}
+                  aria-label={`Subir imagen ${index + 1}`}
+                >
+                  ↑
+                </button>
+                <button
+                  type="button"
+                  className={styles.imageMoveButton}
+                  onClick={() => handleMove(index, 1)}
+                  disabled={index === node.imageAssetIds.length - 1}
+                  aria-label={`Bajar imagen ${index + 1}`}
+                >
+                  ↓
+                </button>
+                <button
+                  type="button"
+                  className={styles.removeButton}
+                  onClick={() => handleRemove(assetId)}
+                  aria-label={`Quitar imagen ${index + 1}`}
+                >
+                  Quitar
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+/** Elige si el bloque de imágenes va antes o después del cuerpo de texto en
+ *  el Player/export (`SlideNode.contentOrder`). Por defecto "Texto primero",
+ *  que es como se comportaba la app antes de admitir varias imágenes. */
+function ContentOrderControl({ node }: { node: SlideNode }) {
+  const updateNode = useProjectStore((state) => state.updateNode)
+  const fieldId = 'inspector-content-order'
+
+  return (
+    <div>
+      <label className={styles.label} htmlFor={fieldId}>
+        Orden del contenido
+      </label>
+      <select
+        id={fieldId}
+        className={styles.select}
+        value={node.contentOrder}
+        onChange={(event) =>
+          updateNode(node.id, { contentOrder: event.target.value as ContentOrder })
+        }
+      >
+        <option value="text-first">Texto primero</option>
+        <option value="image-first">Imagen primero</option>
+      </select>
+    </div>
+  )
+}
+
+/**
+ * Adjuntos de nivel de nodo (solo Diapositiva): imágenes (varias,
+ * ordenables), su orden respecto al texto, y el audio (uno solo). Se
+ * muestra justo debajo de título/contenido.
  */
 function NodeMediaSection({ node, filePath }: { node: SlideNode; filePath: string }) {
   const updateNode = useProjectStore((state) => state.updateNode)
 
   return (
     <div className={styles.nodeMediaSection}>
-      <div>
-        <span className={styles.label}>Imagen</span>
-        <MediaAttachment
-          kind="image"
-          assetId={node.imageAssetId}
-          filePath={filePath}
-          onAttach={(assetId) => updateNode(node.id, { imageAssetId: assetId })}
-          onRemove={() => updateNode(node.id, { imageAssetId: null })}
-        />
-      </div>
+      <NodeImagesSection node={node} filePath={filePath} />
+      <ContentOrderControl node={node} />
       <div>
         <span className={styles.label}>Audio</span>
         <MediaAttachment
@@ -473,12 +627,6 @@ function ResponseRow({
     pointsCommittedRef.current = pending
   }
 
-  function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
-    if (event.key === 'Enter') {
-      commitPending()
-    }
-  }
-
   function handlePointsKeyDown(event: KeyboardEvent<HTMLInputElement>) {
     if (event.key === 'Enter') {
       commitPendingPoints()
@@ -518,14 +666,13 @@ function ResponseRow({
         <label className={styles.label} htmlFor={textFieldId}>
           Texto de la respuesta {index}
         </label>
-        <input
+        <textarea
           id={textFieldId}
-          className={styles.input}
-          type="text"
+          className={styles.textarea}
+          rows={3}
           value={text}
           onChange={(event) => setText(event.target.value)}
           onBlur={commitPending}
-          onKeyDown={handleKeyDown}
         />
       </div>
       <div>
@@ -599,6 +746,19 @@ function ResponseRow({
  * tipo de nodo "Decisión" que crear desde el panel izquierdo. Con 0
  * respuestas solo se ve la cabecera con ese botón.
  */
+/**
+ * Sección de respuestas de una diapositiva. Se muestra SIEMPRE (para
+ * cualquier diapositiva), porque "+ Añadir respuesta" es justo la vía por la
+ * que una diapositiva "de continuar" se convierte en decisión — ya no hay un
+ * tipo de nodo "Decisión" que crear desde el panel izquierdo. Con 0
+ * respuestas solo se ve la cabecera con ese botón.
+ *
+ * El botón "+ Añadir respuesta" vive DENTRO de `.responsesList` (el mismo
+ * flujo vertical que las filas de respuesta), como último elemento — no en
+ * una cabecera aparte — para que aparezca justo debajo de la última
+ * respuesta añadida: el flujo natural es "añades una, el botón para la
+ * siguiente aparece justo debajo". Desaparece al llegar a `MAX_RESPONSES`.
+ */
 function ResponsesSection({
   node,
   allNodes,
@@ -614,18 +774,7 @@ function ResponsesSection({
 
   return (
     <div className={styles.responsesSection}>
-      <div className={styles.responsesSectionHeader}>
-        <h3 className={styles.responsesTitle}>Respuestas</h3>
-        {canAddResponse && (
-          <button
-            type="button"
-            className={styles.addResponseButton}
-            onClick={() => addResponse(node.id)}
-          >
-            + Añadir respuesta
-          </button>
-        )}
-      </div>
+      <h3 className={styles.responsesTitle}>Respuestas</h3>
       <div className={styles.responsesList}>
         {responses.map((response, index) => (
           <ResponseRow
@@ -637,7 +786,141 @@ function ResponsesSection({
             filePath={filePath}
           />
         ))}
+        {canAddResponse && (
+          <button
+            type="button"
+            className={styles.addResponseButton}
+            onClick={() => addResponse(node.id)}
+          >
+            + Añadir respuesta
+          </button>
+        )}
       </div>
+    </div>
+  )
+}
+
+/**
+ * Diapositivas conectadas con el nodo seleccionado (fase de navegación
+ * rápida): las que APUNTAN a este nodo, y las que ESTE nodo referencia.
+ * Calculado con `deriveEdges` (dominio): esa función ya encapsula
+ * exactamente la definición de "salida" de un nodo (el `targetNodeId` de una
+ * diapositiva "de continuar", o el de cada respuesta con destino de una "de
+ * decisión"), así que no se duplica esa regla aquí.
+ */
+function incomingNodesOf(project: ProjectDocument, nodeId: string): Node[] {
+  const edges = deriveEdges(project)
+  const sourceIds = new Set(edges.filter((edge) => edge.target === nodeId).map((edge) => edge.source))
+  return project.graph.nodes.filter((node) => sourceIds.has(node.id))
+}
+
+function outgoingNodesOf(project: ProjectDocument, nodeId: string): Node[] {
+  const edges = deriveEdges(project)
+  const targetIds = new Set(edges.filter((edge) => edge.source === nodeId).map((edge) => edge.target))
+  return project.graph.nodes.filter((node) => targetIds.has(node.id))
+}
+
+/**
+ * Navegación rápida entre diapositivas conectadas: quién apunta a este nodo
+ * y a quién apunta este nodo. Cada elemento es clicable y reutiliza
+ * `focusNode` (mismo mecanismo que `LeftPanel`) para seleccionar y centrar
+ * el lienzo en el nodo elegido — no se inventa un mecanismo nuevo. No se
+ * muestra nada si el nodo no tiene ninguna conexión en ningún sentido.
+ */
+function ConnectionsSection({ node, project }: { node: Node; project: ProjectDocument }) {
+  const focusNode = useProjectStore((state) => state.focusNode)
+  const incoming = incomingNodesOf(project, node.id)
+  const outgoing = outgoingNodesOf(project, node.id)
+
+  if (incoming.length === 0 && outgoing.length === 0) return null
+
+  return (
+    <div className={styles.connectionsSection}>
+      {incoming.length > 0 && (
+        <div>
+          <h3 className={styles.connectionsTitle}>Diapositivas que llevan aquí</h3>
+          <ul className={styles.connectionsList}>
+            {incoming.map((source) => (
+              <li key={source.id}>
+                <button
+                  type="button"
+                  className={styles.connectionItem}
+                  onClick={() => focusNode(source.id)}
+                >
+                  {nodeOptionLabel(source)}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {outgoing.length > 0 && (
+        <div>
+          <h3 className={styles.connectionsTitle}>A dónde lleva esta diapositiva</h3>
+          <ul className={styles.connectionsList}>
+            {outgoing.map((target) => (
+              <li key={target.id}>
+                <button
+                  type="button"
+                  className={styles.connectionItem}
+                  onClick={() => focusNode(target.id)}
+                >
+                  {nodeOptionLabel(target)}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Nota interna del diseñador instruccional (p.ej. "pedir gráfico a diseño"):
+ * campo de texto libre, puramente de uso del equipo — nunca aparece en el
+ * HTML/SCORM exportado (ver `stripEditorOnlyFields` en
+ * `src/export/htmlBundle.ts`) ni en `PlayerScreen` (a diferencia del título,
+ * que sí se ve en gris ahí). Mismo criterio "commit on blur" que el resto de
+ * campos de texto de este panel. Disponible para cualquier tipo de nodo.
+ */
+function InternalNoteField({ node }: { node: Node }) {
+  const updateNode = useProjectStore((state) => state.updateNode)
+
+  const [value, setValue] = useState(node.internalNote ?? '')
+  const committedRef = useRef(node.internalNote ?? '')
+  const latestRef = useRef(value)
+  latestRef.current = value
+
+  useEffect(() => {
+    return () => {
+      commitPending()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  function commitPending() {
+    const pending = latestRef.current
+    if (pending === committedRef.current) return
+    updateNode(node.id, { internalNote: pending.trim() === '' ? null : pending })
+    committedRef.current = pending
+  }
+
+  const fieldId = 'inspector-internal-note'
+
+  return (
+    <div>
+      <label className={styles.label} htmlFor={fieldId}>
+        Nota interna (no se exporta)
+      </label>
+      <textarea
+        id={fieldId}
+        className={styles.textarea}
+        rows={3}
+        value={value}
+        onChange={(event) => setValue(event.target.value)}
+        onBlur={commitPending}
+      />
     </div>
   )
 }
@@ -664,11 +947,13 @@ function NodeFields({
   allNodes,
   startNodeId,
   filePath,
+  project,
 }: {
   node: Node
   allNodes: Node[]
   startNodeId: string
   filePath: string
+  project: ProjectDocument
 }) {
   const updateNode = useProjectStore((state) => state.updateNode)
   const deleteNode = useProjectStore((state) => state.deleteNode)
@@ -760,6 +1045,7 @@ function NodeFields({
           ariaLabelledBy="inspector-node-body-label"
         />
       </div>
+      <InternalNoteField node={node} />
       {node.type === 'slide' && (
         <>
           <NodeMediaSection node={node} filePath={filePath} />
@@ -767,6 +1053,7 @@ function NodeFields({
           <ResponsesSection node={node} allNodes={allNodes} filePath={filePath} />
         </>
       )}
+      <ConnectionsSection node={node} project={project} />
       {/* Acción de borrado descubrible sin depender de la tecla Supr/Backspace
           del lienzo (ver `Canvas`). Nunca se muestra para la diapositiva de
           inicio — `store.deleteNode` (dominio) lanza si se intentara. Sin
@@ -799,9 +1086,64 @@ export interface InspectorProps {
 }
 
 /**
+ * Asa de arrastre en el borde izquierdo del Inspector para redimensionarlo.
+ * Arrastrar el ratón mueve el `pointer capture` a este propio elemento
+ * (`setPointerCapture`), así que sigue recibiendo `pointermove` aunque el
+ * cursor salga de la franja de 6px durante el gesto — sin necesidad de
+ * escuchar en `window`. El ancho se ajusta a los límites vigentes
+ * (`clampInspectorWidth`) en cada movimiento y se persiste en `localStorage`
+ * al soltar (`onPointerUp`), no en cada frame de arrastre.
+ */
+function ResizeHandle({ width, onResize }: { width: number; onResize: (width: number) => void }) {
+  const dragStartRef = useRef<{ pointerX: number; startWidth: number } | null>(null)
+
+  function handlePointerDown(event: ReactPointerEvent<HTMLDivElement>) {
+    // `setPointerCapture` no existe en jsdom (entorno de test): se comprueba
+    // antes de llamarlo para no romper el gesto ahí, sin afectar al
+    // comportamiento real en un navegador/webview de verdad.
+    event.currentTarget.setPointerCapture?.(event.pointerId)
+    dragStartRef.current = { pointerX: event.clientX, startWidth: width }
+  }
+
+  function handlePointerMove(event: ReactPointerEvent<HTMLDivElement>) {
+    const drag = dragStartRef.current
+    if (!drag) return
+    // El asa está en el borde IZQUIERDO del panel: arrastrar hacia la
+    // izquierda (el puntero se mueve a una x menor) debe ENSANCHAR el
+    // panel, de ahí el signo invertido respecto al desplazamiento del
+    // puntero.
+    const delta = drag.pointerX - event.clientX
+    onResize(clampInspectorWidth(drag.startWidth + delta, window.innerWidth))
+  }
+
+  function handlePointerUp(event: ReactPointerEvent<HTMLDivElement>) {
+    dragStartRef.current = null
+    event.currentTarget.releasePointerCapture?.(event.pointerId)
+  }
+
+  return (
+    <div
+      className={styles.resizeHandle}
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="Redimensionar panel derecho"
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+    />
+  )
+}
+
+/**
  * Inspector derecho: información del proyecto sin selección, o
  * título/contenido del nodo seleccionado. Con selección múltiple, muestra
  * los campos del primer nodo seleccionado (no hay edición multi-nodo).
+ *
+ * Ancho redimensionable (tarea 2): estado local inicializado con el ancho
+ * guardado en `localStorage` (`loadInspectorWidth`), persistido de nuevo
+ * cada vez que cambia. Es una preferencia de la app, no del documento
+ * `.brunch` — por eso vive aquí como estado de componente y no en
+ * `useProjectStore`/`project`.
  */
 export function Inspector({ filePath }: InspectorProps) {
   const project = useProject()
@@ -811,13 +1153,22 @@ export function Inspector({ filePath }: InspectorProps) {
     ? project.graph.nodes.find((node) => node.id === selectedNodeId) ?? null
     : null
 
+  const [width, setWidth] = useState(() => loadInspectorWidth(window.innerWidth))
+
+  function handleResize(nextWidth: number) {
+    setWidth(nextWidth)
+    saveInspectorWidth(nextWidth)
+  }
+
   return (
-    <aside className={styles.inspector}>
+    <aside className={styles.inspector} style={{ width, flexBasis: width }}>
+      <ResizeHandle width={width} onResize={handleResize} />
       {selectedNode ? (
         <NodeFields
           key={selectedNode.id}
           node={selectedNode}
           allNodes={project.graph.nodes}
+          project={project}
           startNodeId={project.graph.startNodeId}
           filePath={filePath}
         />

@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { JSONContent } from '@tiptap/core'
 import { EditorContent, useEditor, useEditorState } from '@tiptap/react'
-import StarterKit from '@tiptap/starter-kit'
-import { parseRichBody, serializeRichBody } from './richTextContent'
+import { RICH_TEXT_EXTENSIONS, parseRichBody, serializeRichBody } from './richTextContent'
 import styles from './RichTextEditor.module.css'
 
 export interface RichTextEditorProps {
@@ -38,7 +37,8 @@ interface ToolbarButtonConfig {
 /**
  * Editor de texto enriquecido para el campo `body` de un nodo (fase 4,
  * Milestone 2). Barra de herramientas minimalista: negrita, cursiva, lista
- * con viñetas, lista numerada — nada más (sin color, fuente, tamaño...).
+ * con viñetas, lista numerada, destacado (fase 8) — nada más (sin color,
+ * fuente, tamaño...).
  *
  * Inicialización única al montar: `useEditor` recibe `parseRichBody(body)`
  * como `content` inicial y nunca se resincroniza con la prop `body` en
@@ -109,7 +109,7 @@ export function RichTextEditor({ body, onCommit, ariaLabelledBy }: RichTextEdito
   }
 
   const editor = useEditor({
-    extensions: [StarterKit],
+    extensions: RICH_TEXT_EXTENSIONS,
     content: initialDoc,
     editorProps: {
       attributes: editorAttributes(spellcheckEnabled),
@@ -144,13 +144,14 @@ export function RichTextEditor({ body, onCommit, ariaLabelledBy }: RichTextEdito
     editor,
     selector: (ctx) => {
       if (!ctx.editor) {
-        return { bold: false, italic: false, bulletList: false, orderedList: false }
+        return { bold: false, italic: false, bulletList: false, orderedList: false, highlight: false }
       }
       return {
         bold: ctx.editor.isActive('bold'),
         italic: ctx.editor.isActive('italic'),
         bulletList: ctx.editor.isActive('bulletList'),
         orderedList: ctx.editor.isActive('orderedList'),
+        highlight: ctx.editor.isActive('highlight'),
       }
     },
   })
@@ -187,6 +188,13 @@ export function RichTextEditor({ body, onCommit, ariaLabelledBy }: RichTextEdito
       ariaLabel: 'Lista numerada',
       isActive: toolbarState?.orderedList ?? false,
       onToggle: () => editor.chain().focus().toggleOrderedList().run(),
+    },
+    {
+      key: 'highlight',
+      label: 'H',
+      ariaLabel: 'Destacado',
+      isActive: toolbarState?.highlight ?? false,
+      onToggle: () => editor.chain().focus().toggleHighlight().run(),
     },
   ]
 

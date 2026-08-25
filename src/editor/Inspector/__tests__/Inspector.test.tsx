@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { Inspector } from '../Inspector'
 import { useProjectStore } from '../../../store'
@@ -7,6 +7,7 @@ import type { SlideNode } from '../../../domain'
 import { AppServicesProvider } from '../../../app/AppServicesContext'
 import type { AppServices } from '../../../app/AppServices'
 import { MemoryAssetRepository } from '../../../persistence'
+import styles from '../Inspector.module.css'
 
 const TEST_FILE_PATH = '/tmp/inspector-test.brunch'
 
@@ -549,15 +550,16 @@ describe('Inspector — respuestas de una diapositiva', () => {
   })
 })
 
-describe('Inspector — adjuntos de imagen/audio a nivel de nodo (fase 3, Milestone 2)', () => {
+describe('Inspector — lista de imágenes y audio a nivel de nodo (tarea 5: varias imágenes ordenables)', () => {
   function setupAssetRepository() {
     const assetRepository = new MemoryAssetRepository()
     assetRepository.registerSourceFile('/tmp/foto.png', new Uint8Array([1, 2, 3]), 'image/png')
+    assetRepository.registerSourceFile('/tmp/foto2.png', new Uint8Array([7, 8, 9]), 'image/png')
     assetRepository.registerSourceFile('/tmp/audio.mp3', new Uint8Array([4, 5, 6]), 'audio/mpeg')
     return assetRepository
   }
 
-  it('adjuntar una imagen a una diapositiva actualiza imageAssetId y muestra la vista previa', async () => {
+  it('añadir una imagen actualiza imageAssetIds y muestra la vista previa', async () => {
     act(() => {
       useProjectStore.getState().createNode('slide', { x: 0, y: 0 })
       useProjectStore.getState().selectNode(slideNodeId())
@@ -567,17 +569,99 @@ describe('Inspector — adjuntos de imagen/audio a nivel de nodo (fase 3, Milest
 
     renderInspectorWithServices({ assetRepository, pickImportAssetPath })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Adjuntar imagen' }))
+    fireEvent.click(screen.getByRole('button', { name: '+ Añadir imagen' }))
 
     await waitFor(() => {
-      expect(slideNode(slideNodeId()).imageAssetId).toBeDefined()
+      expect(slideNode(slideNodeId()).imageAssetIds).toHaveLength(1)
     })
     expect(pickImportAssetPath).toHaveBeenCalledWith('image')
 
     const preview = (await screen.findByAltText(
-      'Vista previa de la imagen adjunta',
+      'Vista previa de la imagen adjunta 1',
     )) as HTMLImageElement
     expect(preview.getAttribute('src')).toContain('data:image/png;base64,')
+  })
+
+  it('añadir una segunda imagen la agrega al final de la lista (orden de aparición)', async () => {
+    act(() => {
+      useProjectStore.getState().createNode('slide', { x: 0, y: 0 })
+      useProjectStore.getState().selectNode(slideNodeId())
+    })
+    const assetRepository = setupAssetRepository()
+    const pickImportAssetPath = vi.fn().mockResolvedValueOnce('/tmp/foto.png').mockResolvedValueOnce('/tmp/foto2.png')
+
+    renderInspectorWithServices({ assetRepository, pickImportAssetPath })
+
+    fireEvent.click(screen.getByRole('button', { name: '+ Añadir imagen' }))
+    await waitFor(() => expect(slideNode(slideNodeId()).imageAssetIds).toHaveLength(1))
+
+    fireEvent.click(screen.getByRole('button', { name: '+ Añadir imagen' }))
+    await waitFor(() => expect(slideNode(slideNodeId()).imageAssetIds).toHaveLength(2))
+
+    expect(await screen.findByAltText('Vista previa de la imagen adjunta 1')).toBeInTheDocument()
+    expect(await screen.findByAltText('Vista previa de la imagen adjunta 2')).toBeInTheDocument()
+  })
+
+  it('quitar una imagen la elimina de imageAssetIds; el botón de añadir sigue disponible', async () => {
+    act(() => {
+      useProjectStore.getState().createNode('slide', { x: 0, y: 0 })
+      useProjectStore.getState().selectNode(slideNodeId())
+    })
+    const assetRepository = setupAssetRepository()
+    const pickImportAssetPath = vi.fn().mockResolvedValue('/tmp/foto.png')
+
+    renderInspectorWithServices({ assetRepository, pickImportAssetPath })
+
+    fireEvent.click(screen.getByRole('button', { name: '+ Añadir imagen' }))
+    await waitFor(() => expect(slideNode(slideNodeId()).imageAssetIds).toHaveLength(1))
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Quitar imagen 1' }))
+
+    expect(slideNode(slideNodeId()).imageAssetIds).toEqual([])
+    expect(screen.getByRole('button', { name: '+ Añadir imagen' })).toBeInTheDocument()
+  })
+
+  it('los botones ↑/↓ reordenan las imágenes; en los extremos quedan deshabilitados', async () => {
+    act(() => {
+      useProjectStore.getState().createNode('slide', { x: 0, y: 0 })
+      useProjectStore.getState().selectNode(slideNodeId())
+    })
+    const assetRepository = setupAssetRepository()
+    const pickImportAssetPath = vi.fn().mockResolvedValueOnce('/tmp/foto.png').mockResolvedValueOnce('/tmp/foto2.png')
+
+    renderInspectorWithServices({ assetRepository, pickImportAssetPath })
+
+    fireEvent.click(screen.getByRole('button', { name: '+ Añadir imagen' }))
+    await waitFor(() => expect(slideNode(slideNodeId()).imageAssetIds).toHaveLength(1))
+    fireEvent.click(screen.getByRole('button', { name: '+ Añadir imagen' }))
+    await waitFor(() => expect(slideNode(slideNodeId()).imageAssetIds).toHaveLength(2))
+
+    const [firstId, secondId] = slideNode(slideNodeId()).imageAssetIds
+
+    // La primera imagen no se puede subir más (ya está arriba); la segunda
+    // no se puede bajar más (ya está abajo).
+    expect(screen.getByRole('button', { name: 'Subir imagen 1' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Bajar imagen 2' })).toBeDisabled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Bajar imagen 1' }))
+    expect(slideNode(slideNodeId()).imageAssetIds).toEqual([secondId, firstId])
+
+    fireEvent.click(screen.getByRole('button', { name: 'Subir imagen 2' }))
+    expect(slideNode(slideNodeId()).imageAssetIds).toEqual([firstId, secondId])
+  })
+
+  it('el control de orden de contenido cambia contentOrder, por defecto "text-first"', () => {
+    act(() => {
+      useProjectStore.getState().createNode('slide', { x: 0, y: 0 })
+      useProjectStore.getState().selectNode(slideNodeId())
+    })
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    const select = screen.getByLabelText('Orden del contenido') as HTMLSelectElement
+    expect(select.value).toBe('text-first')
+
+    fireEvent.change(select, { target: { value: 'image-first' } })
+    expect(slideNode(slideNodeId()).contentOrder).toBe('image-first')
   })
 
   it('adjuntar un audio a una diapositiva con respuestas actualiza audioAssetId y muestra el reproductor', async () => {
@@ -604,25 +688,6 @@ describe('Inspector — adjuntos de imagen/audio a nivel de nodo (fase 3, Milest
     })
   })
 
-  it('quitar la imagen limpia imageAssetId y vuelve a mostrarse "Adjuntar imagen"', async () => {
-    act(() => {
-      useProjectStore.getState().createNode('slide', { x: 0, y: 0 })
-      useProjectStore.getState().selectNode(slideNodeId())
-    })
-    const assetRepository = setupAssetRepository()
-    const pickImportAssetPath = vi.fn().mockResolvedValue('/tmp/foto.png')
-
-    renderInspectorWithServices({ assetRepository, pickImportAssetPath })
-
-    fireEvent.click(screen.getByRole('button', { name: 'Adjuntar imagen' }))
-    await waitFor(() => expect(slideNode(slideNodeId()).imageAssetId).toBeDefined())
-
-    fireEvent.click(await screen.findByRole('button', { name: 'Quitar imagen' }))
-
-    expect(slideNode(slideNodeId()).imageAssetId).toBeUndefined()
-    expect(screen.getByRole('button', { name: 'Adjuntar imagen' })).toBeInTheDocument()
-  })
-
   it('cancelar el diálogo de importar no cambia nada ni muestra error', async () => {
     act(() => {
       useProjectStore.getState().createNode('slide', { x: 0, y: 0 })
@@ -633,13 +698,13 @@ describe('Inspector — adjuntos de imagen/audio a nivel de nodo (fase 3, Milest
 
     renderInspectorWithServices({ assetRepository, pickImportAssetPath })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Adjuntar imagen' }))
+    fireEvent.click(screen.getByRole('button', { name: '+ Añadir imagen' }))
 
     await waitFor(() => expect(pickImportAssetPath).toHaveBeenCalled())
 
-    expect(slideNode(slideNodeId()).imageAssetId).toBeUndefined()
+    expect(slideNode(slideNodeId()).imageAssetIds).toEqual([])
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Adjuntar imagen' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '+ Añadir imagen' })).toBeInTheDocument()
   })
 
   it('un fallo de importAsset muestra un mensaje de error breve sin romper el resto del Inspector', async () => {
@@ -656,19 +721,19 @@ describe('Inspector — adjuntos de imagen/audio a nivel de nodo (fase 3, Milest
 
     renderInspectorWithServices({ assetRepository, pickImportAssetPath })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Adjuntar imagen' }))
+    fireEvent.click(screen.getByRole('button', { name: '+ Añadir imagen' }))
 
     const alert = await screen.findByRole('alert')
     expect(alert.textContent).not.toMatch(/error|stack|undefined|NaN|\[object/i)
     // El resto del Inspector sigue funcionando (el título se puede seguir editando).
     expect(screen.getByLabelText('Título')).toBeInTheDocument()
-    expect(slideNode(slideNodeId()).imageAssetId).toBeUndefined()
+    expect(slideNode(slideNodeId()).imageAssetIds).toEqual([])
   })
 
   it('un fallo de getAsset al cargar la vista previa muestra un mensaje de error sin romper los controles', async () => {
     act(() => {
       useProjectStore.getState().createNode('slide', { x: 0, y: 0 })
-      useProjectStore.getState().updateNode(slideNodeId(), { imageAssetId: 'asset-ya-adjunto' })
+      useProjectStore.getState().updateNode(slideNodeId(), { imageAssetIds: ['asset-ya-adjunto'] })
       useProjectStore.getState().selectNode(slideNodeId())
     })
     const assetRepository = {
@@ -681,9 +746,8 @@ describe('Inspector — adjuntos de imagen/audio a nivel de nodo (fase 3, Milest
 
     const alert = await screen.findByRole('alert')
     expect(alert.textContent).not.toMatch(/error|stack|undefined|NaN|\[object/i)
-    // Los controles de reemplazar/quitar siguen disponibles a pesar del fallo de vista previa.
-    expect(screen.getByRole('button', { name: 'Quitar imagen' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Reemplazar imagen' })).toBeInTheDocument()
+    // El control de quitar sigue disponible a pesar del fallo de vista previa.
+    expect(screen.getByRole('button', { name: 'Quitar imagen 1' })).toBeInTheDocument()
   })
 })
 
@@ -756,7 +820,7 @@ describe('Inspector — adjuntos de imagen/audio por respuesta (fase 3, Mileston
     const node = slideNode(decisionId)
     const responseB = node.responses.find((r) => r.letter === 'B')
     expect(responseB?.imageAssetId).toBeUndefined()
-    expect(node.imageAssetId).toBeUndefined()
+    expect(node.imageAssetIds).toEqual([])
 
     fireEvent.click(
       await screen.findByRole('button', { name: 'Quitar imagen de la respuesta 1' }),
@@ -883,5 +947,236 @@ describe('Inspector — editor de texto enriquecido del campo "Contenido" (fase 
     const startNode = useProjectStore.getState().project.graph.nodes.find((n) => n.id === startNodeId())
     const bodyDoc = JSON.parse(startNode?.body ?? '{}')
     expect(bodyDoc.content[0].type).toBe('bulletList')
+  })
+})
+
+describe('Inspector — panel redimensionable (tarea 2)', () => {
+  beforeEach(() => {
+    window.localStorage.clear()
+  })
+
+  it('arrastrar el asa hacia la izquierda ensancha el panel y lo persiste', () => {
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    const handle = screen.getByLabelText('Redimensionar panel derecho')
+    const aside = handle.closest('aside') as HTMLElement
+    const widthBefore = aside.style.width
+
+    fireEvent.pointerDown(handle, { clientX: 500, pointerId: 1 })
+    fireEvent.pointerMove(handle, { clientX: 400, pointerId: 1 })
+    fireEvent.pointerUp(handle, { clientX: 400, pointerId: 1 })
+
+    // Arrastrar 100px hacia la izquierda ensancha el panel en 100px.
+    const before = Number.parseInt(widthBefore, 10)
+    const after = Number.parseInt(aside.style.width, 10)
+    expect(after).toBe(before + 100)
+    expect(window.localStorage.getItem('brunch-studio:inspector-width')).toBe(String(after))
+  })
+
+  it('el ancho nunca baja del mínimo (280px) aunque se arrastre mucho hacia la derecha', () => {
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    const handle = screen.getByLabelText('Redimensionar panel derecho')
+    const aside = handle.closest('aside') as HTMLElement
+
+    fireEvent.pointerDown(handle, { clientX: 500, pointerId: 1 })
+    fireEvent.pointerMove(handle, { clientX: 5000, pointerId: 1 })
+    fireEvent.pointerUp(handle, { clientX: 5000, pointerId: 1 })
+
+    expect(Number.parseInt(aside.style.width, 10)).toBe(280)
+  })
+})
+
+describe('Inspector — nota interna (tarea 6: puramente interna, no se exporta)', () => {
+  it('edita y confirma la nota interna de una diapositiva al perder el foco', () => {
+    act(() => {
+      useProjectStore.getState().selectNode(startNodeId())
+    })
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    const field = screen.getByLabelText('Nota interna (no se exporta)')
+    expect(field).toHaveValue('')
+
+    fireEvent.change(field, { target: { value: 'Pedir gráfico a diseño' } })
+    fireEvent.blur(field)
+
+    expect(slideNode(startNodeId()).internalNote).toBe('Pedir gráfico a diseño')
+  })
+
+  it('vaciar la nota interna y perder el foco la borra (null -> undefined en el documento)', () => {
+    act(() => {
+      useProjectStore.getState().updateNode(startNodeId(), { internalNote: 'Nota previa' })
+      useProjectStore.getState().selectNode(startNodeId())
+    })
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    const field = screen.getByLabelText('Nota interna (no se exporta)')
+    expect(field).toHaveValue('Nota previa')
+
+    fireEvent.change(field, { target: { value: '' } })
+    fireEvent.blur(field)
+
+    const node = useProjectStore.getState().project.graph.nodes.find((n) => n.id === startNodeId())
+    expect(node?.internalNote).toBeUndefined()
+  })
+
+  it('también está disponible en un nodo Final', () => {
+    act(() => {
+      useProjectStore.getState().createNode('final', { x: 100, y: 0 })
+      const finalId = useProjectStore.getState().project.graph.nodes.find((n) => n.type === 'final')?.id
+      if (!finalId) throw new Error('setup inválido')
+      useProjectStore.getState().selectNode(finalId)
+    })
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    expect(screen.getByLabelText('Nota interna (no se exporta)')).toBeInTheDocument()
+  })
+})
+
+describe('Inspector — navegación rápida entre diapositivas conectadas (tarea 7)', () => {
+  it('sin ninguna conexión, no muestra ninguna de las dos secciones', () => {
+    act(() => {
+      useProjectStore.getState().selectNode(startNodeId())
+    })
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    expect(screen.queryByText('Diapositivas que llevan aquí')).not.toBeInTheDocument()
+    expect(screen.queryByText('A dónde lleva esta diapositiva')).not.toBeInTheDocument()
+  })
+
+  it('muestra las entrantes (quién apunta aquí) y las salientes (a dónde lleva), con varias respuestas', () => {
+    act(() => {
+      useProjectStore.getState().updateNode(startNodeId(), { title: 'Inicio' })
+      useProjectStore.getState().createNode('slide', { x: 100, y: 0 }, { title: 'Intermedia' })
+    })
+    const middleId = slideNodeId()
+    act(() => {
+      useProjectStore.getState().connect(startNodeId(), middleId)
+      useProjectStore.getState().createNode('final', { x: 200, y: 0 }, { title: 'Final A' })
+      useProjectStore.getState().createNode('final', { x: 200, y: 100 }, { title: 'Final B' })
+    })
+    const finals = useProjectStore.getState().project.graph.nodes.filter((n) => n.type === 'final')
+    const [finalA, finalB] = finals
+    if (!finalA || !finalB) throw new Error('setup inválido')
+    act(() => {
+      useProjectStore.getState().addResponse(middleId)
+      useProjectStore.getState().addResponse(middleId)
+    })
+    const middleResponses = slideNode(middleId).responses
+    act(() => {
+      useProjectStore.getState().connect(middleId, finalA.id, middleResponses[0]?.id)
+      useProjectStore.getState().connect(middleId, finalB.id, middleResponses[1]?.id)
+      useProjectStore.getState().selectNode(middleId)
+    })
+
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    const incoming = screen.getByText('Diapositivas que llevan aquí').closest('div') as HTMLElement
+    expect(within(incoming).getByText(/Inicio/)).toBeInTheDocument()
+
+    const outgoing = screen.getByText('A dónde lleva esta diapositiva').closest('div') as HTMLElement
+    expect(within(outgoing).getByText(/Final A/)).toBeInTheDocument()
+    expect(within(outgoing).getByText(/Final B/)).toBeInTheDocument()
+  })
+
+  it('un nodo Final solo puede tener entrantes, nunca salientes', () => {
+    act(() => {
+      useProjectStore.getState().createNode('final', { x: 100, y: 0 }, { title: 'Fin' })
+    })
+    const finalId = useProjectStore.getState().project.graph.nodes.find((n) => n.type === 'final')?.id
+    if (!finalId) throw new Error('setup inválido')
+    act(() => {
+      useProjectStore.getState().connect(startNodeId(), finalId)
+      useProjectStore.getState().selectNode(finalId)
+    })
+
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    expect(screen.getByText('Diapositivas que llevan aquí')).toBeInTheDocument()
+    expect(screen.queryByText('A dónde lleva esta diapositiva')).not.toBeInTheDocument()
+  })
+
+  it('hacer clic en una diapositiva conectada la selecciona y pide centrar el lienzo (focusNode)', () => {
+    act(() => {
+      useProjectStore.getState().createNode('slide', { x: 100, y: 0 }, { title: 'Destino' })
+    })
+    const targetId = slideNodeId()
+    act(() => {
+      useProjectStore.getState().connect(startNodeId(), targetId)
+      useProjectStore.getState().selectNode(startNodeId())
+    })
+
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    const outgoing = screen.getByText('A dónde lleva esta diapositiva').closest('div') as HTMLElement
+    fireEvent.click(within(outgoing).getByText(/Destino/))
+
+    expect(useProjectStore.getState().selection.selectedNodeIds).toEqual([targetId])
+    expect(useProjectStore.getState().ui.focusRequestNodeId).toBe(targetId)
+  })
+
+  it('muestra "Sin título" para una diapositiva conectada sin título', () => {
+    act(() => {
+      useProjectStore.getState().createNode('slide', { x: 100, y: 0 })
+    })
+    const targetId = slideNodeId()
+    act(() => {
+      useProjectStore.getState().connect(startNodeId(), targetId)
+      useProjectStore.getState().selectNode(startNodeId())
+    })
+
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    const outgoing = screen.getByText('A dónde lleva esta diapositiva').closest('div') as HTMLElement
+    expect(within(outgoing).getByText(/Sin título/)).toBeInTheDocument()
+  })
+})
+
+describe('Inspector — botón "+ Añadir respuesta" en el flujo del listado (tarea 9)', () => {
+  it('el botón aparece justo después de la última respuesta en el DOM', () => {
+    const decisionId = createSlideWithTwoResponses()
+    act(() => {
+      useProjectStore.getState().selectNode(decisionId)
+    })
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    const responsesList = document.querySelector(`.${styles.responsesList}`) as HTMLElement
+    const children = [...responsesList.children]
+
+    // Los dos últimos elementos del listado son la última fila de respuesta
+    // y, justo después, el botón de añadir — nunca antes.
+    const lastTwo = children.slice(-2)
+    expect(lastTwo[0]?.className).toBe(styles.responseRow)
+    expect(lastTwo[1]?.tagName).toBe('BUTTON')
+    expect(lastTwo[1]?.textContent).toBe('+ Añadir respuesta')
+  })
+
+  it('tras añadir una respuesta más, el botón sigue apareciendo después de la nueva última fila', () => {
+    const decisionId = createSlideWithTwoResponses()
+    act(() => {
+      useProjectStore.getState().selectNode(decisionId)
+    })
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    fireEvent.click(screen.getByRole('button', { name: '+ Añadir respuesta' }))
+
+    expect(screen.getByLabelText('Texto de la respuesta 3')).toBeInTheDocument()
+    const responsesList = document.querySelector(`.${styles.responsesList}`) as HTMLElement
+    const children = [...responsesList.children]
+    const lastTwo = children.slice(-2)
+    expect(lastTwo[0]?.className).toBe(styles.responseRow)
+    expect(lastTwo[1]?.textContent).toBe('+ Añadir respuesta')
+  })
+
+  it('al llegar al máximo de respuestas, el botón desaparece (ya cubierto arriba; se confirma aquí también)', () => {
+    const decisionId = createSlideWithTwoResponses()
+    act(() => {
+      useProjectStore.getState().addResponse(decisionId)
+      useProjectStore.getState().addResponse(decisionId)
+      useProjectStore.getState().selectNode(decisionId)
+    })
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    expect(screen.queryByRole('button', { name: '+ Añadir respuesta' })).not.toBeInTheDocument()
   })
 })

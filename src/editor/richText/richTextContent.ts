@@ -1,4 +1,7 @@
 import type { JSONContent } from '@tiptap/core'
+import type { AnyExtension } from '@tiptap/core'
+import Highlight from '@tiptap/extension-highlight'
+import StarterKit from '@tiptap/starter-kit'
 
 /**
  * Serialización del campo `body` de un nodo (fase 4, Milestone 2).
@@ -16,6 +19,26 @@ import type { JSONContent } from '@tiptap/core'
  * plano histórico" y la envuelve en un documento de un único párrafo — el
  * editor la muestra como contenido normal, nunca como JSON en crudo.
  */
+
+/**
+ * Lista ÚNICA de extensiones Tiptap del `body` de un nodo, compartida por
+ * los cuatro sitios que crean un editor/convierten este documento (fase 8,
+ * marca de resaltado): el editor real (`RichTextEditor`), la vista de solo
+ * lectura del Player (`RichTextView`), el export HTML/SCORM
+ * (`generateHTML` en `src/export/htmlBundle.ts`) y el importador de `.twee`
+ * (`generateJSON` en `src/import/twee/tweeConverter.ts`).
+ *
+ * Centralizada aquí (y no duplicada en cada sitio) porque los cuatro deben
+ * coincidir exactamente: si uno se queda atrás, el resultado visual diverge
+ * (un documento con una marca que un sitio sabe pintar y otro no) o
+ * `generateHTML`/`generateJSON` directamente pierden esa marca al no
+ * reconocerla. `Highlight` se configura con sus opciones por defecto
+ * (`multicolor: false`): una única marca `<mark>` sin atributo de color, con
+ * el color de resaltado fijado por CSS (`--bs-color-highlight` en
+ * `tokens.css`/`exportedStyles.ts`) — no por documento, así que cambiar el
+ * tono de la marca no requiere migrar ningún `body` ya guardado.
+ */
+export const RICH_TEXT_EXTENSIONS: AnyExtension[] = [StarterKit, Highlight]
 
 /** Forma mínima que debe tener un valor para considerarlo un documento
  *  Tiptap ya serializado, en vez de texto plano histórico. */

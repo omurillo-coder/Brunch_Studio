@@ -23,6 +23,22 @@ const SAVE_STATUS_LABEL: Record<SaveStatus, string> = {
   error: 'Error al guardar',
 }
 
+/**
+ * Icono sobrio de "panel lateral" para el botón de mostrar/ocultar el panel
+ * izquierdo (tarea 1): un rectángulo con una franja vertical, evocando un
+ * panel lateral dentro de una ventana — mismo criterio que el resto de
+ * iconos propios de esta app (p.ej. `AutoLayoutIcon` en `Canvas.tsx`): SVG
+ * inline sin depender de ningún set de iconos externo.
+ */
+function SidebarToggleIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+      <rect x="2.5" y="4" width="19" height="16" rx="2" fill="none" stroke="currentColor" strokeWidth="1.5" />
+      <line x1="9.5" y1="4" x2="9.5" y2="20" stroke="currentColor" strokeWidth="1.5" />
+    </svg>
+  )
+}
+
 function isEditableTarget(target: EventTarget | null): boolean {
   return (
     target instanceof HTMLElement &&
@@ -47,6 +63,11 @@ export interface TopbarProps {
    * solo el botón que dispara el callback.
    */
   onCloseProject: () => void
+  /** Estado actual de visibilidad del panel izquierdo (tarea 1); vive en
+   *  `EditorScreen`, no aquí — este componente solo pinta el botón y avisa. */
+  leftPanelVisible: boolean
+  /** Alterna la visibilidad del panel izquierdo. */
+  onToggleLeftPanel: () => void
 }
 
 /**
@@ -60,7 +81,12 @@ export interface TopbarProps {
  * cosas de la interfaz que hablan del documento entero y no de la selección
  * actual.
  */
-export function Topbar({ filePath, onCloseProject }: TopbarProps) {
+export function Topbar({
+  filePath,
+  onCloseProject,
+  leftPanelVisible,
+  onToggleLeftPanel,
+}: TopbarProps) {
   const project = useProject()
   const saveStatus = useProjectStore((state) => state.saveStatus)
   const canUndo = useCanUndo()
@@ -98,6 +124,16 @@ export function Topbar({ filePath, onCloseProject }: TopbarProps) {
   return (
     <header className={styles.bar}>
       <div className={styles.left}>
+        <button
+          type="button"
+          className={styles.iconButton}
+          onClick={onToggleLeftPanel}
+          aria-pressed={leftPanelVisible}
+          aria-label={leftPanelVisible ? 'Ocultar panel izquierdo' : 'Mostrar panel izquierdo'}
+          title={leftPanelVisible ? 'Ocultar panel izquierdo' : 'Mostrar panel izquierdo'}
+        >
+          <SidebarToggleIcon />
+        </button>
         <span className={styles.projectName}>{project.metadata.name}</span>
         <span className={styles.saveStatus}>{SAVE_STATUS_LABEL[saveStatus]}</span>
       </div>

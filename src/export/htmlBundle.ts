@@ -1,8 +1,7 @@
 import { generateHTML } from '@tiptap/core'
-import StarterKit from '@tiptap/starter-kit'
 import { DEFAULT_CONTINUE_LABEL, RESPONSE_LETTERS } from '../domain'
 import type { ProjectDocument } from '../domain'
-import { parseRichBody } from '../editor/richText/richTextContent'
+import { RICH_TEXT_EXTENSIONS, parseRichBody } from '../editor/richText/richTextContent'
 import type { ExportAssetMap } from './exportAssets'
 import {
   BUNDLE_ELEMENT_ID,
@@ -30,9 +29,10 @@ import { EXPORTED_STYLES } from './exportedStyles'
  * Lo que NO viaja al archivo exportado: React, Tiptap y ProseMirror. El
  * `body` de cada nodo (un documento Tiptap serializado) se convierte a HTML
  * aquí, en tiempo de exportación, con `generateHTML` de `@tiptap/core` y las
- * MISMAS extensiones que usan `RichTextEditor`/`RichTextView` (`StarterKit`),
- * así que el resultado visual coincide con lo que se editó — pero el archivo
- * resultante no arrastra un editor entero solo para pintar párrafos y listas.
+ * MISMAS extensiones que usan `RichTextEditor`/`RichTextView`
+ * (`RICH_TEXT_EXTENSIONS`, `richTextContent.ts`), así que el resultado
+ * visual coincide con lo que se editó — pero el archivo resultante no
+ * arrastra un editor entero solo para pintar párrafos y listas.
  */
 
 /** Texto que se muestra en el HTML exportado. Viaja dentro del JSON
@@ -112,22 +112,26 @@ function serializeBundle(bundle: ExportBundle): string {
 }
 
 /**
- * El título de un nodo es solo referencia interna del diseñador
- * instruccional, nunca contenido final: no debe aparecer en ningún punto del
- * HTML/SCORM exportado. `exportedPlayerScript.ts` ya no lo pinta en el DOM
- * (vistas `continue`/`decision`; `final` nunca lo usó, tiene su propio texto
- * fijo "Fin de la experiencia"), pero el `project` completo viaja embebido
- * como JSON en el HTML para que el runtime lo lea — así que, para que el
- * título tampoco quede visible con un simple "ver código fuente", se vacía
- * aquí antes de embeberlo. El runtime exportado no usa `node.title` para
- * nada más, así que esto no cambia ningún comportamiento.
+ * El título de un nodo y su nota interna (`internalNote`) son solo
+ * referencia/recordatorio del diseñador instruccional, nunca contenido
+ * final: no deben aparecer en ningún punto del HTML/SCORM exportado.
+ * `exportedPlayerScript.ts` ya no pinta el título en el DOM (vistas
+ * `continue`/`decision`; `final` nunca lo usó, tiene su propio texto fijo
+ * "Fin de la experiencia") y nunca ha leído `internalNote` para nada, pero el
+ * `project` completo viaja embebido como JSON en el HTML para que el runtime
+ * lo lea — así que, para que ninguno de los dos quede visible con un simple
+ * "ver código fuente", se vacían aquí antes de embeberlo. `internalNote` se
+ * deja en `undefined` (no `''`): al ser un campo opcional, `JSON.stringify`
+ * lo omite por completo del JSON embebido, en vez de dejar una cadena vacía
+ * visible. El runtime exportado no usa ninguno de los dos campos para nada
+ * más, así que esto no cambia ningún comportamiento.
  */
-function stripNodeTitles(project: ProjectDocument): ProjectDocument {
+function stripEditorOnlyFields(project: ProjectDocument): ProjectDocument {
   return {
     ...project,
     graph: {
       ...project.graph,
-      nodes: project.graph.nodes.map((node) => ({ ...node, title: '' })),
+      nodes: project.graph.nodes.map((node) => ({ ...node, title: '', internalNote: undefined })),
     },
   }
 }
@@ -142,7 +146,7 @@ function renderNodeBodies(project: ProjectDocument): Record<string, string> {
   const bodyHtml: Record<string, string> = {}
   for (const node of project.graph.nodes) {
     if (!node.body.trim()) continue
-    bodyHtml[node.id] = generateHTML(parseRichBody(node.body), [StarterKit])
+    bodyHtml[node.id] = generateHTML(parseRichBody(node.body), RICH_TEXT_EXTENSIONS)
   }
   return bodyHtml
 }
@@ -171,7 +175,7 @@ function buildAssetUris(assets: ExportAssetMap): Record<string, string> {
  */
 export function buildHtmlBundle(project: ProjectDocument, assets: ExportAssetMap): string {
   const bundle: ExportBundle = {
-    project: stripNodeTitles(project),
+    project: stripEditorOnlyFields(project),
     bodyHtml: renderNodeBodies(project),
     assetUris: buildAssetUris(assets),
     responseLetters: [...RESPONSE_LETTERS],

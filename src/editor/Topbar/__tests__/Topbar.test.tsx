@@ -49,7 +49,12 @@ function renderTopbar(
   return render(
     <AppServicesProvider services={services}>
       {extra}
-      <Topbar filePath={TEST_FILE_PATH} onCloseProject={onCloseProject} />
+      <Topbar
+        filePath={TEST_FILE_PATH}
+        onCloseProject={onCloseProject}
+        leftPanelVisible
+        onToggleLeftPanel={vi.fn()}
+      />
     </AppServicesProvider>,
   )
 }
@@ -161,6 +166,42 @@ describe('Topbar', () => {
     expect(onCloseProject).not.toHaveBeenCalled()
     fireEvent.click(screen.getByText('Cerrar proyecto'))
     expect(onCloseProject).toHaveBeenCalledTimes(1)
+  })
+
+  it('el botón de panel izquierdo (tarea 1) refleja leftPanelVisible y llama a onToggleLeftPanel', () => {
+    const onToggleLeftPanel = vi.fn()
+    render(
+      <AppServicesProvider services={{}}>
+        <Topbar
+          filePath={TEST_FILE_PATH}
+          onCloseProject={vi.fn()}
+          leftPanelVisible
+          onToggleLeftPanel={onToggleLeftPanel}
+        />
+      </AppServicesProvider>,
+    )
+
+    const button = screen.getByLabelText('Ocultar panel izquierdo')
+    expect(button).toHaveAttribute('aria-pressed', 'true')
+
+    fireEvent.click(button)
+    expect(onToggleLeftPanel).toHaveBeenCalledTimes(1)
+  })
+
+  it('el botón de panel izquierdo muestra "Mostrar" cuando está oculto', () => {
+    render(
+      <AppServicesProvider services={{}}>
+        <Topbar
+          filePath={TEST_FILE_PATH}
+          onCloseProject={vi.fn()}
+          leftPanelVisible={false}
+          onToggleLeftPanel={vi.fn()}
+        />
+      </AppServicesProvider>,
+    )
+
+    const button = screen.getByLabelText('Mostrar panel izquierdo')
+    expect(button).toHaveAttribute('aria-pressed', 'false')
   })
 
   it('"Nueva ventana" abre una WebviewWindow con label único y la misma URL raíz', () => {
@@ -302,13 +343,13 @@ describe('Topbar — Exportar SCORM', () => {
 
   it('un asset que falla no rompe la exportación (mensaje honesto, pero éxito)', async () => {
     const scormPackageWriter = new MemoryScormPackageWriter()
-    // El proyecto de partida referencia un `imageAssetId` que el
+    // El proyecto de partida referencia una imagen (`imageAssetIds`) que el
     // repositorio de assets NO tiene: `resolveExportAssets` lo cuenta como
     // fallido (ver `exportAssets.test.ts`) en vez de abortar toda la
     // exportación.
     act(() => {
       const startNodeId = useProjectStore.getState().project.graph.startNodeId
-      useProjectStore.getState().updateNode(startNodeId, { imageAssetId: 'asset-inexistente' })
+      useProjectStore.getState().updateNode(startNodeId, { imageAssetIds: ['asset-inexistente'] })
     })
     renderTopbar({
       pickExportScormPath: async () => '/tmp/experiencia.zip',

@@ -34,3 +34,5 @@ export const useFocusRequestNodeId = () => useProjectStore((state) => state.ui.f
 
 export const useTitleFocusRequestNodeId = () =>
   useProjectStore((state) => state.ui.titleFocusRequestNodeId)
+
+export const useViewportCenter = () => useProjectStore((state) => state.ui.viewportCenter)

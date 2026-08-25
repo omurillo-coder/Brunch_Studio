@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { addResponse, connect, createNode, createProject, disconnect } from '../../../domain'
+import { addResponse, connect, createNode, createProject, disconnect, updateNode } from '../../../domain'
 import type { ProjectDocument } from '../../../domain'
+import { serializeRichBody } from '../../richText/richTextContent'
 import { resolveConnection, toFlowEdges, toFlowNodes } from '../adapter'
 import { BRUNCH_EDGE_TYPE } from '../edges/edgeTypes'
 import { IN_HANDLE_ID, OUT_HANDLE_ID, responseHandleId } from '../handles'
@@ -212,6 +213,68 @@ describe('toFlowNodes — resaltado por selección (punto 4)', () => {
     // Nodo no relacionado: atenuado, no resaltado.
     expect(unrelated?.data.isHighlighted).toBe(false)
     expect(unrelated?.data.isDimmed).toBe(true)
+  })
+})
+
+describe('toFlowNodes — internalNote (tarea 6) y bodyPreview (tarea 8)', () => {
+  it('internalNote es undefined cuando el nodo no tiene ninguna', () => {
+    const project = createProject('P')
+    const flowNodes = toFlowNodes(project, [])
+    expect(flowNodes[0]?.data.internalNote).toBeUndefined()
+  })
+
+  it('internalNote lleva el texto recortado cuando el nodo tiene una nota con contenido', () => {
+    let project = createProject('P')
+    const startId = project.graph.startNodeId
+    project = updateNode(project, startId, { internalNote: '  Pedir gráfico  ' })
+
+    const flowNodes = toFlowNodes(project, [])
+    expect(flowNodes[0]?.data.internalNote).toBe('Pedir gráfico')
+  })
+
+  it('internalNote es undefined cuando la nota es solo espacios en blanco', () => {
+    let project = createProject('P')
+    const startId = project.graph.startNodeId
+    project = updateNode(project, startId, { internalNote: '   ' })
+
+    const flowNodes = toFlowNodes(project, [])
+    expect(flowNodes[0]?.data.internalNote).toBeUndefined()
+  })
+
+  it('bodyPreview es undefined cuando el nodo no tiene contenido', () => {
+    const project = createProject('P')
+    const flowNodes = toFlowNodes(project, [])
+    expect(flowNodes[0]?.data.bodyPreview).toBeUndefined()
+  })
+
+  it('bodyPreview extrae el texto plano del body (Tiptap), no el JSON en crudo', () => {
+    let project = createProject('P')
+    const startId = project.graph.startNodeId
+    const body = serializeRichBody({
+      type: 'doc',
+      content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Bienvenido al escenario' }] }],
+    })
+    project = updateNode(project, startId, { body })
+
+    const flowNodes = toFlowNodes(project, [])
+    expect(flowNodes[0]?.data.bodyPreview).toBe('Bienvenido al escenario')
+    expect(flowNodes[0]?.data.bodyPreview).not.toMatch(/[{}]/)
+  })
+
+  it('bodyPreview se trunca con "…" cuando el texto supera el máximo', () => {
+    let project = createProject('P')
+    const startId = project.graph.startNodeId
+    const longText = 'x'.repeat(200)
+    const body = serializeRichBody({
+      type: 'doc',
+      content: [{ type: 'paragraph', content: [{ type: 'text', text: longText }] }],
+    })
+    project = updateNode(project, startId, { body })
+
+    const flowNodes = toFlowNodes(project, [])
+    const preview = flowNodes[0]?.data.bodyPreview
+    expect(preview?.endsWith('…')).toBe(true)
+    expect(preview?.length).toBeLessThan(longText.length)
   })
 })
 

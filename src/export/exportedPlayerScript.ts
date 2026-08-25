@@ -348,16 +348,35 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
     }
   }
 
-  function appendMedia(container, owner, sectionClass, imageAlt) {
-    var imageUri = owner.imageAssetId ? assetUris[owner.imageAssetId] : null;
-    var audioUri = owner.audioAssetId ? assetUris[owner.audioAssetId] : null;
-    if (!imageUri && !audioUri) {
+  /** Resuelve una lista de assetId de imagen a sus \`data:\` URI ya
+   *  embebidos, descartando (sin romper nada) los que no se pudieron leer
+   *  en tiempo de exportación. */
+  function resolveImageUris(imageAssetIds) {
+    var ids = imageAssetIds || [];
+    var uris = [];
+    for (var i = 0; i < ids.length; i += 1) {
+      var uri = assetUris[ids[i]];
+      if (uri) {
+        uris.push(uri);
+      }
+    }
+    return uris;
+  }
+
+  /** Pinta, si hay algo que pintar, un bloque con TODAS las imágenes
+   *  (apiladas en columna, en el orden de \`imageUris\`, a ancho completo —
+   *  ver \`.mediaSection\`/\`.media\` en exportedStyles.ts) seguido del audio,
+   *  si lo hay. \`imageUris\` ya viene resuelto (ver \`resolveImageUris\`), así
+   *  que sirve tanto para las varias imágenes de un nodo como para la única
+   *  imagen (0 o 1 elemento) de una respuesta. */
+  function appendMedia(container, imageUris, audioUri, sectionClass, imageAlt) {
+    if (imageUris.length === 0 && !audioUri) {
       return;
     }
     var section = el('div', sectionClass);
-    if (imageUri) {
+    for (var i = 0; i < imageUris.length; i += 1) {
       var image = el('img', 'media');
-      image.src = imageUri;
+      image.src = imageUris[i];
       image.alt = imageAlt;
       section.appendChild(image);
     }
@@ -368,6 +387,33 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
       section.appendChild(audio);
     }
     container.appendChild(section);
+  }
+
+  /** \`data:\` URI del audio adjunto de \`owner\` (nodo o respuesta), o \`null\`
+   *  si no tiene o no se pudo leer. */
+  function resolveAudioUri(owner) {
+    return owner.audioAssetId ? assetUris[owner.audioAssetId] || null : null;
+  }
+
+  /** Pinta el cuerpo de texto y el bloque de medios de una diapositiva
+   *  ('continue'/'decision') en el orden que indique \`node.contentOrder\`
+   *  ('text-first', el de siempre, o 'image-first'). */
+  function appendBodyAndMedia(card, node, fallback) {
+    var imageUris = resolveImageUris(node.imageAssetIds);
+    var audioUri = resolveAudioUri(node);
+    var paintBody = function () {
+      appendBody(card, node, fallback);
+    };
+    var paintMedia = function () {
+      appendMedia(card, imageUris, audioUri, 'mediaSection', texts.nodeImageAlt);
+    };
+    if (node.contentOrder === 'image-first') {
+      paintMedia();
+      paintBody();
+    } else {
+      paintBody();
+      paintMedia();
+    }
   }
 
   function buildOption(response, index) {
@@ -389,7 +435,16 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
     });
     wrapper.appendChild(button);
 
-    appendMedia(wrapper, response, 'optionMedia', texts.responseImageAlt + index);
+    var responseImageUris = response.imageAssetId
+      ? resolveImageUris([response.imageAssetId])
+      : [];
+    appendMedia(
+      wrapper,
+      responseImageUris,
+      resolveAudioUri(response),
+      'optionMedia',
+      texts.responseImageAlt + index,
+    );
 
     return wrapper;
   }
@@ -401,9 +456,9 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
       // El título del nodo es solo referencia interna del diseñador
       // instruccional: nunca se pinta en el HTML/SCORM exportado (sí se ve,
       // en gris claro, dentro del Player de prueba de la app; ver
-      // PlayerScreen.tsx).
-      appendBody(card, view.node, texts.emptySlideBody);
-      appendMedia(card, view.node, 'mediaSection', texts.nodeImageAlt);
+      // PlayerScreen.tsx). El cuerpo y las imágenes se pintan en el orden de
+      // node.contentOrder.
+      appendBodyAndMedia(card, view.node, texts.emptySlideBody);
       var continueButton = el('button', 'primaryButton');
       continueButton.type = 'button';
       continueButton.textContent =
@@ -417,8 +472,7 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
 
     if (view.kind === 'decision') {
       // Mismo criterio que en 'continue': el título del nodo no se pinta.
-      appendBody(card, view.node, null);
-      appendMedia(card, view.node, 'mediaSection', texts.nodeImageAlt);
+      appendBodyAndMedia(card, view.node, null);
       var options = el('div', 'options');
       var sorted = sortByLetter(view.node.responses || []);
       for (var i = 0; i < sorted.length; i += 1) {

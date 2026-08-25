@@ -8,6 +8,7 @@ import type { ProjectRepository } from '../../../persistence'
 import { createProject, deriveEdges } from '../../../domain'
 import { useProjectStore } from '../../../store'
 import { resetProjectStore } from '../../../store/testHelpers'
+import { MemoryAssetRepository } from '../../../persistence'
 
 /**
  * Tests de `useAutosave` (fase 9): autoguardado real con debounce, guardado
@@ -193,6 +194,47 @@ describe('useAutosave — debounce y guardado', () => {
 
     expect(repository.saveProject).toHaveBeenCalledTimes(2)
     expect(useProjectStore.getState().saveStatus).toBe('saved')
+  })
+})
+
+describe('useAutosave — recolección de basura de imágenes (tarea 5: array imageAssetIds)', () => {
+  it('una imagen quitada del array se recolecta; la que sigue en el array sobrevive', async () => {
+    const repository = createStubRepository()
+    const assetRepository = new MemoryAssetRepository()
+    assetRepository.registerSourceFile('/tmp/a.png', new Uint8Array([1]), 'image/png')
+    assetRepository.registerSourceFile('/tmp/b.png', new Uint8Array([2]), 'image/png')
+    const keepId = (await assetRepository.importAsset('/tmp/p.brunch', '/tmp/a.png')).id
+    const removedId = (await assetRepository.importAsset('/tmp/p.brunch', '/tmp/b.png')).id
+
+    render(
+      <AppServicesProvider services={{ repository, assetRepository }}>
+        <Harness filePath="/tmp/autosave-test.brunch" />
+      </AppServicesProvider>,
+    )
+
+    const startId = useProjectStore.getState().project.graph.startNodeId
+    act(() => {
+      useProjectStore.getState().updateNode(startId, { imageAssetIds: [keepId, removedId] })
+    })
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AUTOSAVE_DEBOUNCE_MS)
+    })
+
+    // Todavía referenciadas ambas: ninguna se recolecta en este primer guardado.
+    await expect(assetRepository.getAsset('/tmp/p.brunch', keepId)).resolves.toBeDefined()
+    await expect(assetRepository.getAsset('/tmp/p.brunch', removedId)).resolves.toBeDefined()
+
+    // Se quita `removedId` del array (queda solo `keepId`) y se guarda de nuevo.
+    act(() => {
+      useProjectStore.getState().updateNode(startId, { imageAssetIds: [keepId] })
+    })
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AUTOSAVE_DEBOUNCE_MS)
+    })
+
+    // La que sigue en el array sobrevive; la quitada se recolecta.
+    await expect(assetRepository.getAsset('/tmp/p.brunch', keepId)).resolves.toBeDefined()
+    await expect(assetRepository.getAsset('/tmp/p.brunch', removedId)).rejects.toThrow()
   })
 })
 

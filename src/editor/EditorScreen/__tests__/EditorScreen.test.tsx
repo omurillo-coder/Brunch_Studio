@@ -102,6 +102,34 @@ describe('EditorScreen — conmutación shell/Player (previewMode)', () => {
  * simulados, igual que `useAutosave.test.tsx`, para poder situarse a mitad
  * del debounce sin esperar de verdad.
  */
+describe('EditorScreen — panel izquierdo ocultable (tarea 1)', () => {
+  beforeEach(() => {
+    window.localStorage.clear()
+  })
+
+  it('visible por defecto; el botón lo oculta y el botón vuelve a mostrarlo', () => {
+    renderEditorScreen()
+
+    expect(screen.getByLabelText('Buscar en el proyecto')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByLabelText('Ocultar panel izquierdo'))
+    expect(screen.queryByLabelText('Buscar en el proyecto')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByLabelText('Mostrar panel izquierdo'))
+    expect(screen.getByLabelText('Buscar en el proyecto')).toBeInTheDocument()
+  })
+
+  it('persiste la preferencia en localStorage entre montajes', () => {
+    const { unmount } = renderEditorScreen()
+    fireEvent.click(screen.getByLabelText('Ocultar panel izquierdo'))
+    unmount()
+
+    renderEditorScreen()
+    expect(screen.queryByLabelText('Buscar en el proyecto')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Mostrar panel izquierdo')).toBeInTheDocument()
+  })
+})
+
 describe('EditorScreen — "Cerrar proyecto"', () => {
   beforeEach(() => {
     vi.useFakeTimers()

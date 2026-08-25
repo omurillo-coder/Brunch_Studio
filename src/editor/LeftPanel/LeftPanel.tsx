@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { useProject, useProjectStore } from '../../store'
+import { useProject, useProjectStore, useViewportCenter } from '../../store'
 import type { Node, NodePosition, NodeType } from '../../domain'
 import { NODE_TYPE_LABEL, START_NODE_LABEL } from '../Canvas/nodes/nodeTypes'
 import { extractPlainText, parseRichBody } from '../richText/richTextContent'
@@ -14,10 +14,15 @@ import styles from './LeftPanel.module.css'
 const CREATABLE_TYPES: NodeType[] = ['slide', 'final']
 
 /**
- * Heurística de posición para nodos creados desde este panel: cascadeo en
- * una cuadrícula de 5 columnas, origen en (80, 80), separación de 220px en
- * horizontal y 160px en vertical. No pretende ser un layout definitivo,
- * solo evitar que los nodos nuevos se apilen exactamente unos sobre otros.
+ * Heurística de posición de RESPALDO para nodos creados desde este panel,
+ * usada únicamente mientras `Canvas` todavía no ha publicado ningún centro
+ * visible (`ui.viewportCenter`, ver store) — no debería ocurrir en la app
+ * real (`Canvas` siempre está montado junto a este panel), pero cubre el
+ * instante antes de su primer cálculo y cualquier test que renderice
+ * `LeftPanel` sin `Canvas`. Cascadeo en una cuadrícula de 5 columnas, origen
+ * en (80, 80), separación de 220px en horizontal y 160px en vertical: no
+ * pretende ser un layout definitivo, solo evitar que los nodos nuevos se
+ * apilen exactamente unos sobre otros.
  */
 function nextCascadePosition(existingNodeCount: number): NodePosition {
   const columns = 5
@@ -60,6 +65,7 @@ export function LeftPanel() {
   const createNode = useProjectStore((state) => state.createNode)
   const selectNode = useProjectStore((state) => state.selectNode)
   const focusNode = useProjectStore((state) => state.focusNode)
+  const viewportCenter = useViewportCenter()
 
   const [searchQuery, setSearchQuery] = useState('')
   const normalizedQuery = searchQuery.trim().toLowerCase()
@@ -75,7 +81,11 @@ export function LeftPanel() {
   }, [project.graph.nodes, normalizedQuery])
 
   function handleCreate(type: NodeType) {
-    const position = nextCascadePosition(project.graph.nodes.length)
+    // Tarea 4: la diapositiva nueva nace centrada en la parte visible del
+    // lienzo (`ui.viewportCenter`, publicado por `Canvas`), en vez de en una
+    // posición fija o en cascada — con la cascada como respaldo si ese
+    // centro todavía no se ha calculado (ver `nextCascadePosition`).
+    const position = viewportCenter ?? nextCascadePosition(project.graph.nodes.length)
     createNode(type, position)
 
     // `createNode` no devuelve el nodo creado; como los números visibles

@@ -119,6 +119,29 @@
   font-weight: 600;
 }
 
+/* Icono de pin discreto (tarea 6): nota interna con contenido. Tamaño
+   pequeño para no competir visualmente con el título. */
+.pinBadge {
+  flex: 0 0 auto;
+  font-size: 11px;
+  line-height: 1;
+  cursor: default;
+}
+
+/* Fragmento corto de contenido (tarea 8), más discreto que el título:
+   tamaño menor y color apagado. Truncado a 2 líneas con elipsis para que un
+   fragmento largo nunca rompa el ancho compacto de la tarjeta. */
+.bodyPreview {
+  padding: 0 var(--bs-space-3) var(--bs-space-2);
+  font-size: 10.5px;
+  line-height: 1.35;
+  color: var(--bs-color-text-faint);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
 .body {
   padding: var(--bs-space-2) var(--bs-space-3);
 }

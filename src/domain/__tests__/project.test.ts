@@ -50,6 +50,14 @@ describe('createProject', () => {
     expect(start?.type === 'slide' ? start.targetNodeId : 'missing').toBeUndefined()
     expect(start?.type === 'slide' ? start.continueLabel : 'missing').toBeUndefined()
   })
+
+  it('la diapositiva de inicio nace sin imágenes y con contentOrder "text-first"', () => {
+    const project = createProject('P')
+    const start = project.graph.nodes[0]
+    expect(start?.type === 'slide' ? start.imageAssetIds : undefined).toEqual([])
+    expect(start?.type === 'slide' ? start.contentOrder : undefined).toBe('text-first')
+    expect(start?.internalNote).toBeUndefined()
+  })
 })
 
 describe('createNode', () => {
@@ -194,38 +202,80 @@ describe('updateNode', () => {
   const IMAGE_ID = '11111111-1111-1111-1111-111111111111'
   const AUDIO_ID = '22222222-2222-2222-2222-222222222222'
 
-  it('fija imagen y audio en una diapositiva', () => {
+  it('fija imágenes y audio en una diapositiva', () => {
     const project = createProject('P')
     const startId = project.graph.startNodeId
 
     const updated = updateNode(project, startId, {
-      imageAssetId: IMAGE_ID,
+      imageAssetIds: [IMAGE_ID],
       audioAssetId: AUDIO_ID,
     })
     const node = updated.graph.nodes.find((n) => n.id === startId)
-    expect(node?.type === 'slide' ? node.imageAssetId : undefined).toBe(IMAGE_ID)
+    expect(node?.type === 'slide' ? node.imageAssetIds : undefined).toEqual([IMAGE_ID])
     expect(node?.type === 'slide' ? node.audioAssetId : undefined).toBe(AUDIO_ID)
   })
 
-  it('borra imagen y audio con null tras haberlos fijado', () => {
+  it('imageAssetIds reemplaza la lista completa (no es un patch incremental)', () => {
+    const OTHER_IMAGE_ID = '33333333-3333-3333-3333-333333333333'
     let project = createProject('P')
     const startId = project.graph.startNodeId
 
-    project = updateNode(project, startId, { imageAssetId: IMAGE_ID, audioAssetId: AUDIO_ID })
-    const updated = updateNode(project, startId, { imageAssetId: null, audioAssetId: null })
+    project = updateNode(project, startId, { imageAssetIds: [IMAGE_ID, OTHER_IMAGE_ID] })
+    let node = project.graph.nodes.find((n) => n.id === startId)
+    expect(node?.type === 'slide' ? node.imageAssetIds : undefined).toEqual([IMAGE_ID, OTHER_IMAGE_ID])
+
+    // Reordenar/quitar se hace pasando la lista ya modificada completa.
+    project = updateNode(project, startId, { imageAssetIds: [OTHER_IMAGE_ID] })
+    node = project.graph.nodes.find((n) => n.id === startId)
+    expect(node?.type === 'slide' ? node.imageAssetIds : undefined).toEqual([OTHER_IMAGE_ID])
+
+    // Vaciar la lista es un `imageAssetIds: []` explícito.
+    project = updateNode(project, startId, { imageAssetIds: [] })
+    node = project.graph.nodes.find((n) => n.id === startId)
+    expect(node?.type === 'slide' ? node.imageAssetIds : undefined).toEqual([])
+  })
+
+  it('borra audio con null tras haberlo fijado', () => {
+    let project = createProject('P')
+    const startId = project.graph.startNodeId
+
+    project = updateNode(project, startId, { imageAssetIds: [IMAGE_ID], audioAssetId: AUDIO_ID })
+    const updated = updateNode(project, startId, { audioAssetId: null })
     const node = updated.graph.nodes.find((n) => n.id === startId)
-    expect(node?.type === 'slide' ? node.imageAssetId : 'missing').toBeUndefined()
+    expect(node?.type === 'slide' ? node.imageAssetIds : 'missing').toEqual([IMAGE_ID])
     expect(node?.type === 'slide' ? node.audioAssetId : 'missing').toBeUndefined()
   })
 
-  it('no toca imagen/audio si el patch no los incluye (undefined)', () => {
+  it('no toca imágenes/audio si el patch no los incluye (undefined)', () => {
     let project = createProject('P')
     const startId = project.graph.startNodeId
 
-    project = updateNode(project, startId, { imageAssetId: IMAGE_ID })
+    project = updateNode(project, startId, { imageAssetIds: [IMAGE_ID] })
     const updated = updateNode(project, startId, { title: 'otro título' })
     const node = updated.graph.nodes.find((n) => n.id === startId)
-    expect(node?.type === 'slide' ? node.imageAssetId : undefined).toBe(IMAGE_ID)
+    expect(node?.type === 'slide' ? node.imageAssetIds : undefined).toEqual([IMAGE_ID])
+  })
+
+  it('fija y borra la nota interna (internalNote), disponible también en un nodo final', () => {
+    let project = createNode(createProject('P'), 'final', { x: 0, y: 0 })
+    const finalId = otherNodeIdOf(project, 'final')
+
+    project = updateNode(project, finalId, { internalNote: 'Pedir gráfico a diseño' })
+    let node = project.graph.nodes.find((n) => n.id === finalId)
+    expect(node?.internalNote).toBe('Pedir gráfico a diseño')
+
+    project = updateNode(project, finalId, { internalNote: null })
+    node = project.graph.nodes.find((n) => n.id === finalId)
+    expect(node?.internalNote).toBeUndefined()
+  })
+
+  it('fija el orden de contenido (contentOrder) de una diapositiva', () => {
+    let project = createProject('P')
+    const startId = project.graph.startNodeId
+
+    project = updateNode(project, startId, { contentOrder: 'image-first' })
+    const node = project.graph.nodes.find((n) => n.id === startId)
+    expect(node?.type === 'slide' ? node.contentOrder : undefined).toBe('image-first')
   })
 
   it('fija, cambia y borra el texto del botón de continuar', () => {
@@ -247,13 +297,21 @@ describe('updateNode', () => {
     expect(node?.type === 'slide' ? node.continueLabel : 'missing').toBeUndefined()
   })
 
-  it('lanza error al fijar imagen/audio/texto de continuar en un nodo final', () => {
+  it('lanza error al fijar imagen/audio/texto de continuar/orden de contenido en un nodo final', () => {
     const project = createNode(createProject('P'), 'final', { x: 0, y: 0 })
     const finalId = otherNodeIdOf(project, 'final')
 
-    expect(() => updateNode(project, finalId, { imageAssetId: IMAGE_ID })).toThrow()
+    expect(() => updateNode(project, finalId, { imageAssetIds: [IMAGE_ID] })).toThrow()
     expect(() => updateNode(project, finalId, { audioAssetId: null })).toThrow()
     expect(() => updateNode(project, finalId, { continueLabel: 'Otra cosa' })).toThrow()
+    expect(() => updateNode(project, finalId, { contentOrder: 'image-first' })).toThrow()
+  })
+
+  it('no lanza al fijar internalNote en un nodo final (es válido en cualquier tipo)', () => {
+    const project = createNode(createProject('P'), 'final', { x: 0, y: 0 })
+    const finalId = otherNodeIdOf(project, 'final')
+
+    expect(() => updateNode(project, finalId, { internalNote: 'nota' })).not.toThrow()
   })
 })
 

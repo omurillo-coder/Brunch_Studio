@@ -236,6 +236,10 @@ export interface ProjectStoreActions {
   // -- Foco de título del Inspector (transitorio; ver
   // -- `UiState.titleFocusRequestNodeId`) --
   clearTitleFocusRequest: () => void
+
+  // -- Centro visible del lienzo (transitorio; ver
+  // -- `UiState.viewportCenter`), tarea 4 --
+  setViewportCenter: (position: NodePosition | null) => void
 }
 
 export type ProjectStoreState = ProjectStoreData & ProjectStoreActions
@@ -258,6 +262,7 @@ export function createInitialState(): ProjectStoreData {
       previewMode: false,
       focusRequestNodeId: null,
       titleFocusRequestNodeId: null,
+      viewportCenter: null,
     },
     saveStatus: 'idle',
     history: { past: [], future: [] },
@@ -492,6 +497,7 @@ export const useProjectStore = create<ProjectStoreState>()(
           previewMode: false,
           focusRequestNodeId: null,
           titleFocusRequestNodeId: null,
+          viewportCenter: null,
         }
         state.saveStatus = 'idle'
         state.drag = null
@@ -577,6 +583,12 @@ export const useProjectStore = create<ProjectStoreState>()(
     clearTitleFocusRequest: () => {
       set((state) => {
         state.ui.titleFocusRequestNodeId = null
+      })
+    },
+
+    setViewportCenter: (position) => {
+      set((state) => {
+        state.ui.viewportCenter = position
       })
     },
   })),

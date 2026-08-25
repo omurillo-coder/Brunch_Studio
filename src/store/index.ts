@@ -20,5 +20,6 @@ export {
   useContextMenu,
   useFocusRequestNodeId,
   useTitleFocusRequestNodeId,
+  useViewportCenter,
 } from './selectors'
 export { resetProjectStore } from './testHelpers'

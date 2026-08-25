@@ -1,9 +1,11 @@
+import { useEffect, useState } from 'react'
 import { Topbar } from '../Topbar/Topbar'
 import { LeftPanel } from '../LeftPanel/LeftPanel'
 import { Inspector } from '../Inspector/Inspector'
 import { Canvas } from '../Canvas/Canvas'
 import { PlayerScreen } from '../../player/PlayerScreen'
 import { usePreviewMode } from '../../store'
+import { loadLeftPanelVisible, saveLeftPanelVisible } from '../uiPreferences'
 import { useAutosave } from './useAutosave'
 import styles from './EditorScreen.module.css'
 
@@ -48,10 +50,23 @@ export interface EditorScreenProps {
  * el efecto de autoguardado limpia su temporizador pendiente (`clearTimeout`
  * en el cleanup) en vez de dejarlo completarse, así que hay que adelantar esa
  * escritura explícitamente antes de desmontar.
+ *
+ * Panel izquierdo ocultable (tarea 1): `leftPanelVisible` es un estado local
+ * de este componente (no del store de dominio ni del documento `.brunch` —
+ * es preferencia de la app, no del proyecto), inicializado con el valor
+ * guardado en `localStorage` y persistido de nuevo cada vez que cambia. Al
+ * ocultarse, `LeftPanel` simplemente no se monta: `Canvas` (`flex: 1 1 auto`
+ * en `EditorScreen.module.css`) ocupa el espacio liberado sin más cambios de
+ * layout.
  */
 export function EditorScreen({ filePath, onCloseProject }: EditorScreenProps) {
   const previewMode = usePreviewMode()
   const { flushPendingSave } = useAutosave(filePath)
+  const [leftPanelVisible, setLeftPanelVisible] = useState(() => loadLeftPanelVisible())
+
+  useEffect(() => {
+    saveLeftPanelVisible(leftPanelVisible)
+  }, [leftPanelVisible])
 
   async function handleCloseProject() {
     await flushPendingSave()
@@ -64,9 +79,14 @@ export function EditorScreen({ filePath, onCloseProject }: EditorScreenProps) {
 
   return (
     <div className={styles.screen}>
-      <Topbar filePath={filePath} onCloseProject={() => void handleCloseProject()} />
+      <Topbar
+        filePath={filePath}
+        onCloseProject={() => void handleCloseProject()}
+        leftPanelVisible={leftPanelVisible}
+        onToggleLeftPanel={() => setLeftPanelVisible((visible) => !visible)}
+      />
       <div className={styles.body}>
-        <LeftPanel />
+        {leftPanelVisible && <LeftPanel />}
         <Canvas />
         <Inspector filePath={filePath} />
       </div>

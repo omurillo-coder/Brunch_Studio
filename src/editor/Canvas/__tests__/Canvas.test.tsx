@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { Canvas } from '../Canvas'
 import { useProjectStore } from '../../../store'
 import { resetProjectStore } from '../../../store/testHelpers'
+import { serializeRichBody } from '../../richText/richTextContent'
 
 /**
  * Montaje real de `@xyflow/react` (sin mockear), apoyado en los polyfills
@@ -72,6 +73,44 @@ describe('Canvas (montaje real de @xyflow/react)', () => {
     render(<Canvas />)
 
     expect(await screen.findByText('Sin texto')).toBeInTheDocument()
+  })
+})
+
+describe('Canvas — pin de nota interna (tarea 6) y fragmento de contenido (tarea 8)', () => {
+  it('sin nota interna, no muestra el icono de pin', async () => {
+    render(<Canvas />)
+    expect(await screen.findByText('Diapositiva')).toBeInTheDocument()
+    expect(screen.queryByLabelText(/Nota interna/)).not.toBeInTheDocument()
+  })
+
+  it('con una nota interna, muestra el icono de pin con el texto de la nota como tooltip', async () => {
+    const startId = useProjectStore.getState().project.graph.startNodeId
+    useProjectStore.getState().updateNode(startId, { internalNote: 'Pedir gráfico a diseño' })
+
+    render(<Canvas />)
+
+    const pin = await screen.findByLabelText('Nota interna: Pedir gráfico a diseño')
+    expect(pin).toBeInTheDocument()
+    expect(pin).toHaveAttribute('title', 'Nota interna: Pedir gráfico a diseño')
+  })
+
+  it('sin contenido, la tarjeta no muestra ningún fragmento de cuerpo', async () => {
+    render(<Canvas />)
+    expect(await screen.findByText('Diapositiva')).toBeInTheDocument()
+    expect(screen.queryByText(/./, { selector: '[class*="bodyPreview"]' })).not.toBeInTheDocument()
+  })
+
+  it('con contenido, la tarjeta muestra un fragmento de texto plano del body', async () => {
+    const startId = useProjectStore.getState().project.graph.startNodeId
+    const body = serializeRichBody({
+      type: 'doc',
+      content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Bienvenido al escenario' }] }],
+    })
+    useProjectStore.getState().updateNode(startId, { body })
+
+    render(<Canvas />)
+
+    expect(await screen.findByText('Bienvenido al escenario')).toBeInTheDocument()
   })
 })
 

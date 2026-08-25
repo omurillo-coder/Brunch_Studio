@@ -1,6 +1,5 @@
 import { EditorContent, useEditor } from '@tiptap/react'
-import StarterKit from '@tiptap/starter-kit'
-import { parseRichBody } from './richTextContent'
+import { RICH_TEXT_EXTENSIONS, parseRichBody } from './richTextContent'
 import styles from './RichTextView.module.css'
 
 export interface RichTextViewProps {
@@ -13,10 +12,11 @@ export interface RichTextViewProps {
 
 /**
  * Renderiza el `body` de un nodo en modo estrictamente solo lectura
- * (`PlayerScreen`, fase 5 del Milestone 2): mismo motor (Tiptap +
- * `StarterKit`) que `RichTextEditor` del Inspector, para garantizar que el
- * resultado visual es idéntico al que se editó allí — sin reimplementar un
- * renderizador de JSON a mano ni recurrir a `dangerouslySetInnerHTML`.
+ * (`PlayerScreen`, fase 5 del Milestone 2): mismas extensiones Tiptap
+ * (`RICH_TEXT_EXTENSIONS`, `richTextContent.ts`) que `RichTextEditor` del
+ * Inspector, para garantizar que el resultado visual es idéntico al que se
+ * editó allí — sin reimplementar un renderizador de JSON a mano ni recurrir
+ * a `dangerouslySetInnerHTML`.
  *
  * `editable: false` y sin ningún callback de escritura (`onUpdate`/`onBlur`,
  * que ni siquiera se pasan a `useEditor`): no existe ninguna vía por la que
@@ -35,7 +35,7 @@ export interface RichTextViewProps {
  */
 export function RichTextView({ body, className }: RichTextViewProps) {
   const editor = useEditor({
-    extensions: [StarterKit],
+    extensions: RICH_TEXT_EXTENSIONS,
     content: parseRichBody(body),
     editable: false,
   })

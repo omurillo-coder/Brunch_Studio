@@ -98,19 +98,19 @@ describe('acciones de dominio: una entrada de historial por acción', () => {
     expect(redone?.title).toBe('Inicio')
   })
 
-  it('updateNode propaga imageAssetId/audioAssetId de una diapositiva (fijar y borrar con null)', () => {
+  it('updateNode propaga imageAssetIds/audioAssetId de una diapositiva (fijar y vaciar)', () => {
     useProjectStore.getState().createNode('slide', { x: 0, y: 0 })
     const slideId = nodeIdOf('slide')
 
     useProjectStore.getState().updateNode(slideId, {
-      imageAssetId: 'asset-imagen-1',
+      imageAssetIds: ['asset-imagen-1'],
       audioAssetId: 'asset-audio-1',
     })
-    expect(slideNode(slideId).imageAssetId).toBe('asset-imagen-1')
+    expect(slideNode(slideId).imageAssetIds).toEqual(['asset-imagen-1'])
     expect(slideNode(slideId).audioAssetId).toBe('asset-audio-1')
 
-    useProjectStore.getState().updateNode(slideId, { imageAssetId: null })
-    expect(slideNode(slideId).imageAssetId).toBeUndefined()
+    useProjectStore.getState().updateNode(slideId, { imageAssetIds: [] })
+    expect(slideNode(slideId).imageAssetIds).toEqual([])
     expect(slideNode(slideId).audioAssetId).toBe('asset-audio-1')
   })
 

@@ -48,6 +48,18 @@ export interface UiState {
    * debe robar el foco del usuario, solo este flujo concreto debe hacerlo.
    */
   titleFocusRequestNodeId: string | null
+  /**
+   * Punto (en coordenadas de lienzo) del centro de la parte VISIBLE del
+   * lienzo en este momento, mantenido por `Canvas` (única pieza que conoce
+   * la instancia de `@xyflow/react` y el tamaño real del contenedor) y
+   * consumido por `LeftPanel` al crear un nodo nuevo desde "+ Diapositiva"/
+   * "+ Final" (tarea 4), para que nazca centrado en lo que el usuario tiene
+   * delante en vez de en una posición fija o en cascada. `null` mientras
+   * `Canvas` todavía no ha calculado ninguno (p.ej. antes de montarse, o en
+   * un test que renderiza `LeftPanel` sin `Canvas`); en ese caso quien
+   * consume este campo debe usar un valor de repuesto razonable.
+   */
+  viewportCenter: NodePosition | null
 }
 
 /**

@@ -72,3 +72,10 @@
   margin: 0 0 var(--bs-space-2);
   padding-left: var(--bs-space-4);
 }
+
+.editorContent :global(.tiptap mark) {
+  background: var(--bs-color-highlight);
+  color: inherit;
+  border-radius: var(--bs-radius-sm);
+  padding: 0 1px;
+}

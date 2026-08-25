@@ -36,6 +36,9 @@ export const EXPORTED_STYLES = `
   --bs-color-danger-hover: #a32230;
   --bs-color-danger-contrast: #ffffff;
   --bs-color-focus-ring: rgba(0, 174, 199, 0.45);
+  /* Destacado del texto enriquecido (marca highlight de Tiptap, fase 8),
+     mismo valor que --bs-color-highlight en tokens.css. */
+  --bs-color-highlight: #ffe066;
 
   --bs-space-1: 4px;
   --bs-space-2: 8px;
@@ -72,6 +75,7 @@ export const EXPORTED_STYLES = `
     --bs-color-danger-hover: #f78b99;
     --bs-color-danger-contrast: #2a0b10;
     --bs-color-focus-ring: rgba(44, 199, 222, 0.5);
+    --bs-color-highlight: #6b5717;
     --bs-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
   }
 }
@@ -201,6 +205,13 @@ body {
 .body pre code {
   padding: 0;
   background: none;
+}
+
+.body mark {
+  background: var(--bs-color-highlight);
+  color: inherit;
+  border-radius: var(--bs-radius-sm);
+  padding: 0 1px;
 }
 
 .body hr {

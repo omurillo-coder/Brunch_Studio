@@ -18,8 +18,9 @@ function slide(id: string, overrides: Partial<SlideNode> = {}): SlideNode {
     targetNodeId: undefined,
     continueLabel: undefined,
     responses: [],
-    imageAssetId: undefined,
+    imageAssetIds: [],
     audioAssetId: undefined,
+    contentOrder: 'text-first',
     ...overrides,
   }
 }
@@ -66,9 +67,9 @@ function fakeRepository(available: Record<string, AssetData>): AssetRepository {
 describe('collectReferencedAssetIds', () => {
   it('reúne imagen y audio de nodos y de respuestas, sin duplicados', () => {
     const doc = project([
-      slide(SLIDE_A, { imageAssetId: 'img-1', audioAssetId: 'aud-1' }),
+      slide(SLIDE_A, { imageAssetIds: ['img-1'], audioAssetId: 'aud-1' }),
       slide(SLIDE_B, {
-        imageAssetId: 'img-1', // repetido: no debe duplicarse
+        imageAssetIds: ['img-1'], // repetido: no debe duplicarse
         responses: [
           response({ id: 'r1', imageAssetId: 'img-2' }),
           response({ id: 'r2', letter: 'B', audioAssetId: 'aud-2' }),
@@ -80,6 +81,14 @@ describe('collectReferencedAssetIds', () => {
     expect(collectReferencedAssetIds(doc)).toEqual(['img-1', 'aud-1', 'img-2', 'aud-2'])
   })
 
+  it('reúne TODAS las imágenes de la lista de un nodo, en orden, sin duplicados', () => {
+    const doc = project([
+      slide(SLIDE_A, { imageAssetIds: ['img-1', 'img-2', 'img-1', 'img-3'] }),
+    ])
+
+    expect(collectReferencedAssetIds(doc)).toEqual(['img-1', 'img-2', 'img-3'])
+  })
+
   it('devuelve una lista vacía si el proyecto no tiene ningún asset', () => {
     expect(collectReferencedAssetIds(project([slide(SLIDE_A)]))).toEqual([])
   })
@@ -87,7 +96,7 @@ describe('collectReferencedAssetIds', () => {
 
 describe('resolveExportAssets', () => {
   it('resuelve todos los assets legibles', async () => {
-    const doc = project([slide(SLIDE_A, { imageAssetId: 'img-1', audioAssetId: 'aud-1' })])
+    const doc = project([slide(SLIDE_A, { imageAssetIds: ['img-1'], audioAssetId: 'aud-1' })])
     const repository = fakeRepository({
       'img-1': { mimeType: 'image/png', filename: 'a.png', dataBase64: 'AAA=' },
       'aud-1': { mimeType: 'audio/mpeg', filename: 'a.mp3', dataBase64: 'BBB=' },
@@ -104,7 +113,7 @@ describe('resolveExportAssets', () => {
 
   it('un asset que falla no rompe la resolución de los demás', async () => {
     const doc = project([
-      slide(SLIDE_A, { imageAssetId: 'roto', audioAssetId: 'aud-1' }),
+      slide(SLIDE_A, { imageAssetIds: ['roto'], audioAssetId: 'aud-1' }),
       slide(SLIDE_B, { responses: [response({ id: 'r1', imageAssetId: 'img-2' })] }),
     ])
     const repository = fakeRepository({
@@ -119,7 +128,7 @@ describe('resolveExportAssets', () => {
   })
 
   it('no rechaza aunque fallen todos los assets', async () => {
-    const doc = project([slide(SLIDE_A, { imageAssetId: 'roto-1', audioAssetId: 'roto-2' })])
+    const doc = project([slide(SLIDE_A, { imageAssetIds: ['roto-1'], audioAssetId: 'roto-2' })])
     const result = await resolveExportAssets('/tmp/p.brunch', doc, fakeRepository({}))
 
     expect(result.assets).toEqual({})

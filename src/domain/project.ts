@@ -1,7 +1,9 @@
 import { produce } from 'immer'
 import { createId, nextNodeNumber } from './id'
 import { connect } from './graph'
+import { DEFAULT_CONTENT_ORDER } from './schemas'
 import type {
+  ContentOrder,
   FinalNode,
   Node,
   NodePosition,
@@ -19,20 +21,30 @@ export interface CreateNodeExtra {
 /**
  * Campos editables mediante `updateNode` (título/body y afines básicos).
  *
- * Semántica de "patch" para `imageAssetId`/`audioAssetId`/`continueLabel`:
+ * Semántica de "patch" para `audioAssetId`/`continueLabel`/`internalNote`:
  * `undefined` no toca el campo, `null` lo borra (lo deja `undefined` en el
  * nodo — para `continueLabel` eso significa "vuelve al texto por defecto",
- * ver `DEFAULT_CONTINUE_LABEL`) y un string lo fija a ese valor. Los tres
- * solo aplican a nodos `slide`: un `final` con alguno de estos campos
- * presente en el patch (aunque sea `null`) hace que `updateNode` lance, ver
- * más abajo.
+ * ver `DEFAULT_CONTINUE_LABEL`) y un string lo fija a ese valor.
+ *
+ * `imageAssetIds`, si se indica, REEMPLAZA la lista completa (no es un patch
+ * incremental): quien llama es responsable de construir el array final
+ * (añadir/quitar/reordenar una imagen concreta se hace leyendo la lista
+ * actual del nodo y llamando con la lista ya modificada).
+ *
+ * `imageAssetIds`/`audioAssetId`/`continueLabel`/`contentOrder` solo aplican
+ * a nodos `slide`: un `final` con alguno de estos campos presente en el
+ * patch (aunque sea `null`) hace que `updateNode` lance, ver más abajo.
+ * `internalNote` es válido en cualquier tipo de nodo (incluidos los
+ * `final`), así que no participa de esa guarda.
  */
 export interface UpdateNodePatch {
   title?: string
   body?: string
-  imageAssetId?: string | null
+  imageAssetIds?: string[]
   audioAssetId?: string | null
   continueLabel?: string | null
+  contentOrder?: ContentOrder
+  internalNote?: string | null
 }
 
 function newSlideNode(
@@ -44,8 +56,9 @@ function newSlideNode(
     targetNodeId: undefined,
     continueLabel: undefined,
     responses: [],
-    imageAssetId: undefined,
+    imageAssetIds: [],
     audioAssetId: undefined,
+    contentOrder: DEFAULT_CONTENT_ORDER,
   }
 }
 
@@ -237,10 +250,12 @@ export function moveNodes(project: ProjectDocument, moves: NodeMove[]): ProjectD
  * `number` ni campos estructurales (responses, targetNodeId) — para eso
  * existen funciones dedicadas.
  *
- * `imageAssetId`/`audioAssetId`/`continueLabel` solo son válidos en nodos
- * `slide`: si el patch los incluye (aunque sea con valor `null` para
- * borrarlos) y el nodo es `final`, lanza `Error` — un Final no admite media
- * adjunta ni tiene botón de continuar.
+ * `imageAssetIds`/`audioAssetId`/`continueLabel`/`contentOrder` solo son
+ * válidos en nodos `slide`: si el patch los incluye (aunque sea con valor
+ * `null` para los que admiten borrado) y el nodo es `final`, lanza `Error`
+ * — un Final no admite media adjunta, botón de continuar ni orden de
+ * contenido. `internalNote` es válido en cualquier tipo de nodo y no
+ * participa de esta guarda.
  */
 export function updateNode(
   project: ProjectDocument,
@@ -254,12 +269,13 @@ export function updateNode(
 
   const node = project.graph.nodes[index]
   const setsSlideOnlyField =
-    patch.imageAssetId !== undefined ||
+    patch.imageAssetIds !== undefined ||
     patch.audioAssetId !== undefined ||
-    patch.continueLabel !== undefined
+    patch.continueLabel !== undefined ||
+    patch.contentOrder !== undefined
   if (setsSlideOnlyField && node && node.type !== 'slide') {
     throw new Error(
-      `El nodo "${nodeId}" es de tipo "${node.type}" y no admite imagen/audio adjuntos ni texto de continuar.`,
+      `El nodo "${nodeId}" es de tipo "${node.type}" y no admite imagen/audio adjuntos, texto de continuar ni orden de contenido.`,
     )
   }
 
@@ -268,15 +284,21 @@ export function updateNode(
     if (!draftNode) return
     if (patch.title !== undefined) draftNode.title = patch.title
     if (patch.body !== undefined) draftNode.body = patch.body
+    if (patch.internalNote !== undefined) {
+      draftNode.internalNote = patch.internalNote === null ? undefined : patch.internalNote
+    }
     if (draftNode.type === 'slide') {
-      if (patch.imageAssetId !== undefined) {
-        draftNode.imageAssetId = patch.imageAssetId === null ? undefined : patch.imageAssetId
+      if (patch.imageAssetIds !== undefined) {
+        draftNode.imageAssetIds = patch.imageAssetIds
       }
       if (patch.audioAssetId !== undefined) {
         draftNode.audioAssetId = patch.audioAssetId === null ? undefined : patch.audioAssetId
       }
       if (patch.continueLabel !== undefined) {
         draftNode.continueLabel = patch.continueLabel === null ? undefined : patch.continueLabel
+      }
+      if (patch.contentOrder !== undefined) {
+        draftNode.contentOrder = patch.contentOrder
       }
     }
     touchUpdatedAt(draft)

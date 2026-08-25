@@ -53,6 +53,12 @@
   --bs-color-warning-contrast: #402c02;
   --bs-color-focus-ring: rgba(0, 174, 199, 0.45);
   --bs-color-canvas-dot: #d7d7de;
+  /* Destacado del editor de texto enriquecido (marca `highlight` de Tiptap,
+     fase 8): amarillo "rotulador" clásico, deliberadamente distinto del
+     turquesa de acento (`--bs-color-accent`) para no confundirse con la
+     selección/foco de la interfaz. Texto encima en `--bs-color-text`
+     (#1b1b1f): 14.9:1, sobra para AAA. */
+  --bs-color-highlight: #ffe066;
 
   /* Espaciado */
   --bs-space-1: 4px;
@@ -107,6 +113,12 @@
     --bs-color-warning-contrast: #2a1a02;
     --bs-color-focus-ring: rgba(44, 199, 222, 0.5);
     --bs-color-canvas-dot: #34343a;
+    /* Mismo amarillo "rotulador" oscurecido para fondo oscuro (en vez de
+       aclarado como el resto de la paleta): un amarillo brillante sobre
+       fondo oscuro deslumbraría — un tono dorado apagado lee mejor como
+       "marcador" sin doler la vista. Texto encima en `--bs-color-text`
+       (#ededef): 5.98:1, AA para texto normal. */
+    --bs-color-highlight: #6b5717;
     --bs-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
   }
 }

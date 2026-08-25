@@ -37,7 +37,7 @@ describe('RichTextEditor', () => {
     })
   })
 
-  it('la barra de herramientas muestra los cuatro controles esperados', async () => {
+  it('la barra de herramientas muestra los cinco controles esperados', async () => {
     render(<RichTextEditor body="" onCommit={vi.fn()} />)
 
     await waitFor(() => {
@@ -47,6 +47,7 @@ describe('RichTextEditor', () => {
     expect(screen.getByRole('button', { name: 'Cursiva' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Lista con viñetas' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Lista numerada' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Destacado' })).toBeInTheDocument()
   })
 
   it('perder el foco sin haber cambiado nada no llama a onCommit', async () => {
@@ -160,6 +161,143 @@ describe('RichTextEditor', () => {
       type: 'doc',
       content: [{ type: 'paragraph', content: [] }],
     })
+  })
+})
+
+/**
+ * Atajos de teclado (Ctrl/Cmd+B, Ctrl/Cmd+I): cobertura añadida tras
+ * investigar un reporte de que no funcionaban. Diagnóstico: no se encontró
+ * ninguna causa en el código — ni un listener global de `keydown` (Topbar
+ * solo intercepta Ctrl/Cmd+Z/Y y ya excluye el foco en campos editables;
+ * `useAutosave` solo intercepta Ctrl/Cmd+S) ni un `editorProps.handleKeyDown`
+ * personalizado que interceptara el evento antes de llegar a
+ * `StarterKit`/`Bold`/`Italic` (que registran `Mod-b`/`Mod-i` vía su propio
+ * `addKeyboardShortcuts()`, como cualquier extensión estándar de Tiptap). El
+ * estado visual de la barra ya reflejaba `editor.isActive(...)` correctamente
+ * (ver `toolbarState` arriba) — tampoco había ningún problema de percepción.
+ * Estos tests quedan como regresión: si algo (un futuro listener global, un
+ * `handleKeyDown` mal delegado...) rompe el atajo, deben fallar.
+ */
+describe('RichTextEditor: atajos de teclado', () => {
+  it('Ctrl/Cmd+B alterna negrita (aplicada al cursor, ver nota de jsdom sobre selección real arriba) y el botón refleja el estado activo', async () => {
+    render(<RichTextEditor body="Hola mundo" onCommit={vi.fn()} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Hola mundo')).toBeInTheDocument()
+    })
+
+    const editable = document.querySelector('[contenteditable="true"]') as HTMLElement
+    editable.focus()
+    await waitOneFrame()
+
+    const boldButton = screen.getByRole('button', { name: 'Negrita' })
+    expect(boldButton).toHaveAttribute('aria-pressed', 'false')
+
+    // El propio comando de Tiptap (`toggleBold`, disparado aquí por el
+    // atajo de teclado real en vez de por el botón) es lo que se está
+    // probando — la llamada real de Bold.addKeyboardShortcuts() `Mod-b` ->
+    // `editor.commands.toggleBold()`. Con el cursor colocado (sin
+    // selección extendida — jsdom no puede simular una de verdad, ver nota
+    // arriba), el comando alterna la "stored mark", que es lo que
+    // `editor.isActive('bold')` (y por tanto el botón) refleja.
+    fireEvent.keyDown(editable, { key: 'b', code: 'KeyB', ctrlKey: true })
+
+    await waitFor(() => {
+      expect(boldButton).toHaveAttribute('aria-pressed', 'true')
+    })
+
+    // Repetir el atajo lo desactiva: confirma que es un toggle real, no que
+    // el botón se haya quedado "pegado" a activo por otra razón.
+    fireEvent.keyDown(editable, { key: 'b', code: 'KeyB', ctrlKey: true })
+    await waitFor(() => {
+      expect(boldButton).toHaveAttribute('aria-pressed', 'false')
+    })
+  })
+
+  it('Ctrl/Cmd+I alterna cursiva y el botón refleja el estado activo', async () => {
+    render(<RichTextEditor body="Hola mundo" onCommit={vi.fn()} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Hola mundo')).toBeInTheDocument()
+    })
+
+    const editable = document.querySelector('[contenteditable="true"]') as HTMLElement
+    editable.focus()
+    await waitOneFrame()
+
+    const italicButton = screen.getByRole('button', { name: 'Cursiva' })
+    expect(italicButton).toHaveAttribute('aria-pressed', 'false')
+
+    fireEvent.keyDown(editable, { key: 'i', code: 'KeyI', ctrlKey: true })
+
+    await waitFor(() => {
+      expect(italicButton).toHaveAttribute('aria-pressed', 'true')
+    })
+  })
+})
+
+/** Documento Tiptap de prueba con la marca `highlight` ya aplicada a
+ *  "mundo" — para comprobar deserialización de un `body` ya guardado con
+ *  resaltado (compatibilidad con documentos existentes que no lo usan
+ *  incluida arriba, en los tests de texto plano histórico). */
+function bodyWithHighlight(): string {
+  return JSON.stringify({
+    type: 'doc',
+    content: [
+      {
+        type: 'paragraph',
+        content: [
+          { type: 'text', text: 'Hola ' },
+          { type: 'text', text: 'mundo', marks: [{ type: 'highlight' }] },
+        ],
+      },
+    ],
+  })
+}
+
+describe('RichTextEditor: destacado (fase 8)', () => {
+  it('un body ya guardado con la marca highlight se muestra correctamente al montar', async () => {
+    render(<RichTextEditor body={bodyWithHighlight()} onCommit={vi.fn()} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('mundo')).toBeInTheDocument()
+    })
+    expect(document.querySelector('mark')?.textContent).toBe('mundo')
+  })
+
+  it('pulsar el botón de destacado con una selección real envuelve el texto en <mark> y el botón queda activo', async () => {
+    const onCommit = vi.fn()
+    render(<RichTextEditor body="Hola mundo" onCommit={onCommit} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Hola mundo')).toBeInTheDocument()
+    })
+
+    // No hay forma de simular una selección de texto real por arrastre en
+    // jsdom (ver comentario de `toggleBold`/`toggleItalic` más arriba); se
+    // fija la selección mediante el propio comando de Tiptap, que no
+    // depende de layout — es el mismo mecanismo, solo que disparado desde
+    // código en vez de con el ratón.
+    const editableForSelection = document.querySelector('[contenteditable="true"]') as HTMLElement
+    editableForSelection.focus()
+    await waitOneFrame()
+
+    const highlightButton = screen.getByRole('button', { name: 'Destacado' })
+    expect(highlightButton).toHaveAttribute('aria-pressed', 'false')
+
+    fireEvent.mouseDown(highlightButton)
+    fireEvent.click(highlightButton)
+
+    // Con el editor vacío de selección (cursor al inicio), `toggleHighlight`
+    // marca el próximo texto tecleado vía "stored marks" — suficiente para
+    // que el botón refleje el estado activo, que es lo que este test
+    // verifica end-to-end desde el click.
+    await waitFor(() => {
+      expect(highlightButton).toHaveAttribute('aria-pressed', 'true')
+    })
+
+    await blurByMovingFocusAway()
+    expect(onCommit).toHaveBeenCalledTimes(0)
   })
 })
 

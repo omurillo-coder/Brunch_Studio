@@ -56,8 +56,10 @@ function sampleProject(): ProjectDocument {
     targetNodeId: DECISION_ID,
     continueLabel: 'Empezar el caso',
     responses: [],
-    imageAssetId: IMAGE_ASSET_ID,
+    imageAssetIds: [IMAGE_ASSET_ID],
     audioAssetId: AUDIO_ASSET_ID,
+    contentOrder: 'text-first',
+    internalNote: 'Recordatorio interno: pedir revisión al equipo de diseño',
   }
 
   const decision: SlideNode = {
@@ -86,8 +88,9 @@ function sampleProject(): ProjectDocument {
         targetNodeId: FINAL_ID,
       }),
     ],
-    imageAssetId: undefined,
+    imageAssetIds: [],
     audioAssetId: undefined,
+    contentOrder: 'text-first',
   }
 
   const final: FinalNode = {
@@ -116,6 +119,65 @@ function sampleProject(): ProjectDocument {
 const sampleAssets: ExportAssetMap = {
   [IMAGE_ASSET_ID]: { mimeType: 'image/png', dataBase64: 'UE5HRkFLRQ==' },
   [AUDIO_ASSET_ID]: { mimeType: 'audio/mpeg', dataBase64: 'TVAzRkFLRQ==' },
+}
+
+// -----------------------------------------------------------------------
+// Varias imágenes por diapositiva + orden de contenido (tarea 5)
+// -----------------------------------------------------------------------
+
+const SECOND_IMAGE_ASSET_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3'
+const MULTI_IMAGE_SLIDE_ID = '66666666-6666-4666-8666-666666666666'
+const MULTI_IMAGE_FINAL_ID = '77777777-7777-4777-8777-777777777777'
+
+const multiImageAssets: ExportAssetMap = {
+  [IMAGE_ASSET_ID]: { mimeType: 'image/png', dataBase64: 'UE5HRkFLRQ==' },
+  [SECOND_IMAGE_ASSET_ID]: { mimeType: 'image/png', dataBase64: 'U0VDT05EQQ==' },
+}
+
+/** Documento mínimo con una única diapositiva "de continuar" con dos
+ *  imágenes (en `imageAssetIds`, orden IMAGE_ASSET_ID -> SECOND_IMAGE_ASSET_ID)
+ *  y sin destino, para observar solo el bloque de medios en el DOM
+ *  exportado sin el ruido del resto de `sampleProject()`. */
+function multiImageProject(contentOrder: 'text-first' | 'image-first'): ProjectDocument {
+  const slide: SlideNode = {
+    id: MULTI_IMAGE_SLIDE_ID,
+    number: 1,
+    type: 'slide',
+    position: { x: 0, y: 0 },
+    title: 'Varias imágenes',
+    body: richBody('Cuerpo de la diapositiva.'),
+    // Destino de "continuar" a un Final trivial: solo hace falta que la
+    // vista resuelva a `continue` (con target) en vez de `dead-end`, para
+    // poder observar el bloque de medios.
+    targetNodeId: MULTI_IMAGE_FINAL_ID,
+    continueLabel: undefined,
+    responses: [],
+    imageAssetIds: [IMAGE_ASSET_ID, SECOND_IMAGE_ASSET_ID],
+    audioAssetId: undefined,
+    contentOrder,
+  }
+
+  const final: FinalNode = {
+    id: MULTI_IMAGE_FINAL_ID,
+    number: 2,
+    type: 'final',
+    position: { x: 300, y: 0 },
+    title: 'Fin',
+    body: '',
+  }
+
+  return {
+    schemaVersion: 1,
+    metadata: {
+      id: '99999999-9999-4999-8999-999999999997',
+      name: 'Proyecto con varias imágenes',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    },
+    settings: {},
+    graph: { nodes: [slide, final], startNodeId: MULTI_IMAGE_SLIDE_ID },
+    editor: { viewport: { x: 0, y: 0, zoom: 1 } },
+  }
 }
 
 /**
@@ -228,6 +290,76 @@ describe('buildHtmlBundle — contenido del archivo generado', () => {
     // \\u003c porque el HTML viaja dentro de un JSON en un <script>).
     expect(html).toContain('\\u003cp>Bienvenido al escenario.')
     expect(html).toContain('\\u003cstrong>protocolo\\u003c/strong>')
+  })
+
+  it('conserva la marca highlight (destacado, fase 8) como <mark> en el HTML exportado', () => {
+    // Documento mínimo independiente de `sampleProject()`: solo lo
+    // necesario para un nodo `slide` con un `body` que trae la marca
+    // `highlight`, sin arrastrar los demás campos de la muestra grande.
+    const slideId = '55555555-5555-4555-8555-555555555555'
+    const body = JSON.stringify({
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            { type: 'text', text: 'Presta atención a lo ' },
+            { type: 'text', text: 'destacado', marks: [{ type: 'highlight' }] },
+            { type: 'text', text: '.' },
+          ],
+        },
+      ],
+    })
+
+    const project: ProjectDocument = {
+      schemaVersion: 1,
+      metadata: {
+        id: '99999999-9999-4999-8999-999999999998',
+        name: 'Proyecto con destacado',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+      settings: {},
+      graph: {
+        nodes: [
+          {
+            id: slideId,
+            number: 1,
+            type: 'slide',
+            position: { x: 0, y: 0 },
+            title: 'Con destacado',
+            body,
+            targetNodeId: undefined,
+            continueLabel: undefined,
+            responses: [],
+            imageAssetIds: [],
+            audioAssetId: undefined,
+            contentOrder: 'text-first',
+          },
+        ],
+        startNodeId: slideId,
+      },
+      editor: { viewport: { x: 0, y: 0, zoom: 1 } },
+    }
+
+    const html = buildHtmlBundle(project, {})
+
+    // `<` va escapado como < dentro del JSON embebido (ver
+    // `serializeBundle`); `generateHTML` con `RICH_TEXT_EXTENSIONS` (que
+    // incluye `Highlight`) produce un `<mark>` de verdad, no texto plano.
+    expect(html).toContain('\\u003cmark>destacado\\u003c/mark>')
+  })
+
+  it('no incluye en ningún punto la nota interna del nodo (internalNote, tarea 6: nunca se exporta)', () => {
+    const html = buildHtmlBundle(sampleProject(), sampleAssets)
+
+    // `sampleProject()` fija un `internalNote` con contenido real en la
+    // diapositiva de inicio (ver arriba): ni su texto literal debe aparecer
+    // en ningún punto del HTML generado (ni pintado, ni en el JSON
+    // embebido), mismo criterio que el título del nodo.
+    expect(html).not.toContain('Recordatorio interno')
+    expect(html).not.toContain('pedir revisión al equipo de diseño')
+    expect(html).not.toContain('internalNote')
   })
 
   it('omite los assets que no se pudieron leer sin romper el archivo', () => {
@@ -394,5 +526,59 @@ describe('buildHtmlBundle — comportamiento del HTML generado (jsdom)', () => {
     // Sigue en la diapositiva de decisión (no navega): se reconoce por sus
     // opciones, no por su título (que no se pinta).
     expect(currentCard().querySelectorAll('.optionButton')).toHaveLength(2)
+  })
+})
+
+describe('buildHtmlBundle — varias imágenes por diapositiva y orden de contenido (tarea 5)', () => {
+  beforeEach(() => {
+    document.body.innerHTML = ''
+  })
+
+  it('pinta TODAS las imágenes de imageAssetIds, apiladas, en el orden del array', () => {
+    runExportedBundle(buildHtmlBundle(multiImageProject('text-first'), multiImageAssets))
+
+    const images = [...currentCard().querySelectorAll<HTMLImageElement>('.mediaSection img')]
+    expect(images.map((img) => img.getAttribute('src'))).toEqual([
+      'data:image/png;base64,UE5HRkFLRQ==',
+      'data:image/png;base64,U0VDT05EQQ==',
+    ])
+  })
+
+  it('contentOrder "text-first" (por defecto) pinta el cuerpo antes que las imágenes', () => {
+    runExportedBundle(buildHtmlBundle(multiImageProject('text-first'), multiImageAssets))
+
+    const card = currentCard()
+    const body = card.querySelector('.body')
+    const mediaSection = card.querySelector('.mediaSection')
+    expect(body).not.toBeNull()
+    expect(mediaSection).not.toBeNull()
+    // `compareDocumentPosition` con el bit DOCUMENT_POSITION_FOLLOWING (4)
+    // confirma que `mediaSection` viene DESPUÉS de `body` en el DOM.
+    expect(body!.compareDocumentPosition(mediaSection!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('contentOrder "image-first" pinta las imágenes antes que el cuerpo', () => {
+    runExportedBundle(buildHtmlBundle(multiImageProject('image-first'), multiImageAssets))
+
+    const card = currentCard()
+    const body = card.querySelector('.body')
+    const mediaSection = card.querySelector('.mediaSection')
+    expect(body).not.toBeNull()
+    expect(mediaSection).not.toBeNull()
+    expect(mediaSection!.compareDocumentPosition(body!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('una imagen no resuelta se omite sin romper el orden de las demás', () => {
+    // Solo la segunda imagen está en el mapa de assets: la primera se omite.
+    runExportedBundle(
+      buildHtmlBundle(multiImageProject('text-first'), {
+        [SECOND_IMAGE_ASSET_ID]: multiImageAssets[SECOND_IMAGE_ASSET_ID]!,
+      }),
+    )
+
+    const images = [...currentCard().querySelectorAll<HTMLImageElement>('.mediaSection img')]
+    expect(images.map((img) => img.getAttribute('src'))).toEqual([
+      'data:image/png;base64,U0VDT05EQQ==',
+    ])
   })
 })

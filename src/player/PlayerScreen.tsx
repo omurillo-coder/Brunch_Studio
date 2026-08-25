@@ -20,6 +20,40 @@ function sortByLetter(responses: DecisionResponse[]): DecisionResponse[] {
 }
 
 /**
+ * Bloque de imágenes de un nodo: TODAS las de `imageAssetIds`, apiladas en
+ * columna (una debajo de otra, a ancho completo) en el orden del array —
+ * ese orden es justo lo que el Inspector permite reordenar con ↑/↓. Nunca un
+ * carrusel ni una galería con interacción: es la decisión de diseño de esta
+ * fase. Cada imagen se monta con `key={assetId}` para que un cambio de asset
+ * concreto (añadida, reemplazada indirectamente al quitar/reañadir) arranque
+ * su propia carga desde cero sin afectar a las demás.
+ */
+function NodeImages({
+  imageAssetIds,
+  filePath,
+  assetRepository,
+}: {
+  imageAssetIds: string[]
+  filePath: string
+  assetRepository: AssetRepository
+}) {
+  if (imageAssetIds.length === 0) return null
+  return (
+    <>
+      {imageAssetIds.map((assetId) => (
+        <PlayerImage
+          key={assetId}
+          assetId={assetId}
+          filePath={filePath}
+          assetRepository={assetRepository}
+          alt="Imagen de esta pantalla"
+        />
+      ))}
+    </>
+  )
+}
+
+/**
  * Imagen adjunta (de nodo o de respuesta) mostrada como contenido real para
  * quien juega — no una miniatura de edición como en el Inspector, así que
  * usa su propia clase de tamaño (`styles.media`). Se monta con `key={assetId}`
@@ -64,8 +98,11 @@ function PlayerAudio({
   return <audio className={styles.audio} controls src={dataUri} />
 }
 
-/** Imagen/audio a nivel de nodo (Diapositiva), justo debajo del cuerpo de
- *  texto. `null` si el nodo no tiene ningún adjunto. */
+/** Imágenes (apiladas, en orden) + audio a nivel de nodo (Diapositiva).
+ *  `null` si el nodo no tiene ningún adjunto. La posición de este bloque
+ *  respecto al cuerpo de texto la decide quien llama, según
+ *  `node.contentOrder` (ver `SlideBody`/las vistas `continue`/`decision` más
+ *  abajo). */
 function NodeMedia({
   node,
   filePath,
@@ -75,20 +112,16 @@ function NodeMedia({
   filePath: string
   assetRepository: AssetRepository
 }) {
-  if (!node.imageAssetId && !node.audioAssetId) {
+  if (node.imageAssetIds.length === 0 && !node.audioAssetId) {
     return null
   }
   return (
     <div className={styles.mediaSection}>
-      {node.imageAssetId && (
-        <PlayerImage
-          key={node.imageAssetId}
-          assetId={node.imageAssetId}
-          filePath={filePath}
-          assetRepository={assetRepository}
-          alt="Imagen de esta pantalla"
-        />
-      )}
+      <NodeImages
+        imageAssetIds={node.imageAssetIds}
+        filePath={filePath}
+        assetRepository={assetRepository}
+      />
       {node.audioAssetId && (
         <PlayerAudio
           key={node.audioAssetId}
@@ -98,6 +131,54 @@ function NodeMedia({
         />
       )}
     </div>
+  )
+}
+
+/** Cuerpo de texto de una diapositiva (`continue`/`decision`), con el
+ *  respaldo de siempre si está vacío. `emptyFallback` es `null` para "no
+ *  pintar nada si no hay cuerpo" (vista `decision`, mismo criterio que ya
+ *  aplicaba antes de esta sección). */
+function SlideBody({ node, emptyFallback }: { node: SlideNode; emptyFallback: string | null }) {
+  if (node.body.trim()) {
+    return <RichTextView body={node.body} className={styles.body} />
+  }
+  if (emptyFallback === null) return null
+  return <p className={styles.body}>{emptyFallback}</p>
+}
+
+/**
+ * Cuerpo de texto + bloque de medios de una diapositiva `continue`/
+ * `decision`, en el orden que indique `node.contentOrder` ('text-first', el
+ * de siempre, o 'image-first'). Reutilizado por ambas vistas para no
+ * duplicar la lógica de orden.
+ */
+function SlideBodyAndMedia({
+  node,
+  filePath,
+  assetRepository,
+  emptyBodyFallback,
+}: {
+  node: SlideNode
+  filePath: string
+  assetRepository: AssetRepository
+  emptyBodyFallback: string | null
+}) {
+  const body = <SlideBody node={node} emptyFallback={emptyBodyFallback} />
+  const media = <NodeMedia node={node} filePath={filePath} assetRepository={assetRepository} />
+
+  if (node.contentOrder === 'image-first') {
+    return (
+      <>
+        {media}
+        {body}
+      </>
+    )
+  }
+  return (
+    <>
+      {body}
+      {media}
+    </>
   )
 }
 
@@ -233,12 +314,12 @@ export function PlayerScreen({ filePath }: PlayerScreenProps) {
             {view.node.title.trim() && (
               <h1 className={styles.nodeReferenceTitle}>{view.node.title}</h1>
             )}
-            {view.node.body.trim() ? (
-              <RichTextView body={view.node.body} className={styles.body} />
-            ) : (
-              <p className={styles.body}>Esta diapositiva todavía no tiene contenido.</p>
-            )}
-            <NodeMedia node={view.node} filePath={filePath} assetRepository={assetRepository} />
+            <SlideBodyAndMedia
+              node={view.node}
+              filePath={filePath}
+              assetRepository={assetRepository}
+              emptyBodyFallback="Esta diapositiva todavía no tiene contenido."
+            />
             {/* Texto personalizable del botón de continuar; "Continuar" si la
                 diapositiva no define uno propio (ver `continueLabel`). */}
             <button
@@ -257,8 +338,12 @@ export function PlayerScreen({ filePath }: PlayerScreenProps) {
             {view.node.title.trim() && (
               <h1 className={styles.nodeReferenceTitle}>{view.node.title}</h1>
             )}
-            {view.node.body.trim() && <RichTextView body={view.node.body} className={styles.body} />}
-            <NodeMedia node={view.node} filePath={filePath} assetRepository={assetRepository} />
+            <SlideBodyAndMedia
+              node={view.node}
+              filePath={filePath}
+              assetRepository={assetRepository}
+              emptyBodyFallback={null}
+            />
             <div className={styles.options}>
               {sortByLetter(view.node.responses).map((response, index) => (
                 <ResponseOption

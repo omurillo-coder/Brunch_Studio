@@ -103,6 +103,26 @@ describe('parseRichBody / serializeRichBody', () => {
     const doc = { type: 'doc', content: [{ type: 'paragraph', content: [] }] }
     expect(serializeRichBody(doc)).toBe(JSON.stringify(doc))
   })
+
+  it('hace roundtrip de un documento con la marca highlight (destacado, fase 8) sin perder información', () => {
+    const doc = {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            { type: 'text', text: 'Hola ' },
+            { type: 'text', text: 'mundo', marks: [{ type: 'highlight' }] },
+          ],
+        },
+      ],
+    }
+
+    const raw = serializeRichBody(doc)
+    const parsed = parseRichBody(raw)
+
+    expect(parsed).toEqual(doc)
+  })
 })
 
 describe('extractPlainText', () => {

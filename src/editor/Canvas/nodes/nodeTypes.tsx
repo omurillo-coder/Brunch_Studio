@@ -70,6 +70,22 @@ function NoOutgoingBadge({ data }: { data: CanvasNodeData }) {
   )
 }
 
+/** Icono de pin discreto (tarea 6): solo cuando el nodo tiene una nota
+ *  interna con contenido. El `title` nativo del navegador basta como
+ *  tooltip — no se abre ningún panel ni popover propio. */
+function PinBadge({ data }: { data: CanvasNodeData }) {
+  if (!data.internalNote) return null
+  return (
+    <span
+      className={styles.pinBadge}
+      title={`Nota interna: ${data.internalNote}`}
+      aria-label={`Nota interna: ${data.internalNote}`}
+    >
+      📌
+    </span>
+  )
+}
+
 function Header({ data }: { data: CanvasNodeData }) {
   return (
     <div className={styles.header}>
@@ -81,8 +97,18 @@ function Header({ data }: { data: CanvasNodeData }) {
       )}
       <span className={styles.number}>{data.number}</span>
       <span className={styles.title}>{displayTitle(data.title)}</span>
+      <PinBadge data={data} />
     </div>
   )
+}
+
+/** Fragmento corto del contenido de la diapositiva (tarea 8), para saber de
+ *  un vistazo qué hay sin abrir el Inspector. No se pinta nada si el nodo
+ *  todavía no tiene contenido, para no ensuciar visualmente una tarjeta
+ *  recién creada. */
+function BodyPreview({ data }: { data: CanvasNodeData }) {
+  if (!data.bodyPreview) return null
+  return <div className={styles.bodyPreview}>{data.bodyPreview}</div>
 }
 
 /** Handle de entrada único, compartido por diapositivas y finales. */
@@ -136,6 +162,7 @@ export function SlideNodeView({ data }: NodeProps<CanvasFlowNode>) {
       <NoOutgoingBadge data={data} />
       <InHandle />
       <Header data={data} />
+      <BodyPreview data={data} />
       {responses.length > 0 ? (
         <div className={styles.body}>
           <div className={styles.responseList}>
@@ -156,6 +183,7 @@ export function FinalNodeView({ data }: NodeProps<CanvasFlowNode>) {
     <div className={cardClassName(data)}>
       <InHandle />
       <Header data={data} />
+      <BodyPreview data={data} />
     </div>
   )
 }
