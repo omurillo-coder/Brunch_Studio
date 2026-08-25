@@ -113,6 +113,7 @@ export function Canvas() {
   const connect = useProjectStore((state) => state.connect)
   const deleteNode = useProjectStore((state) => state.deleteNode)
   const setSelection = useProjectStore((state) => state.setSelection)
+  const clearSelection = useProjectStore((state) => state.clearSelection)
   const setViewport = useProjectStore((state) => state.setViewport)
   const beginNodeDrag = useProjectStore((state) => state.beginNodeDrag)
   const updateNodeDragPosition = useProjectStore((state) => state.updateNodeDragPosition)
@@ -334,6 +335,17 @@ export function Canvas() {
     [setSelection],
   )
 
+  // Clic en el fondo del lienzo (ni un nodo ni una arista): quita el
+  // resaltado de lo que hubiera seleccionado. No basta con confiar en que
+  // `@xyflow/react` dispare `onSelectionChange` por su cuenta al hacer clic
+  // fuera —nuestros nodos son "controlados" (`selected` viene siempre de
+  // `selection` del store, ver comentario de arriba), así que se pide
+  // explícitamente con la acción de dominio, igual que hace cualquier otro
+  // punto de esta app que toca la selección.
+  const handlePaneClick = useCallback(() => {
+    clearSelection()
+  }, [clearSelection])
+
   // -- Conexión nodo→nodo. Si `store.connect` (dominio) lanza porque la
   // combinación es inválida (p.ej. un handle que ya no existe tras una
   // edición concurrente), se ignora en silencio: no debe romper la UI. En
@@ -475,6 +487,7 @@ export function Canvas() {
         onNodeDrag={handleNodeDrag}
         onNodeDragStop={handleNodeDragStop}
         onSelectionChange={handleSelectionChange}
+        onPaneClick={handlePaneClick}
         onConnect={handleConnect}
         onConnectEnd={handleConnectEnd}
         onMoveEnd={handleMoveEnd}

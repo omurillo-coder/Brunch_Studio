@@ -157,6 +157,21 @@ describe('Canvas — cableado con @xyflow/react (ReactFlow stub)', () => {
     expect(useProjectStore.getState().selection.selectedNodeIds).toEqual([start.id])
   })
 
+  it('onPaneClick (clic fuera de cualquier diapositiva) quita la selección actual', () => {
+    render(<Canvas />)
+    const start = startSlide()
+    act(() => {
+      useProjectStore.getState().selectNode(start.id)
+    })
+    expect(useProjectStore.getState().selection.selectedNodeIds).toEqual([start.id])
+
+    act(() => {
+      capturedProps?.onPaneClick?.(undefined as never)
+    })
+
+    expect(useProjectStore.getState().selection.selectedNodeIds).toEqual([])
+  })
+
   it('onMoveEnd persiste el viewport y no toca el historial de undo/redo', () => {
     render(<Canvas />)
     const historyBefore = useProjectStore.getState().history.past.length
