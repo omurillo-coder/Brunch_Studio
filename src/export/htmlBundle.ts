@@ -112,6 +112,27 @@ function serializeBundle(bundle: ExportBundle): string {
 }
 
 /**
+ * El título de un nodo es solo referencia interna del diseñador
+ * instruccional, nunca contenido final: no debe aparecer en ningún punto del
+ * HTML/SCORM exportado. `exportedPlayerScript.ts` ya no lo pinta en el DOM
+ * (vistas `continue`/`decision`; `final` nunca lo usó, tiene su propio texto
+ * fijo "Fin de la experiencia"), pero el `project` completo viaja embebido
+ * como JSON en el HTML para que el runtime lo lea — así que, para que el
+ * título tampoco quede visible con un simple "ver código fuente", se vacía
+ * aquí antes de embeberlo. El runtime exportado no usa `node.title` para
+ * nada más, así que esto no cambia ningún comportamiento.
+ */
+function stripNodeTitles(project: ProjectDocument): ProjectDocument {
+  return {
+    ...project,
+    graph: {
+      ...project.graph,
+      nodes: project.graph.nodes.map((node) => ({ ...node, title: '' })),
+    },
+  }
+}
+
+/**
  * Convierte el `body` (documento Tiptap serializado) de cada nodo con
  * contenido a HTML estático. Se omiten los nodos con `body` vacío o solo
  * espacios: el runtime exportado ya pinta su texto de respaldo en ese caso,
@@ -150,7 +171,7 @@ function buildAssetUris(assets: ExportAssetMap): Record<string, string> {
  */
 export function buildHtmlBundle(project: ProjectDocument, assets: ExportAssetMap): string {
   const bundle: ExportBundle = {
-    project,
+    project: stripNodeTitles(project),
     bodyHtml: renderNodeBodies(project),
     assetUris: buildAssetUris(assets),
     responseLetters: [...RESPONSE_LETTERS],

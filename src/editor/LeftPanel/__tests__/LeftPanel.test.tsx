@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { LeftPanel } from '../LeftPanel'
 import { useProjectStore } from '../../../store'
 import { resetProjectStore } from '../../../store/testHelpers'
+import { serializeRichBody } from '../../richText/richTextContent'
 
 beforeEach(() => {
   resetProjectStore()
@@ -104,6 +105,115 @@ describe('LeftPanel', () => {
 
     fireEvent.click(screen.getByText(created.number.toString()))
 
+    expect(useProjectStore.getState().ui.focusRequestNodeId).toBe(created.id)
+  })
+})
+
+describe('LeftPanel — buscador del proyecto (fase 8)', () => {
+  function searchInput(): HTMLElement {
+    return screen.getByLabelText('Buscar en el proyecto')
+  }
+
+  /** Añade una respuesta a una diapositiva y le pone el texto indicado. */
+  function addResponseWithText(nodeId: string, text: string): string {
+    act(() => {
+      useProjectStore.getState().addResponse(nodeId)
+    })
+    const node = useProjectStore.getState().project.graph.nodes.find((n) => n.id === nodeId)
+    const responses = node?.type === 'slide' ? node.responses : []
+    const responseId = responses[responses.length - 1]?.id
+    if (!responseId) throw new Error('responseId inesperadamente ausente')
+    act(() => {
+      useProjectStore.getState().updateResponse(nodeId, responseId, { text })
+    })
+    return responseId
+  }
+
+  it('sin texto de búsqueda muestra todos los nodos', () => {
+    render(<LeftPanel />)
+    act(() => {
+      useProjectStore.getState().createNode('slide', { x: 0, y: 0 }, { title: 'Otra diapositiva' })
+    })
+
+    expect(screen.getAllByRole('button', { name: /Diapositiva|Final/ }).length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('filtra por título (case-insensitive, substring)', () => {
+    render(<LeftPanel />)
+    act(() => {
+      useProjectStore.getState().createNode('slide', { x: 0, y: 0 }, { title: 'Sala de espera' })
+      useProjectStore.getState().createNode('final', { x: 0, y: 0 }, { title: 'Cierre del caso' })
+    })
+
+    fireEvent.change(searchInput(), { target: { value: 'SALA' } })
+
+    expect(screen.getByText('Sala de espera')).toBeInTheDocument()
+    expect(screen.queryByText('Cierre del caso')).not.toBeInTheDocument()
+  })
+
+  it('filtra por el texto plano real del cuerpo (Tiptap), no por el JSON serializado', () => {
+    render(<LeftPanel />)
+    const start = useProjectStore.getState().project.graph.startNodeId
+    const richBody = serializeRichBody({
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            { type: 'text', marks: [{ type: 'bold' }], text: 'Protocolo' },
+            { type: 'text', text: ' de emergencia' },
+          ],
+        },
+      ],
+    })
+    act(() => {
+      useProjectStore.getState().updateNode(start, { title: 'Diapositiva con cuerpo', body: richBody })
+      useProjectStore.getState().createNode('slide', { x: 0, y: 0 }, { title: 'Sin relación' })
+    })
+
+    fireEvent.change(searchInput(), { target: { value: 'protocolo' } })
+    expect(screen.getByText('Diapositiva con cuerpo')).toBeInTheDocument()
+    expect(screen.queryByText('Sin relación')).not.toBeInTheDocument()
+
+    // Ninguna coincidencia falsa con la sintaxis JSON de Tiptap.
+    fireEvent.change(searchInput(), { target: { value: 'paragraph' } })
+    expect(screen.queryByText('Diapositiva con cuerpo')).not.toBeInTheDocument()
+  })
+
+  it('filtra por el texto de una respuesta de decisión', () => {
+    render(<LeftPanel />)
+    const start = useProjectStore.getState().project.graph.startNodeId
+    act(() => {
+      useProjectStore.getState().updateNode(start, { title: 'Diapositiva de decisión' })
+      useProjectStore.getState().createNode('slide', { x: 0, y: 0 }, { title: 'Otra diapositiva' })
+    })
+    addResponseWithText(start, 'Avisar al responsable')
+
+    fireEvent.change(searchInput(), { target: { value: 'responsable' } })
+
+    expect(screen.getByText('Diapositiva de decisión')).toBeInTheDocument()
+    expect(screen.queryByText('Otra diapositiva')).not.toBeInTheDocument()
+  })
+
+  it('sin ninguna coincidencia muestra un aviso de "sin resultados"', () => {
+    render(<LeftPanel />)
+
+    fireEvent.change(searchInput(), { target: { value: 'ninguna-coincidencia-posible' } })
+
+    expect(screen.getByText(/Sin resultados/)).toBeInTheDocument()
+  })
+
+  it('hacer clic en un resultado filtrado selecciona y centra el lienzo en ese nodo, igual que sin filtrar', () => {
+    render(<LeftPanel />)
+    act(() => {
+      useProjectStore.getState().createNode('slide', { x: 0, y: 0 }, { title: 'Objetivo de búsqueda' })
+    })
+    const created = lastNode()
+
+    fireEvent.change(searchInput(), { target: { value: 'objetivo' } })
+    fireEvent.click(screen.getByText('Objetivo de búsqueda'))
+
+    expect(useProjectStore.getState().selection.selectedNodeIds).toEqual([created.id])
     expect(useProjectStore.getState().ui.focusRequestNodeId).toBe(created.id)
   })
 })

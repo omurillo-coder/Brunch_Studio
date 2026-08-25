@@ -209,6 +209,18 @@ describe('buildHtmlBundle — contenido del archivo generado', () => {
     expect(html).toContain('Fin de la experiencia')
   })
 
+  it('no incluye en ningún punto el título de las diapositivas (es solo referencia interna)', () => {
+    const html = buildHtmlBundle(sampleProject(), sampleAssets)
+
+    // Ni en el DOM pintado ni en el JSON embebido con el documento del
+    // proyecto: el título del nodo no debe sobrevivir a la exportación en
+    // ninguna forma, a diferencia del nombre del proyecto (que sí viaja,
+    // como <title> de la pestaña).
+    expect(html).not.toContain('Primer contacto')
+    expect(html).not.toContain('¿Qué haces?')
+    expect(html).not.toContain('Caso cerrado')
+  })
+
   it('convierte el body Tiptap a HTML estático con las mismas extensiones', () => {
     const html = buildHtmlBundle(sampleProject(), sampleAssets)
 
@@ -235,11 +247,14 @@ describe('buildHtmlBundle — comportamiento del HTML generado (jsdom)', () => {
     document.body.innerHTML = ''
   })
 
-  it('arranca en la diapositiva de startNodeId con su título, cuerpo y medios', () => {
+  it('arranca en la diapositiva de startNodeId con su cuerpo y medios, sin pintar el título', () => {
     runExportedBundle(buildHtmlBundle(sampleProject(), sampleAssets))
 
     const card = currentCard()
-    expect(card.querySelector('.title')?.textContent).toBe('Primer contacto')
+    // El título del nodo ("Primer contacto") es solo referencia interna del
+    // diseñador instruccional: no se pinta en el HTML exportado.
+    expect(card.querySelector('.title')).toBeNull()
+    expect(card.textContent).not.toContain('Primer contacto')
     expect(card.querySelector('.body')?.innerHTML).toContain('<strong>protocolo</strong>')
     expect(card.querySelector('img')?.getAttribute('src')).toBe(
       'data:image/png;base64,UE5HRkFLRQ==',
@@ -251,12 +266,15 @@ describe('buildHtmlBundle — comportamiento del HTML generado (jsdom)', () => {
     expect(card.querySelector('.primaryButton')?.textContent).toBe('Empezar el caso')
   })
 
-  it('avanza con el botón de continuar y muestra las opciones sin letras A/B/C/D', () => {
+  it('avanza con el botón de continuar y muestra las opciones sin letras A/B/C/D, ni el título del nodo', () => {
     runExportedBundle(buildHtmlBundle(sampleProject(), sampleAssets))
     clickButton('Empezar el caso')
 
     const card = currentCard()
-    expect(card.querySelector('.title')?.textContent).toBe('¿Qué haces?')
+    // El título de la diapositiva de decisión ("¿Qué haces?") tampoco se
+    // pinta: es la misma referencia interna que en la de continuar.
+    expect(card.querySelector('.title')).toBeNull()
+    expect(card.textContent).not.toContain('¿Qué haces?')
 
     const options = [...card.querySelectorAll<HTMLButtonElement>('.optionButton')]
     expect(options.map((option) => option.textContent)).toEqual([
@@ -301,7 +319,9 @@ describe('buildHtmlBundle — comportamiento del HTML generado (jsdom)', () => {
     clickButton('Avisar al responsable')
     clickButton('Reintentar')
 
-    expect(currentCard().querySelector('.title')?.textContent).toBe('Primer contacto')
+    // De vuelta a la diapositiva de inicio: se reconoce por su botón de
+    // continuar personalizado, no por su título (que no se pinta).
+    expect(currentCard().querySelector('.primaryButton')?.textContent).toBe('Empezar el caso')
 
     // Y el segundo recorrido no arrastra la puntuación del primero.
     clickButton('Empezar el caso')
@@ -322,6 +342,27 @@ describe('buildHtmlBundle — comportamiento del HTML generado (jsdom)', () => {
     const card = currentCard()
     expect(card.querySelector('.title')?.textContent).toBe('Fin de la experiencia')
     expect(card.querySelector('.points')).toBeNull()
+  })
+
+  it('un Final sin body no usa su título como texto de repuesto (referencia interna, no contenido)', () => {
+    const project = sampleProject()
+    const final = project.graph.nodes[2] as FinalNode
+    final.body = ''
+    // El título sigue teniendo un valor no vacío ("Caso cerrado"): si se
+    // filtrara por el HTML exportado, no debe aparecer en ningún sitio, ni
+    // siquiera como texto de repuesto del cuerpo.
+
+    const html = buildHtmlBundle(project, sampleAssets)
+    runExportedBundle(html)
+    clickButton('Empezar el caso')
+    clickButton('Avisar al responsable')
+
+    const card = currentCard()
+    expect(card.textContent).not.toContain('Caso cerrado')
+    expect(card.querySelector('.body')?.textContent).toBe(
+      'Has llegado al final de esta experiencia.',
+    )
+    expect(html).not.toContain('Caso cerrado')
   })
 
   it('una diapositiva sin continuación configurada avisa sin romperse', () => {
@@ -350,6 +391,8 @@ describe('buildHtmlBundle — comportamiento del HTML generado (jsdom)', () => {
     expect(disabled?.disabled).toBe(true)
 
     disabled?.click()
-    expect(currentCard().querySelector('.title')?.textContent).toBe('¿Qué haces?')
+    // Sigue en la diapositiva de decisión (no navega): se reconoce por sus
+    // opciones, no por su título (que no se pinta).
+    expect(currentCard().querySelectorAll('.optionButton')).toHaveLength(2)
   })
 })

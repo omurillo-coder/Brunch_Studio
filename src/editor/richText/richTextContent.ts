@@ -86,3 +86,46 @@ export function parseRichBody(raw: string): JSONContent {
 export function serializeRichBody(doc: JSONContent): string {
   return JSON.stringify(doc)
 }
+
+/**
+ * Extrae el texto plano "de búsqueda" de un documento Tiptap ya parseado
+ * (`parseRichBody(node.body)`), recorriendo el árbol recursivamente y
+ * concatenando todos los nodos de texto de todos los niveles (párrafos,
+ * listas, negrita/cursiva — las marcas no afectan al texto extraído).
+ *
+ * Usada por el buscador del proyecto (`LeftPanel`, fase 8): buscar
+ * directamente con un substring sobre `node.body` encontraría falsos
+ * positivos en la propia sintaxis JSON serializada (p.ej. buscar "type"
+ * "encontraría" cualquier body, por la clave `"type":"doc"` de Tiptap) — por
+ * eso hace falta parsear primero y extraer solo el texto real.
+ *
+ * Inserta un espacio entre el texto de un nodo de bloque (párrafo, item de
+ * lista, etc.) y lo que sigue, para que el texto de dos bloques distintos
+ * ("Primer punto" / "Segundo punto" en dos items de una lista) no quede
+ * pegado sin separación ("Primer puntoSegundo punto"); los espacios
+ * consecutivos que resultan de anidar varios bloques se colapsan al final.
+ * Los nodos de texto dentro del MISMO bloque se concatenan tal cual (sin
+ * insertar nada entre ellos): el espacio, si lo hay entre dos tramos con
+ * formato distinto de un mismo párrafo, ya viene incluido en el propio texto
+ * de Tiptap.
+ */
+export function extractPlainText(doc: JSONContent): string {
+  const parts: string[] = []
+
+  function visit(node: JSONContent): void {
+    if (node.type === 'text' && typeof node.text === 'string') {
+      parts.push(node.text)
+    }
+    if (Array.isArray(node.content)) {
+      for (const child of node.content) {
+        visit(child as JSONContent)
+      }
+    }
+    if (node.type !== 'text' && node.type !== 'doc') {
+      parts.push(' ')
+    }
+  }
+
+  visit(doc)
+  return parts.join('').replace(/\s+/g, ' ').trim()
+}

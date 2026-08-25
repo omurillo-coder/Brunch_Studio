@@ -1,6 +1,8 @@
+import { useMemo, useState } from 'react'
 import { useProject, useProjectStore } from '../../store'
-import type { NodePosition, NodeType } from '../../domain'
+import type { Node, NodePosition, NodeType } from '../../domain'
 import { NODE_TYPE_LABEL, START_NODE_LABEL } from '../Canvas/nodes/nodeTypes'
+import { extractPlainText, parseRichBody } from '../richText/richTextContent'
 import styles from './LeftPanel.module.css'
 
 /**
@@ -24,12 +26,53 @@ function nextCascadePosition(existingNodeCount: number): NodePosition {
   return { x: 80 + column * 220, y: 80 + row * 160 }
 }
 
-/** Panel izquierdo: crear nodos y navegar la lista de nodos existentes. */
+/**
+ * Buscador del proyecto (fase 8): `query` ya normalizado (recortado, en
+ * minúsculas). Un nodo aparece en la lista filtrada si el término buscado
+ * aparece, sin distinguir mayúsculas/minúsculas, en su título, en el texto
+ * plano real de su cuerpo, o en el texto de alguna de sus respuestas de
+ * decisión.
+ *
+ * El cuerpo (`node.body`) es JSON de Tiptap serializado, NUNCA se compara
+ * como substring directo: eso encontraría falsos positivos en la propia
+ * sintaxis JSON (p.ej. buscar "type" "encontraría" cualquier nodo, por la
+ * clave `"type":"doc"`). Se parsea con `parseRichBody` (la misma función que
+ * usa `RichTextEditor`/la exportación) y se extrae su texto real con
+ * `extractPlainText`, compartida con `src/editor/richText/richTextContent.ts`.
+ */
+function nodeMatchesQuery(node: Node, query: string): boolean {
+  if (node.title.toLowerCase().includes(query)) {
+    return true
+  }
+  if (extractPlainText(parseRichBody(node.body)).toLowerCase().includes(query)) {
+    return true
+  }
+  if (node.type === 'slide') {
+    return node.responses.some((response) => response.text.toLowerCase().includes(query))
+  }
+  return false
+}
+
+/** Panel izquierdo: buscar/filtrar, crear nodos y navegar la lista de nodos
+ *  existentes. */
 export function LeftPanel() {
   const project = useProject()
   const createNode = useProjectStore((state) => state.createNode)
   const selectNode = useProjectStore((state) => state.selectNode)
   const focusNode = useProjectStore((state) => state.focusNode)
+
+  const [searchQuery, setSearchQuery] = useState('')
+  const normalizedQuery = searchQuery.trim().toLowerCase()
+
+  // Filtra la lista ya existente; no toca `focusNode`/selección, así que
+  // hacer clic en un resultado filtrado centra el lienzo exactamente igual
+  // que ya hacía antes de este buscador.
+  const visibleNodes = useMemo(() => {
+    if (!normalizedQuery) {
+      return project.graph.nodes
+    }
+    return project.graph.nodes.filter((node) => nodeMatchesQuery(node, normalizedQuery))
+  }, [project.graph.nodes, normalizedQuery])
 
   function handleCreate(type: NodeType) {
     const position = nextCascadePosition(project.graph.nodes.length)
@@ -59,13 +102,25 @@ export function LeftPanel() {
         ))}
       </div>
 
+      <div className={styles.searchSection}>
+        <input
+          type="search"
+          className={styles.searchInput}
+          placeholder="Buscar en el proyecto…"
+          aria-label="Buscar en el proyecto"
+          value={searchQuery}
+          onChange={(event) => setSearchQuery(event.target.value)}
+        />
+      </div>
+
       <ul className={styles.nodeList}>
-        {project.graph.nodes.map((node) => (
+        {visibleNodes.map((node) => (
           <li key={node.id}>
             {/* `focusNode` selecciona el nodo (igual que `selectNode`) y
                 además pide al lienzo que centre la vista en él, sin que
                 este componente conozca `@xyflow/react` — ver
-                `ui.focusRequestNodeId` en `src/store`. */}
+                `ui.focusRequestNodeId` en `src/store`. Reutilizado tal cual
+                sobre la lista ya filtrada por el buscador. */}
             <button type="button" className={styles.nodeItem} onClick={() => focusNode(node.id)}>
               <span className={styles.nodeType}>{NODE_TYPE_LABEL[node.type]}</span>
               {/* Marca discreta del punto de partida del recorrido. Mismo
@@ -82,6 +137,9 @@ export function LeftPanel() {
             </button>
           </li>
         ))}
+        {normalizedQuery && visibleNodes.length === 0 && (
+          <li className={styles.noResults}>Sin resultados para "{searchQuery.trim()}"</li>
+        )}
       </ul>
     </aside>
   )

@@ -10,6 +10,14 @@ import styles from './EditorScreen.module.css'
 export interface EditorScreenProps {
   /** Ruta absoluta del `.brunch` abierto; destino del autoguardado (fase 9). */
   filePath: string
+  /**
+   * Vuelve a `HomeScreen` en la misma ventana ("Cerrar proyecto" de
+   * `Topbar`). `EditorScreen` no lo invoca directamente: primero fuerza
+   * cualquier guardado pendiente (ver `handleCloseProject`) y solo entonces
+   * llama a este callback, que en `App.tsx` (`AppShell`) pone
+   * `openProjectPath` de vuelta a `null`.
+   */
+  onCloseProject: () => void
 }
 
 /**
@@ -31,10 +39,24 @@ export interface EditorScreenProps {
  * aquí garantiza que su listener de `Ctrl+S`/`Cmd+S` y su temporizador de
  * debounce sigan "vivos" mientras el usuario está en el Player, en vez de
  * reiniciarse cada vez que se alterna entre ambos modos.
+ *
+ * "Cerrar proyecto": antes de avisar a `onCloseProject` (que desmonta este
+ * componente al volver a `HomeScreen`), `handleCloseProject` fuerza
+ * cualquier guardado pendiente vía `flushPendingSave` de `useAutosave`. Sin
+ * este paso, un cambio hecho dentro de la ventana de debounce
+ * (`AUTOSAVE_DEBOUNCE_MS`, ver `useAutosave.ts`) se perdería: al desmontarse
+ * el efecto de autoguardado limpia su temporizador pendiente (`clearTimeout`
+ * en el cleanup) en vez de dejarlo completarse, así que hay que adelantar esa
+ * escritura explícitamente antes de desmontar.
  */
-export function EditorScreen({ filePath }: EditorScreenProps) {
+export function EditorScreen({ filePath, onCloseProject }: EditorScreenProps) {
   const previewMode = usePreviewMode()
-  useAutosave(filePath)
+  const { flushPendingSave } = useAutosave(filePath)
+
+  async function handleCloseProject() {
+    await flushPendingSave()
+    onCloseProject()
+  }
 
   if (previewMode) {
     return <PlayerScreen filePath={filePath} />
@@ -42,7 +64,7 @@ export function EditorScreen({ filePath }: EditorScreenProps) {
 
   return (
     <div className={styles.screen}>
-      <Topbar filePath={filePath} />
+      <Topbar filePath={filePath} onCloseProject={() => void handleCloseProject()} />
       <div className={styles.body}>
         <LeftPanel />
         <Canvas />

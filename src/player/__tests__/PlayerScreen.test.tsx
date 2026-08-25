@@ -8,6 +8,7 @@ import type { AppServices } from '../../app/AppServices'
 import { AppServicesProvider } from '../../app/AppServicesContext'
 import { MemoryAssetRepository } from '../../persistence'
 import { serializeRichBody } from '../../editor/richText/richTextContent'
+import styles from '../PlayerScreen.module.css'
 
 const TEST_FILE_PATH = '/tmp/player-screen-test.brunch'
 
@@ -237,6 +238,44 @@ describe('PlayerScreen', () => {
     expect(screen.getByText('Título exacto')).toBeInTheDocument()
     expect(screen.getByText('Cuerpo exacto')).toBeInTheDocument()
     expect(useProjectStore.getState().project.metadata.name).toBe('Mi proyecto de prueba')
+  })
+})
+
+describe('PlayerScreen: título del nodo (referencia interna del diseñador instruccional)', () => {
+  it('sigue mostrando el título del nodo en la diapositiva "de continuar", en gris claro', () => {
+    buildGraphInStore()
+    renderPlayer()
+
+    const heading = screen.getByText('Bienvenida')
+    expect(heading.tagName).toBe('H1')
+    // Gris claro (`--bs-color-text-faint`, ver `PlayerScreen.module.css`),
+    // no el color de texto normal: es una referencia interna, no contenido
+    // final. Nunca aparece así en el HTML/SCORM exportado (ver
+    // `src/export/__tests__/htmlBundle.test.ts`).
+    expect(heading.className).toBe(styles.nodeReferenceTitle)
+    expect(heading.className).not.toBe(styles.title)
+  })
+
+  it('sigue mostrando el título del nodo en la diapositiva de decisión, en gris claro', () => {
+    buildGraphInStore()
+    renderPlayer()
+
+    fireEvent.click(screen.getByText('Continuar'))
+
+    const heading = screen.getByText('¿Qué eliges?')
+    expect(heading.className).toBe(styles.nodeReferenceTitle)
+  })
+
+  it('el Final NO usa el estilo de referencia interna: su título fijo mantiene el color normal', () => {
+    buildGraphInStore()
+    renderPlayer()
+
+    fireEvent.click(screen.getByText('Continuar'))
+    fireEvent.click(screen.getByText('Camino A'))
+
+    const heading = screen.getByText('Fin de la experiencia')
+    expect(heading.className).toBe(styles.title)
+    expect(heading.className).not.toBe(styles.nodeReferenceTitle)
   })
 })
 

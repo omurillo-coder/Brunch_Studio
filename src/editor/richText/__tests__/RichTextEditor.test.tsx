@@ -162,3 +162,81 @@ describe('RichTextEditor', () => {
     })
   })
 })
+
+describe('RichTextEditor: corrector ortotipográfico nativo (fase 8)', () => {
+  it('el elemento editable tiene spellcheck="true" y lang="es" al montar (activado por defecto)', async () => {
+    render(<RichTextEditor body="Hola" onCommit={vi.fn()} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Hola')).toBeInTheDocument()
+    })
+
+    const editable = document.querySelector('[contenteditable="true"]') as HTMLElement
+    expect(editable.getAttribute('spellcheck')).toBe('true')
+    expect(editable.getAttribute('lang')).toBe('es')
+  })
+
+  it('el botón del corrector arranca activado y su aria-pressed lo refleja', async () => {
+    render(<RichTextEditor body="Hola" onCommit={vi.fn()} />)
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Corrector ortográfico' })).toBeInTheDocument()
+    })
+    expect(screen.getByRole('button', { name: 'Corrector ortográfico' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+  })
+
+  it('pulsar el botón desactiva el corrector: cambia spellcheck a "false" en caliente, sin desmontar el editor', async () => {
+    render(<RichTextEditor body="Hola" onCommit={vi.fn()} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Hola')).toBeInTheDocument()
+    })
+
+    const toggle = screen.getByRole('button', { name: 'Corrector ortográfico' })
+    const editableBefore = document.querySelector('[contenteditable="true"]') as HTMLElement
+
+    fireEvent.mouseDown(toggle)
+    fireEvent.click(toggle)
+
+    await waitFor(() => {
+      expect(toggle).toHaveAttribute('aria-pressed', 'false')
+    })
+
+    const editableAfter = document.querySelector('[contenteditable="true"]') as HTMLElement
+    // Mismo elemento del DOM: el editor no se ha recreado, solo se le ha
+    // actualizado el atributo (`editor.setOptions` -> `view.setProps`, ver
+    // `RichTextEditor.tsx`).
+    expect(editableAfter).toBe(editableBefore)
+    expect(editableAfter.getAttribute('spellcheck')).toBe('false')
+
+    // Y se puede reactivar.
+    fireEvent.mouseDown(toggle)
+    fireEvent.click(toggle)
+    await waitFor(() => {
+      expect(editableAfter.getAttribute('spellcheck')).toBe('true')
+    })
+  })
+
+  it('desactivar el corrector conserva el aria-labelledby del editor', async () => {
+    render(<RichTextEditor body="Hola" onCommit={vi.fn()} ariaLabelledBy="etiqueta-externa" />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Hola')).toBeInTheDocument()
+    })
+
+    const editable = document.querySelector('[contenteditable="true"]') as HTMLElement
+    expect(editable.getAttribute('aria-labelledby')).toBe('etiqueta-externa')
+
+    const toggle = screen.getByRole('button', { name: 'Corrector ortográfico' })
+    fireEvent.mouseDown(toggle)
+    fireEvent.click(toggle)
+
+    await waitFor(() => {
+      expect(editable.getAttribute('spellcheck')).toBe('false')
+    })
+    expect(editable.getAttribute('aria-labelledby')).toBe('etiqueta-externa')
+  })
+})

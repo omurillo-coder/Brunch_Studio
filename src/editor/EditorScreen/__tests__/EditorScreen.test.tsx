@@ -1,8 +1,12 @@
-import { act, render, screen } from '@testing-library/react'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { act, fireEvent, render, screen } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { Mock } from 'vitest'
 import { EditorScreen } from '../EditorScreen'
 import { AppServicesProvider } from '../../../app/AppServicesContext'
-import { MemoryProjectRepository } from '../../../persistence'
+import { MemoryAssetRepository, MemoryProjectRepository } from '../../../persistence'
+import type { ProjectRepository } from '../../../persistence'
+import { createProject } from '../../../domain'
+import { AUTOSAVE_DEBOUNCE_MS } from '../useAutosave'
 import { useProjectStore } from '../../../store'
 import { resetProjectStore } from '../../../store/testHelpers'
 
@@ -20,12 +24,24 @@ import { resetProjectStore } from '../../../store/testHelpers'
 
 const TEST_FILE_PATH = '/tmp/editor-screen-test.brunch'
 
-function renderEditorScreen() {
+function renderEditorScreen(onCloseProject: () => void = vi.fn()) {
   return render(
     <AppServicesProvider services={{ repository: new MemoryProjectRepository() }}>
-      <EditorScreen filePath={TEST_FILE_PATH} />
+      <EditorScreen filePath={TEST_FILE_PATH} onCloseProject={onCloseProject} />
     </AppServicesProvider>,
   )
+}
+
+/** Repositorio de pega: mismos métodos que `ProjectRepository`, todos mockeados. */
+function createStubRepository(overrides: Partial<ProjectRepository> = {}): ProjectRepository & {
+  saveProject: Mock
+} {
+  return {
+    createProject: vi.fn().mockResolvedValue(undefined),
+    openProject: vi.fn().mockResolvedValue(createProject('stub')),
+    saveProject: vi.fn().mockResolvedValue(undefined),
+    ...overrides,
+  } as ProjectRepository & { saveProject: Mock }
 }
 
 beforeEach(() => {
@@ -75,5 +91,80 @@ describe('EditorScreen — conmutación shell/Player (previewMode)', () => {
     // `previewMode` vía el store.
     expect(screen.getByText('← Volver al editor')).toBeInTheDocument()
     expect(screen.queryByText('▶ Probar')).not.toBeInTheDocument()
+  })
+})
+
+/**
+ * "Cerrar proyecto": `handleCloseProject` debe fuerza cualquier guardado
+ * pendiente (`flushPendingSave` de `useAutosave`) antes de avisar a
+ * `onCloseProject`, para que un cambio hecho dentro de la ventana de
+ * debounce nunca se pierda al volver a `HomeScreen`. Usa temporizadores
+ * simulados, igual que `useAutosave.test.tsx`, para poder situarse a mitad
+ * del debounce sin esperar de verdad.
+ */
+describe('EditorScreen — "Cerrar proyecto"', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('sin cambios pendientes, cierra de inmediato sin llamar a saveProject', async () => {
+    const repository = createStubRepository()
+    const onCloseProject = vi.fn()
+    render(
+      <AppServicesProvider services={{ repository, assetRepository: new MemoryAssetRepository() }}>
+        <EditorScreen filePath={TEST_FILE_PATH} onCloseProject={onCloseProject} />
+      </AppServicesProvider>,
+    )
+
+    await act(async () => {
+      fireEvent.click(screen.getByText('Cerrar proyecto'))
+      await vi.advanceTimersByTimeAsync(0)
+    })
+
+    expect(onCloseProject).toHaveBeenCalledTimes(1)
+    expect(repository.saveProject).not.toHaveBeenCalled()
+  })
+
+  it('con un cambio a mitad del debounce, fuerza el guardado antes de avisar a onCloseProject', async () => {
+    const repository = createStubRepository()
+    const onCloseProject = vi.fn()
+    render(
+      <AppServicesProvider services={{ repository, assetRepository: new MemoryAssetRepository() }}>
+        <EditorScreen filePath={TEST_FILE_PATH} onCloseProject={onCloseProject} />
+      </AppServicesProvider>,
+    )
+
+    act(() => {
+      useProjectStore.getState().createNode('final', { x: 0, y: 0 })
+    })
+    // A mitad del periodo de debounce: todavía no se ha guardado nada.
+    act(() => {
+      vi.advanceTimersByTime(AUTOSAVE_DEBOUNCE_MS / 2)
+    })
+    expect(repository.saveProject).not.toHaveBeenCalled()
+
+    await act(async () => {
+      fireEvent.click(screen.getByText('Cerrar proyecto'))
+      await vi.advanceTimersByTimeAsync(0)
+    })
+
+    expect(repository.saveProject).toHaveBeenCalledTimes(1)
+    expect(onCloseProject).toHaveBeenCalledTimes(1)
+    expect(repository.saveProject).toHaveBeenCalledWith(
+      TEST_FILE_PATH,
+      useProjectStore.getState().project,
+    )
+
+    // El temporizador de debounce original quedó cancelado por el guardado
+    // forzado: dejar pasar el resto de su plazo no debe producir una
+    // segunda llamada.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AUTOSAVE_DEBOUNCE_MS)
+    })
+    expect(repository.saveProject).toHaveBeenCalledTimes(1)
   })
 })

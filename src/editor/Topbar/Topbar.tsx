@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { useCanRedo, useCanUndo, useProject, useProjectStore } from '../../store'
 import type { SaveStatus } from '../../store'
 import { useHtmlExport, useScormExport } from '../../export'
+import { openNewProjectWindow } from '../../app/openNewProjectWindow'
 import styles from './Topbar.module.css'
 
 /**
@@ -39,6 +40,13 @@ export interface TopbarProps {
    * `useProjectStore`.
    */
   filePath: string
+  /**
+   * Vuelve a `HomeScreen` en la misma ventana. Lo llama `EditorScreen`
+   * (`handleCloseProject`), que primero fuerza cualquier guardado pendiente
+   * y solo entonces invoca esto: aquí no hay ninguna lógica de guardado,
+   * solo el botón que dispara el callback.
+   */
+  onCloseProject: () => void
 }
 
 /**
@@ -52,7 +60,7 @@ export interface TopbarProps {
  * cosas de la interfaz que hablan del documento entero y no de la selección
  * actual.
  */
-export function Topbar({ filePath }: TopbarProps) {
+export function Topbar({ filePath, onCloseProject }: TopbarProps) {
   const project = useProject()
   const saveStatus = useProjectStore((state) => state.saveStatus)
   const canUndo = useCanUndo()
@@ -159,6 +167,23 @@ export function Topbar({ filePath }: TopbarProps) {
         </button>
         <button type="button" className={styles.playButton} onClick={() => setPreviewMode(true)}>
           ▶ Probar
+        </button>
+        {/* Acciones de sesión (no de documento): trabajar con varios
+            proyectos. Van al final, después de "Probar", para no competir
+            visualmente con las acciones de proyecto (exportar) ni con la
+            única acción de acento de la barra. Estilo neutro (mismo que
+            "Exportar HTML/SCORM"): son acciones secundarias, sobrias, sin
+            modal ni diálogo de confirmación — el autoguardado ya deja el
+            `.brunch` al día antes de cerrar (ver `EditorScreen.handleCloseProject`). */}
+        <button
+          type="button"
+          className={styles.exportButton}
+          onClick={() => openNewProjectWindow()}
+        >
+          Nueva ventana
+        </button>
+        <button type="button" className={styles.exportButton} onClick={onCloseProject}>
+          Cerrar proyecto
         </button>
       </div>
     </header>

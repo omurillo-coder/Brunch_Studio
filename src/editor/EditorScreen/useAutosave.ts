@@ -96,6 +96,19 @@ export const AUTOSAVE_DEBOUNCE_MS = 700
  * siempre escribe el estado más reciente, no uno obsoleto.
  *
  * ---------------------------------------------------------------------------
+ * `flushPendingSave` (guardado forzado desde fuera, p.ej. "Cerrar proyecto")
+ * ---------------------------------------------------------------------------
+ * El valor devuelto por el hook expone `flushPendingSave`, pensado para
+ * quien vaya a desmontar/ocultar el editor (el botón "Cerrar proyecto" de
+ * `Topbar`, vía `EditorScreen`) y necesite garantizar que no queda ningún
+ * cambio dentro de la ventana de debounce sin escribir todavía. A
+ * diferencia del atajo `Ctrl+S`/`Cmd+S` (que siempre fuerza una escritura),
+ * `flushPendingSave` solo escribe si de verdad hay un guardado programado
+ * pendiente (`timer !== null`): si ya está todo guardado (`idle`/`saved`) no
+ * hace ninguna llamada innecesaria al repositorio.
+ *
+
+ * ---------------------------------------------------------------------------
  * Recolección de basura de assets huérfanos
  * ---------------------------------------------------------------------------
  * Justo después de que un guardado (programado o forzado) escriba con éxito,
@@ -113,7 +126,17 @@ export const AUTOSAVE_DEBOUNCE_MS = 700
  * el guardado del documento en sí ya se completó con éxito y no debe
  * quedar marcado como fallido por culpa de una limpieza secundaria.
  */
-export function useAutosave(filePath: string): void {
+export interface UseAutosaveResult {
+  /**
+   * Si hay un guardado programado pendiente (un cambio reciente todavía
+   * dentro de la ventana de debounce), lo fuerza de inmediato y espera a que
+   * termine. Si no hay nada pendiente, no hace nada. Ver comentario de
+   * diseño de más arriba.
+   */
+  flushPendingSave: () => Promise<void>
+}
+
+export function useAutosave(filePath: string): UseAutosaveResult {
   const { repository, assetRepository } = useAppServices()
 
   // Referencias siempre-frescas para que el listener de teclado y el
@@ -131,6 +154,13 @@ export function useAutosave(filePath: string): void {
     assetRepositoryRef.current = assetRepository
     filePathRef.current = filePath
   }, [repository, assetRepository, filePath])
+
+  // Puente estable hacia `flushSave`/`timer` (ambos recreados dentro del
+  // `useEffect` de dependencias `[]` de más abajo): `flushPendingSave` del
+  // valor devuelto por el hook necesita una identidad de función estable
+  // entre renders (para poder usarse con seguridad en un `useCallback`/efecto
+  // de quien la consuma) sin dejar de ver siempre el `timer` más reciente.
+  const flushPendingSaveRef = useRef<() => Promise<void>>(async () => {})
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | null = null
@@ -200,10 +230,16 @@ export function useAutosave(filePath: string): void {
 
     window.addEventListener('keydown', handleKeyDown)
 
+    flushPendingSaveRef.current = async () => {
+      if (timer === null) return
+      await flushSave()
+    }
+
     return () => {
       clearPendingTimer()
       unsubscribe()
       window.removeEventListener('keydown', handleKeyDown)
+      flushPendingSaveRef.current = async () => {}
     }
     // Deliberadamente sin `repository` como dependencia (ver `repositoryRef`
     // arriba): reinstalar el listener/temporizador cada vez que la
@@ -211,4 +247,8 @@ export function useAutosave(filePath: string): void {
     // solo arriesgaría perder un temporizador en marcha a mitad de un ciclo
     // de debounce.
   }, [])
+
+  return {
+    flushPendingSave: () => flushPendingSaveRef.current(),
+  }
 }

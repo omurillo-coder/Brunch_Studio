@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseRichBody, serializeRichBody } from '../richTextContent'
+import { extractPlainText, parseRichBody, serializeRichBody } from '../richTextContent'
 
 describe('parseRichBody / serializeRichBody', () => {
   it('hace roundtrip de un documento con negrita y lista sin perder información', () => {
@@ -102,5 +102,82 @@ describe('parseRichBody / serializeRichBody', () => {
   it('serializeRichBody produce JSON.stringify del documento', () => {
     const doc = { type: 'doc', content: [{ type: 'paragraph', content: [] }] }
     expect(serializeRichBody(doc)).toBe(JSON.stringify(doc))
+  })
+})
+
+describe('extractPlainText', () => {
+  it('extrae el texto de un párrafo simple', () => {
+    expect(extractPlainText(parseRichBody('Texto plano histórico'))).toBe(
+      'Texto plano histórico',
+    )
+  })
+
+  it('un documento vacío produce una cadena vacía', () => {
+    expect(extractPlainText(parseRichBody(''))).toBe('')
+  })
+
+  it('concatena varios tramos con marcas (negrita) del mismo párrafo sin insertar espacios de más', () => {
+    const doc = {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            { type: 'text', text: 'Bienvenido al escenario. Presta atención al ' },
+            { type: 'text', marks: [{ type: 'bold' }], text: 'protocolo' },
+            { type: 'text', text: '.' },
+          ],
+        },
+      ],
+    }
+    expect(extractPlainText(doc)).toBe('Bienvenido al escenario. Presta atención al protocolo.')
+  })
+
+  it('separa con un espacio el texto de párrafos distintos', () => {
+    const doc = {
+      type: 'doc',
+      content: [
+        { type: 'paragraph', content: [{ type: 'text', text: 'Primer párrafo' }] },
+        { type: 'paragraph', content: [{ type: 'text', text: 'Segundo párrafo' }] },
+      ],
+    }
+    expect(extractPlainText(doc)).toBe('Primer párrafo Segundo párrafo')
+  })
+
+  it('extrae el texto de listas (con y sin viñetas), un item por bloque, sin palabras pegadas', () => {
+    const doc = {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            { type: 'text', marks: [{ type: 'bold' }], text: 'Importante' },
+            { type: 'text', text: ': lee esto con atención.' },
+          ],
+        },
+        {
+          type: 'bulletList',
+          content: [
+            {
+              type: 'listItem',
+              content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Primer punto' }] }],
+            },
+            {
+              type: 'listItem',
+              content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Segundo punto' }] }],
+            },
+          ],
+        },
+      ],
+    }
+    const text = extractPlainText(doc)
+    expect(text).toBe('Importante: lee esto con atención. Primer punto Segundo punto')
+    expect(text).not.toContain('puntoSegundo')
+  })
+
+  it('no incluye claves ni sintaxis JSON: es texto real, no el body serializado', () => {
+    const text = extractPlainText(parseRichBody('Hola mundo'))
+    expect(text).not.toContain('"type"')
+    expect(text).not.toContain('"doc"')
   })
 })

@@ -41,6 +41,11 @@ export interface AppProps {
  * autoguardado necesita saber dónde escribir. Se guarda aquí porque es un
  * detalle de la sesión de la app, no del documento en sí (por eso no vive
  * en `useProjectStore`).
+ *
+ * "Cerrar proyecto" (Topbar) hace el camino inverso: pone `openProjectPath`
+ * de vuelta a `null` para volver a `HomeScreen` sin cerrar la ventana ni la
+ * aplicación. El mismo `useState` que decide qué pantalla mostrar basta
+ * para esto — no hace falta ningún estado nuevo.
  */
 function AppShell() {
   const [openProjectPath, setOpenProjectPath] = useState<string | null>(null)
@@ -51,7 +56,7 @@ function AppShell() {
 
   return (
     <Suspense fallback={<EditorScreenLoadingFallback />}>
-      <EditorScreen filePath={openProjectPath} />
+      <EditorScreen filePath={openProjectPath} onCloseProject={() => setOpenProjectPath(null)} />
     </Suspense>
   )
 }

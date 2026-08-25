@@ -226,7 +226,13 @@ export function PlayerScreen({ filePath }: PlayerScreenProps) {
       <main className={styles.stage}>
         {view.kind === 'continue' && (
           <div key={view.node.id} className={styles.card}>
-            {view.node.title.trim() && <h1 className={styles.title}>{view.node.title}</h1>}
+            {/* Referencia interna del diseñador instruccional (nunca
+                aparece en el HTML/SCORM exportado, ver
+                `src/export/exportedPlayerScript.ts`): en gris claro para
+                marcarlo como tal. */}
+            {view.node.title.trim() && (
+              <h1 className={styles.nodeReferenceTitle}>{view.node.title}</h1>
+            )}
             {view.node.body.trim() ? (
               <RichTextView body={view.node.body} className={styles.body} />
             ) : (
@@ -247,7 +253,10 @@ export function PlayerScreen({ filePath }: PlayerScreenProps) {
 
         {view.kind === 'decision' && (
           <div key={view.node.id} className={styles.card}>
-            {view.node.title.trim() && <h1 className={styles.title}>{view.node.title}</h1>}
+            {/* Misma referencia interna que en 'continue': gris claro. */}
+            {view.node.title.trim() && (
+              <h1 className={styles.nodeReferenceTitle}>{view.node.title}</h1>
+            )}
             {view.node.body.trim() && <RichTextView body={view.node.body} className={styles.body} />}
             <NodeMedia node={view.node} filePath={filePath} assetRepository={assetRepository} />
             <div className={styles.options}>

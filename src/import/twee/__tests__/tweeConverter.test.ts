@@ -190,4 +190,56 @@ describe('convertTweeToProject', () => {
     const { warnings } = convertTweeToProject(source, 'Historia')
     expect(warnings).toEqual([])
   })
+
+  describe('HTML embebido en el texto de un pasaje', () => {
+    it('interpreta divs/clases/estilos de maquetación sin dejar etiquetas ni atributos como texto visible', () => {
+      const source =
+        ':: Inicio\n' +
+        '<div class="cpi-level">Nivel de digitalización del proceso · 0 %</div>\n' +
+        '<div class="cpi-progress" style="width:0%"></div>\n' +
+        '<p>Lunes, 10:20. Recepción de <strong>un ticket</strong> urgente.</p>\n' +
+        '[[Siguiente]]\n\n' +
+        ':: Siguiente\nFin.'
+      const { document } = convertTweeToProject(source, 'Historia')
+      const inicio = document.graph.nodes.find((n) => n.title === 'Inicio') as SlideNode
+      const doc = parseRichBody(inicio.body)
+      const raw = JSON.stringify(doc)
+
+      // Ninguna etiqueta ni atributo crudo debe sobrevivir como texto.
+      expect(raw).not.toContain('<div')
+      expect(raw).not.toContain('</div>')
+      expect(raw).not.toContain('<p>')
+      expect(raw).not.toContain('class=')
+      expect(raw).not.toContain('style=')
+      expect(raw).not.toContain('cpi-level')
+      expect(raw).not.toContain('cpi-progress')
+
+      // El texto real se conserva íntegro y legible.
+      expect(bodyText(inicio.body)).toContain('Nivel de digitalización del proceso · 0 %')
+      expect(bodyText(inicio.body)).toContain('Lunes, 10:20. Recepción de un ticket urgente.')
+    })
+
+    it('convierte <strong> en negrita real, no en texto con etiquetas', () => {
+      const source = ':: Inicio\n<p>Hola <strong>mundo</strong> importante.</p>'
+      const { document } = convertTweeToProject(source, 'Historia')
+      const inicio = document.graph.nodes.find((n) => n.title === 'Inicio') as FinalNode
+      const doc = parseRichBody(inicio.body)
+      const textNodes = (doc.content?.[0]?.content ?? []) as Array<{
+        text?: string
+        marks?: Array<{ type: string }>
+      }>
+
+      const boldNode = textNodes.find((node) => node.marks?.some((mark) => mark.type === 'bold'))
+      expect(boldNode?.text).toBe('mundo')
+      expect(JSON.stringify(doc)).not.toContain('<strong>')
+    })
+
+    it('no confunde una macro SugarCube (doble ángulo) con HTML y sigue avisando de la lógica de Twine', () => {
+      const source = ':: ConMacro\n<<set $vida = 10>> Sigue leyendo. [[Siguiente]]\n\n:: Siguiente\nFin.'
+      const { document, warnings } = convertTweeToProject(source, 'Historia')
+      const nodo = document.graph.nodes.find((n) => n.title === 'ConMacro')
+      expect(warnings.some((w) => w.includes('ConMacro'))).toBe(true)
+      expect(bodyText(nodo?.body ?? '')).toContain('<<set $vida = 10>>')
+    })
+  })
 })

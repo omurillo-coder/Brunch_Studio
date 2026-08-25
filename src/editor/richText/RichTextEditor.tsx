@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { JSONContent } from '@tiptap/core'
 import { EditorContent, useEditor, useEditorState } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
@@ -89,11 +89,30 @@ export function RichTextEditor({ body, onCommit, ariaLabelledBy }: RichTextEdito
     onCommit(next)
   }
 
+  // Corrector ortotipográfico nativo del sistema/navegador (fase 8): sin
+  // ninguna librería propia de diccionario, apoyado enteramente en los
+  // atributos HTML `spellcheck`/`lang` del elemento editable raíz, que el
+  // propio navegador/SO interpreta. Activado por defecto; estado puramente
+  // local del componente (no se persiste en el documento ni en preferencias
+  // globales de la app — no hace falta más para esta fase).
+  const [spellcheckEnabled, setSpellcheckEnabled] = useState(true)
+
+  /** Atributos del `<div contenteditable>` raíz según el estado actual del
+   *  corrector. `spellcheck` es un atributo HTML, por eso viaja como string
+   *  `'true'`/`'false'`, no como booleano. */
+  function editorAttributes(enabled: boolean): Record<string, string> {
+    return {
+      ...(ariaLabelledBy ? { 'aria-labelledby': ariaLabelledBy } : {}),
+      spellcheck: enabled ? 'true' : 'false',
+      lang: 'es',
+    }
+  }
+
   const editor = useEditor({
     extensions: [StarterKit],
     content: initialDoc,
     editorProps: {
-      attributes: ariaLabelledBy ? { 'aria-labelledby': ariaLabelledBy } : {},
+      attributes: editorAttributes(spellcheckEnabled),
     },
     onUpdate: ({ editor: updatedEditor }) => {
       latestDocRef.current = updatedEditor.getJSON()
@@ -102,6 +121,17 @@ export function RichTextEditor({ body, onCommit, ariaLabelledBy }: RichTextEdito
       commitIfChanged(blurredEditor.getJSON())
     },
   })
+
+  // Alternar el corrector en caliente sin recrear el editor: `setOptions`
+  // hace merge superficial de `EditorOptions`, así que `editorProps` viaja
+  // completo (no solo `spellcheck`) o perdería `aria-labelledby`.
+  // Internamente llama a `view.setProps(...)` (ProseMirror), que actualiza
+  // de verdad los atributos del `<div contenteditable>` ya montado en el
+  // DOM — no hace falta desmontar/montar el editor.
+  useEffect(() => {
+    editor?.setOptions({ editorProps: { attributes: editorAttributes(spellcheckEnabled) } })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editor, spellcheckEnabled, ariaLabelledBy])
 
   useEffect(() => {
     return () => {
@@ -180,6 +210,22 @@ export function RichTextEditor({ body, onCommit, ariaLabelledBy }: RichTextEdito
             {button.label}
           </button>
         ))}
+        {/* Corrector ortotipográfico nativo (fase 8): activa/desactiva el
+            atributo `spellcheck` del editor en caliente, sin ninguna
+            librería propia de diccionario — ver `editorAttributes` arriba. */}
+        <button
+          type="button"
+          className={spellcheckEnabled ? styles.toolbarButtonActive : styles.toolbarButton}
+          aria-label="Corrector ortográfico"
+          aria-pressed={spellcheckEnabled}
+          title={
+            spellcheckEnabled ? 'Corrector ortográfico activado' : 'Corrector ortográfico desactivado'
+          }
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => setSpellcheckEnabled((current) => !current)}
+        >
+          ABC
+        </button>
       </div>
       <EditorContent editor={editor} className={styles.editorContent} />
     </div>

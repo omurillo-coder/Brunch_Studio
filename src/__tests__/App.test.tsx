@@ -69,4 +69,29 @@ describe('App: navegación HomeScreen -> EditorScreen', () => {
     expect(screen.getByText('Abrir proyecto')).toBeInTheDocument()
     expect(screen.queryByText('▶ Probar')).not.toBeInTheDocument()
   })
+
+  it('"Cerrar proyecto" desde el editor vuelve a mostrar HomeScreen en la misma ventana', async () => {
+    const repository = new MemoryProjectRepository()
+    const pickSaveProjectPath = vi.fn().mockResolvedValue('/tmp/proyecto-a-cerrar.brunch')
+    const pickOpenProjectPath = vi.fn().mockResolvedValue(null)
+
+    render(<App services={{ repository, pickSaveProjectPath, pickOpenProjectPath }} />)
+
+    fireEvent.click(screen.getByText('Nuevo proyecto'))
+    fireEvent.change(screen.getByLabelText('Nombre del proyecto'), {
+      target: { value: 'Escenario a cerrar' },
+    })
+    fireEvent.click(screen.getByText('Crear'))
+
+    await screen.findByText('▶ Probar')
+
+    fireEvent.click(screen.getByText('Cerrar proyecto'))
+
+    // Vuelve a HomeScreen sin cerrar la aplicación: los botones iniciales
+    // reaparecen y no queda ningún rastro del shell del editor.
+    await screen.findByText('Nuevo proyecto')
+    expect(screen.getByText('Abrir proyecto')).toBeInTheDocument()
+    expect(screen.queryByText('▶ Probar')).not.toBeInTheDocument()
+    expect(screen.queryByText('Cerrar proyecto')).not.toBeInTheDocument()
+  })
 })

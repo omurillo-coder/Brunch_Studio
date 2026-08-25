@@ -75,6 +75,23 @@
   color: var(--bs-color-text);
 }
 
+/* Título del NODO (vistas "continuar"/"decisión"): es una referencia interna
+   del diseñador instruccional, no contenido final — nunca aparece en el
+   HTML/SCORM exportado (ver `src/export/exportedPlayerScript.ts`), pero aquí,
+   en el Player de prueba integrado en la app, sí se muestra, en gris claro
+   para marcar justamente que es una referencia interna y no una diapositiva
+   pintada como contenido final. Reutiliza `--bs-color-text-faint`, el mismo
+   tono "apagado" que ya usa el resto de la app para metadatos secundarios
+   (p.ej. el número de nodo en `LeftPanel`), en vez de inventar un color
+   nuevo. El título fijo del Final ("Fin de la experiencia", ver más abajo)
+   NO es el título del nodo, así que sigue usando `.title` sin cambios. */
+.nodeReferenceTitle {
+  margin: 0;
+  font-size: var(--bs-font-size-lg);
+  font-weight: 600;
+  color: var(--bs-color-text-faint);
+}
+
 .body {
   margin: 0;
   font-size: var(--bs-font-size-md);

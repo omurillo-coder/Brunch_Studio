@@ -1,4 +1,6 @@
+import { generateJSON } from '@tiptap/core'
 import type { JSONContent } from '@tiptap/core'
+import StarterKit from '@tiptap/starter-kit'
 import { createId, MAX_RESPONSES, RESPONSE_LETTERS } from '../../domain'
 import type { DecisionResponse, FinalNode, Node, ProjectDocument, SlideNode } from '../../domain'
 import { serializeRichBody } from '../../editor/richText/richTextContent'
@@ -21,6 +23,13 @@ import type { TweePassage } from './tweeParser'
  * - Un enlace a un pasaje inexistente se deja sin destino, con aviso.
  * - Las macros de story format (Harlowe, SugarCube...) no se interpretan:
  *   se detecta su presencia y se avisa, dejando el texto tal cual.
+ * - El HTML embebido en el texto de un pasaje (muy habitual en Twine/Harlowe
+ *   para maquetar: `<div class="...">`, `<strong>`, `style="..."`) sí se
+ *   interpreta como marcado real cuando el editor tiene un equivalente
+ *   (negrita, cursiva, listas, párrafos); lo que no tiene equivalente
+ *   (etiquetas de maquetación como `<div>`, atributos `class`/`style`) se
+ *   descarta silenciosamente conservando su texto, nunca se muestra la
+ *   etiqueta cruda. Ver `containsEmbeddedHtml`/`embeddedHtmlToRichDoc`.
  */
 
 // ---------------------------------------------------------------------------
@@ -101,12 +110,81 @@ function containsTwineLogic(rawBody: string): boolean {
 // Cuerpo enriquecido
 // ---------------------------------------------------------------------------
 
-/** Convierte texto plano (ya sin sintaxis de enlace) en un documento Tiptap
- *  simple de párrafos, separando por líneas en blanco, y lo serializa con
- *  `serializeRichBody` para que Inspector/Player lo muestren como cualquier
- *  otro `body`. No traduce marcado de story format (negrita/cursiva...): se
- *  deja como texto simple, tal como pide el encargo. */
+/** Extensiones Tiptap usadas para interpretar el HTML embebido en pasajes de
+ *  Twine, exactamente las mismas que usa el editor real
+ *  (`RichTextEditor.tsx`, `extensions: [StarterKit]`) — así el HTML
+ *  convertido en la importación admite ni más ni menos marcado del que el
+ *  usuario podría producir editando el cuerpo a mano. */
+const RICH_TEXT_EXTENSIONS = [StarterKit]
+
+/** Detecta una etiqueta HTML "de verdad" en el texto de un pasaje: un único
+ *  `<` (no precedido de otro `<`) seguido directamente de una letra (o de
+ *  `/` + letra para el cierre). Autores de Twine/Harlowe a menudo maquetan
+ *  pasajes con HTML crudo (`<div class="...">`, `<strong>`, `style="..."`)
+ *  directamente en el texto; sin esto, esas etiquetas se veían tal cual como
+ *  texto plano en el resultado.
+ *
+ *  El requisito de que no vaya precedido de otro `<` es deliberado: excluye
+ *  la sintaxis de macro de doble ángulo de SugarCube (`<<set ...>>`,
+ *  `<<if ...>>`), que jamás debe confundirse con una etiqueta HTML real. */
+const HTML_TAG_RE = /(?<!<)<\/?[a-zA-Z][a-zA-Z0-9]*(?:\s[^<>]*)?>/
+
+/** Decide si el texto de un pasaje (ya sin sintaxis de enlace `[[...]]`)
+ *  contiene HTML embebido que conviene interpretar como marcado real, en
+ *  vez de como texto plano.
+ *
+ *  Se excluye explícitamente cualquier texto con macro de SugarCube: pasar
+ *  `<<set $x to 1>>` por un parser HTML lo corrompe (el `<` doble no forma
+ *  una etiqueta válida y el resultado es basura como `<> ` + texto suelto),
+ *  y el comportamiento ya existente de conservar las macros como texto con
+ *  aviso (`containsTwineLogic`) tiene prioridad sobre interpretar HTML. */
+function containsEmbeddedHtml(text: string): boolean {
+  return HTML_TAG_RE.test(text) && !SUGARCUBE_MACRO_RE.test(text)
+}
+
+/** Convierte el HTML embebido de un pasaje en un documento Tiptap real vía
+ *  `generateJSON` (mismas extensiones que el editor): las etiquetas con
+ *  equivalente en el modelo de texto enriquecido de la app (`<strong>`/`<b>`
+ *  -> negrita, `<em>`/`<i>` -> cursiva, `<ul>`/`<ol>`/`<li>` -> listas,
+ *  `<p>`/saltos de línea -> párrafos...) se convierten en las marcas/nodos
+ *  Tiptap correspondientes. Las etiquetas o atributos sin equivalente
+ *  (`<div class="cpi-level">`, `style="width:0%"`, clases CSS propias de la
+ *  maquetación original de Twine) no tienen regla de parseo en este esquema
+ *  Tiptap: `generateJSON` las descarta silenciosamente y conserva solo su
+ *  contenido de texto, que es justo el comportamiento buscado — nunca debe
+ *  verse una etiqueta o atributo crudo como texto para el usuario final.
+ *
+ *  Devuelve `undefined` si `generateJSON` lanza (HTML demasiado irregular);
+ *  la llamada debe caer entonces al tratamiento de texto plano de abajo en
+ *  vez de romper la importación completa del archivo por un solo pasaje. */
+function embeddedHtmlToRichDoc(text: string): JSONContent | undefined {
+  try {
+    return generateJSON(text, RICH_TEXT_EXTENSIONS) as JSONContent
+  } catch {
+    return undefined
+  }
+}
+
+/** Convierte el texto de un pasaje (ya sin sintaxis de enlace) en un
+ *  documento Tiptap y lo serializa con `serializeRichBody` para que
+ *  Inspector/Player lo muestren como cualquier otro `body`.
+ *
+ * - Si el texto contiene HTML embebido de verdad (`containsEmbeddedHtml`),
+ *   se interpreta como marcado real (ver `embeddedHtmlToRichDoc`).
+ * - En cualquier otro caso -incluido si el HTML era demasiado irregular
+ *   para interpretarse- se trata como texto plano simple: separa por líneas
+ *   en blanco en párrafos, uniendo con un espacio las líneas sueltas de
+ *   cada párrafo. No traduce marcado de story format (macros Harlowe/
+ *   SugarCube): se deja tal cual, tal como pide el encargo, para que el
+ *   aviso de `containsTwineLogic` siga teniendo sentido. */
 function plainTextToRichBody(text: string): string {
+  if (containsEmbeddedHtml(text)) {
+    const htmlDoc = embeddedHtmlToRichDoc(text)
+    if (htmlDoc) {
+      return serializeRichBody(htmlDoc)
+    }
+  }
+
   const paragraphs = text
     .split(/\n\s*\n/)
     .map((paragraph) =>

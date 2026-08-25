@@ -740,6 +740,11 @@ function NodeFields({
           className={styles.input}
           type="text"
           value={title}
+          // Mismo corrector nativo del sistema/navegador que `RichTextEditor`
+          // (fase 8), por consistencia — este campo no tiene su propio botón
+          // de activar/desactivar (solo el editor de contenido lo necesita).
+          spellCheck
+          lang="es"
           onChange={(event) => setTitle(event.target.value)}
           onBlur={commitPending}
           onKeyDown={handleTitleKeyDown}

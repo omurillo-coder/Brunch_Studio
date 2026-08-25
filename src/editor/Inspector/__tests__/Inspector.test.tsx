@@ -95,6 +95,17 @@ describe('Inspector', () => {
     })
   })
 
+  it('el campo de título tiene el corrector nativo activado con idioma español (fase 8)', () => {
+    act(() => {
+      useProjectStore.getState().selectNode(startNodeId())
+    })
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    const titleInput = screen.getByLabelText('Título')
+    expect(titleInput).toHaveAttribute('spellcheck', 'true')
+    expect(titleInput).toHaveAttribute('lang', 'es')
+  })
+
   it('editar y hacer blur produce exactamente una llamada efectiva a updateNode', () => {
     act(() => {
       useProjectStore.getState().selectNode(startNodeId())

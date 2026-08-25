@@ -330,15 +330,6 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
     return typeof value === 'string' ? value.trim() : '';
   }
 
-  function appendTitle(card, node) {
-    if (!trimmed(node.title)) {
-      return;
-    }
-    var heading = el('h1', 'title');
-    heading.textContent = node.title;
-    card.appendChild(heading);
-  }
-
   /** Cuerpo enriquecido ya renderizado en tiempo de exportación (Tiptap ->
    *  HTML estático). \`fallback\` se pinta como texto plano cuando el nodo no
    *  tiene cuerpo; \`null\` significa "no pintar nada". */
@@ -407,7 +398,10 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
     var card = el('section', 'card');
 
     if (view.kind === 'continue') {
-      appendTitle(card, view.node);
+      // El título del nodo es solo referencia interna del diseñador
+      // instruccional: nunca se pinta en el HTML/SCORM exportado (sí se ve,
+      // en gris claro, dentro del Player de prueba de la app; ver
+      // PlayerScreen.tsx).
       appendBody(card, view.node, texts.emptySlideBody);
       appendMedia(card, view.node, 'mediaSection', texts.nodeImageAlt);
       var continueButton = el('button', 'primaryButton');
@@ -422,7 +416,7 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
     }
 
     if (view.kind === 'decision') {
-      appendTitle(card, view.node);
+      // Mismo criterio que en 'continue': el título del nodo no se pinta.
       appendBody(card, view.node, null);
       appendMedia(card, view.node, 'mediaSection', texts.nodeImageAlt);
       var options = el('div', 'options');
