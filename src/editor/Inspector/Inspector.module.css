@@ -415,3 +415,55 @@
   background: var(--bs-color-danger);
   color: var(--bs-color-danger-contrast);
 }
+
+/* Confirmación inline de "Eliminar <tipo>" (ver `DeleteNodeButton` en
+   `Inspector.tsx`): sustituye al botón en el mismo sitio, mismo criterio de
+   color de peligro que el botón que reemplaza. */
+.deleteNodeConfirm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--bs-space-2);
+  align-self: flex-start;
+  padding: var(--bs-space-2) var(--bs-space-3);
+  border: 1px solid var(--bs-color-danger);
+  border-radius: var(--bs-radius-sm);
+  background: var(--bs-color-danger-bg);
+}
+
+.deleteNodeConfirmText {
+  font-size: var(--bs-font-size-sm);
+  color: var(--bs-color-text);
+}
+
+.deleteNodeConfirmActions {
+  display: flex;
+  gap: var(--bs-space-2);
+}
+
+.deleteNodeConfirmButton {
+  padding: var(--bs-space-1) var(--bs-space-3);
+  border: none;
+  border-radius: var(--bs-radius-sm);
+  background: var(--bs-color-danger);
+  color: var(--bs-color-danger-contrast);
+  font-size: var(--bs-font-size-sm);
+  cursor: pointer;
+}
+
+.deleteNodeConfirmButton:hover {
+  background: var(--bs-color-danger-hover);
+}
+
+.cancelDeleteButton {
+  padding: var(--bs-space-1) var(--bs-space-3);
+  border: 1px solid var(--bs-color-border);
+  border-radius: var(--bs-radius-sm);
+  background: var(--bs-color-surface);
+  color: var(--bs-color-text);
+  font-size: var(--bs-font-size-sm);
+  cursor: pointer;
+}
+
+.cancelDeleteButton:hover {
+  background: var(--bs-color-bg);
+}

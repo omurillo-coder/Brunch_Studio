@@ -7,6 +7,7 @@ import { PlayerScreen } from '../../player/PlayerScreen'
 import { usePreviewMode } from '../../store'
 import { loadLeftPanelVisible, saveLeftPanelVisible } from '../uiPreferences'
 import { useAutosave } from './useAutosave'
+import { useWindowCloseGuard } from './useWindowCloseGuard'
 import styles from './EditorScreen.module.css'
 
 export interface EditorScreenProps {
@@ -62,6 +63,12 @@ export interface EditorScreenProps {
 export function EditorScreen({ filePath, onCloseProject }: EditorScreenProps) {
   const previewMode = usePreviewMode()
   const { flushPendingSave } = useAutosave(filePath)
+  // Guardián de cierre de ventana (tarea "cerrar con cambios pendientes"):
+  // mismo criterio que `useAutosave` en cuanto a colocación — antes del
+  // `if (previewMode)`, para que el listener sobreviva intacto a la
+  // conmutación Editor↔Player. Ver comentario de diseño en
+  // `useWindowCloseGuard.ts`.
+  useWindowCloseGuard({ flushPendingSave })
   const [leftPanelVisible, setLeftPanelVisible] = useState(() => loadLeftPanelVisible())
 
   useEffect(() => {

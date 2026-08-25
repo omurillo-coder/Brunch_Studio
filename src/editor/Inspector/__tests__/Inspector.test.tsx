@@ -480,7 +480,7 @@ describe('Inspector — respuestas de una diapositiva', () => {
     expect(screen.queryByRole('button', { name: /^Eliminar /i })).not.toBeInTheDocument()
   })
 
-  it('el botón de eliminar borra una diapositiva y el Inspector vuelve a "sin selección"', () => {
+  it('el primer clic en "Eliminar" NO borra todavía: solo muestra la confirmación inline', () => {
     act(() => {
       useProjectStore.getState().createNode('slide', { x: 0, y: 0 }, { title: 'Diapositiva 2' })
     })
@@ -492,12 +492,52 @@ describe('Inspector — respuestas de una diapositiva', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Eliminar diapositiva' }))
 
+    // Sigue existiendo: el primer clic solo arma la confirmación.
+    expect(useProjectStore.getState().project.graph.nodes.some((n) => n.id === slideId)).toBe(true)
+    expect(screen.getByText('¿Eliminar diapositiva?')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Sí, eliminar' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Cancelar' })).toBeInTheDocument()
+    // El botón original desaparece mientras se confirma.
+    expect(screen.queryByRole('button', { name: 'Eliminar diapositiva' })).not.toBeInTheDocument()
+  })
+
+  it('confirmar con "Sí, eliminar" borra la diapositiva y el Inspector vuelve a "sin selección"', () => {
+    act(() => {
+      useProjectStore.getState().createNode('slide', { x: 0, y: 0 }, { title: 'Diapositiva 2' })
+    })
+    const slideId = slideNodeId()
+    act(() => {
+      useProjectStore.getState().selectNode(slideId)
+    })
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Eliminar diapositiva' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Sí, eliminar' }))
+
     expect(useProjectStore.getState().project.graph.nodes.some((n) => n.id === slideId)).toBe(false)
     // Vuelve a la vista "sin selección" (resumen del proyecto).
     expect(screen.getByText('Untitled')).toBeInTheDocument()
   })
 
-  it('el botón de eliminar borra un nodo Final', () => {
+  it('cancelar la confirmación no borra nada y vuelve al botón normal', () => {
+    act(() => {
+      useProjectStore.getState().createNode('slide', { x: 0, y: 0 }, { title: 'Diapositiva 2' })
+    })
+    const slideId = slideNodeId()
+    act(() => {
+      useProjectStore.getState().selectNode(slideId)
+    })
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Eliminar diapositiva' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
+
+    expect(useProjectStore.getState().project.graph.nodes.some((n) => n.id === slideId)).toBe(true)
+    expect(screen.getByRole('button', { name: 'Eliminar diapositiva' })).toBeInTheDocument()
+    expect(screen.queryByText('¿Eliminar diapositiva?')).not.toBeInTheDocument()
+  })
+
+  it('el botón de eliminar borra un nodo Final tras confirmar', () => {
     act(() => {
       useProjectStore.getState().createNode('final', { x: 0, y: 0 })
       const finalId = useProjectStore
@@ -509,13 +549,18 @@ describe('Inspector — respuestas de una diapositiva', () => {
     render(<Inspector filePath={TEST_FILE_PATH} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Eliminar final' }))
+    expect(
+      useProjectStore.getState().project.graph.nodes.some((n) => n.type === 'final'),
+    ).toBe(true)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sí, eliminar' }))
 
     expect(
       useProjectStore.getState().project.graph.nodes.some((n) => n.type === 'final'),
     ).toBe(false)
   })
 
-  it('el botón de eliminar borra una diapositiva con respuestas (antes "Decisión")', () => {
+  it('el botón de eliminar borra una diapositiva con respuestas (antes "Decisión") tras confirmar', () => {
     const decisionId = createSlideWithTwoResponses()
     act(() => {
       useProjectStore.getState().selectNode(decisionId)
@@ -523,6 +568,7 @@ describe('Inspector — respuestas de una diapositiva', () => {
     render(<Inspector filePath={TEST_FILE_PATH} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Eliminar diapositiva' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Sí, eliminar' }))
 
     expect(useProjectStore.getState().project.graph.nodes.some((n) => n.id === decisionId)).toBe(
       false,

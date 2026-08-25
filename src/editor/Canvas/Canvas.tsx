@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   Background,
   BackgroundVariant,
@@ -80,6 +80,17 @@ function pointFromConnectEndEvent(event: MouseEvent | TouchEvent): { x: number; 
  */
 const FALLBACK_NODE_WIDTH = 180
 const FALLBACK_NODE_HEIGHT = 60
+
+/**
+ * Ventana de confirmación del borrado con Supr/Backspace (ver
+ * `handleBeforeDelete` más abajo): una segunda pulsación sobre exactamente
+ * el mismo conjunto de nodos, dentro de este plazo, confirma el borrado.
+ * Pasado este tiempo sin una segunda pulsación, la confirmación caduca sola
+ * y hay que empezar de nuevo. 3s: suficiente para que no se sienta como una
+ * doble pulsación accidental, pero corto para no dejar el aviso colgado
+ * mucho rato si el usuario se distrae.
+ */
+const DELETE_CONFIRM_WINDOW_MS = 3000
 
 /**
  * Lienzo real del editor, sobre `@xyflow/react`.
@@ -211,14 +222,82 @@ export function Canvas() {
   // de aristas propio en `@xyflow/react` (se derivan de `project` en cada
   // render, ver `adapter.ts`), así que aceptarlas aquí no tiene efecto en el
   // dominio.
+  //
+  // Confirmación por doble pulsación (sin `window.confirm()` ni modal
+  // propio, mismo criterio "sin diálogos/overlays propios" que el resto de
+  // la app — ver `DeleteNodeButton` en `Inspector.tsx` para el equivalente
+  // de dos pasos con clic en vez de tecla): la PRIMERA vez que Supr/
+  // Backspace deja candidatos válidos para un conjunto de nodos dado, este
+  // handler los veta (`return false`) y arma una confirmación pendiente
+  // (`pendingDeleteRef` + `pendingDeleteCount` para el aviso, ver JSX) que
+  // caduca sola a los `DELETE_CONFIRM_WINDOW_MS`. Solo una SEGUNDA pulsación
+  // sobre EXACTAMENTE el mismo conjunto de nodos (`key`, el join ordenado de
+  // sus ids), dentro de esa ventana, deja pasar el borrado de verdad. Cambiar
+  // la selección entre pulsaciones cuenta como un conjunto distinto, así que
+  // vuelve a pedir una primera confirmación para ese nuevo conjunto.
   const startNodeId = project.graph.startNodeId
+  const pendingDeleteRef = useRef<{ key: string; timer: ReturnType<typeof setTimeout> } | null>(
+    null,
+  )
+  const [pendingDeleteCount, setPendingDeleteCount] = useState<number | null>(null)
+
+  const cancelPendingDelete = useCallback(() => {
+    if (pendingDeleteRef.current) {
+      clearTimeout(pendingDeleteRef.current.timer)
+      pendingDeleteRef.current = null
+    }
+    setPendingDeleteCount(null)
+  }, [])
+
+  // Limpia el temporizador pendiente si el lienzo se desmonta a mitad de la
+  // ventana de confirmación (p.ej. "Cerrar proyecto"), para no dejar un
+  // `setTimeout` huérfano corriendo contra un componente ya desmontado.
+  useEffect(() => {
+    return () => {
+      if (pendingDeleteRef.current) {
+        clearTimeout(pendingDeleteRef.current.timer)
+      }
+    }
+  }, [])
+
   const handleBeforeDelete: OnBeforeDelete<CanvasFlowNode, CanvasFlowEdge> = useCallback(
     async ({ nodes: candidateNodes, edges: candidateEdges }) => {
       const allowedNodes = candidateNodes.filter((node) => node.id !== startNodeId)
       if (allowedNodes.length === 0 && candidateNodes.length > 0) {
         return false
       }
-      return { nodes: allowedNodes, edges: candidateEdges }
+      if (allowedNodes.length === 0) {
+        // Sin nodos candidatos (solo aristas, o nada) no hay nada que
+        // confirmar: se deja pasar tal cual, mismo comportamiento que antes.
+        return { nodes: allowedNodes, edges: candidateEdges }
+      }
+
+      const key = allowedNodes
+        .map((node) => node.id)
+        .sort()
+        .join('|')
+      const pending = pendingDeleteRef.current
+
+      if (pending && pending.key === key) {
+        // Segunda pulsación sobre el mismo conjunto: se confirma de verdad.
+        clearTimeout(pending.timer)
+        pendingDeleteRef.current = null
+        setPendingDeleteCount(null)
+        return { nodes: allowedNodes, edges: candidateEdges }
+      }
+
+      // Primera pulsación (o una selección distinta a la que ya estaba
+      // pendiente): se veta este borrado y se arma/renueva la confirmación.
+      if (pending) {
+        clearTimeout(pending.timer)
+      }
+      const timer = setTimeout(() => {
+        pendingDeleteRef.current = null
+        setPendingDeleteCount(null)
+      }, DELETE_CONFIRM_WINDOW_MS)
+      pendingDeleteRef.current = { key, timer }
+      setPendingDeleteCount(allowedNodes.length)
+      return false
     },
     [startNodeId],
   )
@@ -422,6 +501,26 @@ export function Canvas() {
           onSelect={handleSelectMenuType}
           onClose={closeContextMenu}
         />
+      )}
+      {/* Aviso de confirmación de borrado por doble pulsación (ver
+          `handleBeforeDelete` arriba): discreto, anclado a la parte
+          inferior del lienzo, no un modal. Desaparece solo al confirmar, al
+          cancelar, o al caducar la ventana de confirmación. */}
+      {pendingDeleteCount !== null && (
+        <div className={styles.deleteConfirmBanner} role="status">
+          <span>
+            {pendingDeleteCount === 1
+              ? 'Pulsa Supr/Backspace otra vez para eliminar este nodo.'
+              : `Pulsa Supr/Backspace otra vez para eliminar estos ${pendingDeleteCount} nodos.`}
+          </span>
+          <button
+            type="button"
+            className={styles.deleteConfirmCancel}
+            onClick={cancelPendingDelete}
+          >
+            Cancelar
+          </button>
+        </div>
       )}
     </div>
   )

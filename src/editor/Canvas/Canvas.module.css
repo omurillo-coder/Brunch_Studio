@@ -40,3 +40,41 @@
 .canvas :global(.react-flow__edges) {
   z-index: 1000;
 }
+
+/* Aviso de confirmación de borrado por doble pulsación de Supr/Backspace
+   (ver `handleBeforeDelete` en `Canvas.tsx`). Ámbar de aviso (no rojo de
+   peligro): todavía no se ha borrado nada, es un "confirma la siguiente
+   pulsación", no un error ni un destructivo ya en curso. Anclado a la parte
+   inferior central del lienzo, discreto — no un modal ni un overlay a
+   pantalla completa. */
+.deleteConfirmBanner {
+  position: absolute;
+  left: 50%;
+  bottom: var(--bs-space-5);
+  transform: translateX(-50%);
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: var(--bs-space-3);
+  padding: var(--bs-space-2) var(--bs-space-3);
+  background: var(--bs-color-warning-bg);
+  border: 1px solid var(--bs-color-warning);
+  border-radius: var(--bs-radius-md);
+  box-shadow: var(--bs-shadow-sm);
+  font-size: var(--bs-font-size-sm);
+  color: var(--bs-color-warning-contrast);
+}
+
+.deleteConfirmCancel {
+  padding: var(--bs-space-1) var(--bs-space-2);
+  border: 1px solid var(--bs-color-border);
+  border-radius: var(--bs-radius-sm);
+  background: var(--bs-color-surface);
+  color: var(--bs-color-text);
+  font-size: var(--bs-font-size-xs);
+  cursor: pointer;
+}
+
+.deleteConfirmCancel:hover {
+  background: var(--bs-color-bg);
+}

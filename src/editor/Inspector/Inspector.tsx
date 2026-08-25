@@ -926,6 +926,66 @@ function InternalNoteField({ node }: { node: Node }) {
 }
 
 /**
+ * Botón de eliminar el nodo seleccionado, con confirmación INLINE (nunca
+ * `window.confirm()` del navegador ni un modal propio — mismo criterio "sin
+ * diálogos/overlays propios" que el resto de la app, ver comentario de
+ * diseño en `HomeScreen`). El primer clic NO borra nada todavía: sustituye
+ * el propio botón por un aviso con dos acciones, "Sí, eliminar" (la única
+ * que de verdad llama a `deleteNode`) y "Cancelar" (vuelve al botón normal
+ * sin tocar el documento).
+ *
+ * Nunca se monta para la diapositiva de inicio: `NodeFields` ya filtra ese
+ * caso antes de renderizar este componente (ver `node.id !== startNodeId`
+ * más abajo) — el dominio (`store.deleteNode`) lanzaría si se intentara
+ * borrar de todos modos.
+ *
+ * Estado de confirmación puramente local (`useState`, no en el store): al
+ * montarse con `key={node.id}` a través de `NodeFields` (ver su comentario
+ * de diseño), cambiar de nodo seleccionado destruye y vuelve a crear esta
+ * instancia, así que la confirmación nunca queda "colgada" de un nodo
+ * distinto al que se está mirando.
+ */
+function DeleteNodeButton({ node }: { node: Node }) {
+  const deleteNode = useProjectStore((state) => state.deleteNode)
+  const [confirming, setConfirming] = useState(false)
+  const typeLabel = NODE_TYPE_LABEL[node.type].toLowerCase()
+
+  if (confirming) {
+    return (
+      <div className={styles.deleteNodeConfirm}>
+        <span className={styles.deleteNodeConfirmText}>¿Eliminar {typeLabel}?</span>
+        <div className={styles.deleteNodeConfirmActions}>
+          <button
+            type="button"
+            className={styles.deleteNodeConfirmButton}
+            onClick={() => deleteNode(node.id)}
+          >
+            Sí, eliminar
+          </button>
+          <button
+            type="button"
+            className={styles.cancelDeleteButton}
+            onClick={() => setConfirming(false)}
+          >
+            Cancelar
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <button
+      type="button"
+      className={styles.deleteNodeButton}
+      onClick={() => setConfirming(true)}
+    >
+      Eliminar {typeLabel}
+    </button>
+  )
+}
+
+/**
  * Campos de edición de un nodo (título/body), comunes a cualquier tipo, más
  * — para una Diapositiva — sus adjuntos, su modo "de continuar" (si no tiene
  * respuestas) y la sección de respuestas.
@@ -956,7 +1016,6 @@ function NodeFields({
   project: ProjectDocument
 }) {
   const updateNode = useProjectStore((state) => state.updateNode)
-  const deleteNode = useProjectStore((state) => state.deleteNode)
   const titleFocusRequestNodeId = useTitleFocusRequestNodeId()
   const clearTitleFocusRequest = useProjectStore((state) => state.clearTitleFocusRequest)
   const titleInputRef = useRef<HTMLInputElement>(null)
@@ -1055,19 +1114,11 @@ function NodeFields({
       )}
       <ConnectionsSection node={node} project={project} />
       {/* Acción de borrado descubrible sin depender de la tecla Supr/Backspace
-          del lienzo (ver `Canvas`). Nunca se muestra para la diapositiva de
-          inicio — `store.deleteNode` (dominio) lanza si se intentara. Sin
-          diálogo de confirmación: el propio undo (Ctrl/Cmd+Z) cubre el
-          "deshacer por error", mismo criterio que "Eliminar respuesta". */}
-      {node.id !== startNodeId && (
-        <button
-          type="button"
-          className={styles.deleteNodeButton}
-          onClick={() => deleteNode(node.id)}
-        >
-          Eliminar {NODE_TYPE_LABEL[node.type].toLowerCase()}
-        </button>
-      )}
+          del lienzo (ver `Canvas`, que tiene su propia confirmación por
+          doble pulsación). Nunca se muestra para la diapositiva de inicio —
+          `store.deleteNode` (dominio) lanzaría si se intentara. Confirmación
+          inline de dos pasos, ver `DeleteNodeButton` más arriba. */}
+      {node.id !== startNodeId && <DeleteNodeButton node={node} />}
     </div>
   )
 }

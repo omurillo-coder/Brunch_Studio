@@ -478,11 +478,14 @@ describe('Canvas — elegir una opción del menú crea, conecta, selecciona y ci
 
 /**
  * Tests de borrado con Supr/Backspace: `onBeforeDelete` veta la diapositiva
- * de inicio (`graph.startNodeId`) entre los candidatos y `onNodesDelete`
- * llama a `store.deleteNode` por cada nodo que quedó permitido.
+ * de inicio (`graph.startNodeId`) entre los candidatos, exige una SEGUNDA
+ * pulsación sobre el mismo conjunto de nodos dentro de
+ * `DELETE_CONFIRM_WINDOW_MS` para confirmar de verdad (ver comentario de
+ * diseño en `Canvas.tsx`), y `onNodesDelete` llama a `store.deleteNode` por
+ * cada nodo que quedó permitido.
  */
 describe('Canvas — borrado de nodos (onBeforeDelete / onNodesDelete)', () => {
-  it('onBeforeDelete veta la diapositiva de inicio y deja pasar los demás candidatos', async () => {
+  it('onBeforeDelete veta la diapositiva de inicio y, tras una segunda pulsación sobre el mismo conjunto, deja pasar los demás candidatos', async () => {
     render(<Canvas />)
     const start = startSlide()
     act(() => {
@@ -490,15 +493,100 @@ describe('Canvas — borrado de nodos (onBeforeDelete / onNodesDelete)', () => {
     })
     const other = otherNodeOfType('slide')
 
-    const result = await capturedProps?.onBeforeDelete?.({
+    const candidates = {
       nodes: [
         { id: start.id, type: 'slide' } as never,
         { id: other.id, type: 'slide' } as never,
       ],
       edges: [],
+    }
+
+    // Primera pulsación: se veta (solo arma la confirmación), nada se borra
+    // todavía.
+    const firstResult = await capturedProps?.onBeforeDelete?.(candidates)
+    expect(firstResult).toBe(false)
+
+    // Segunda pulsación sobre el mismo conjunto: se confirma de verdad, y la
+    // diapositiva de inicio sigue excluida de los candidatos permitidos.
+    const secondResult = await capturedProps?.onBeforeDelete?.(candidates)
+    expect(secondResult).toEqual({ nodes: [{ id: other.id, type: 'slide' }], edges: [] })
+  })
+
+  it('una primera pulsación muestra un aviso inline con "Cancelar"; cancelar exige una nueva primera confirmación', async () => {
+    render(<Canvas />)
+    act(() => {
+      useProjectStore.getState().createNode('slide', { x: 0, y: 0 })
+    })
+    const other = otherNodeOfType('slide')
+    const candidates = { nodes: [{ id: other.id, type: 'slide' } as never], edges: [] }
+
+    await act(async () => {
+      await capturedProps?.onBeforeDelete?.(candidates)
     })
 
-    expect(result).toEqual({ nodes: [{ id: other.id, type: 'slide' }], edges: [] })
+    expect(
+      screen.getByText('Pulsa Supr/Backspace otra vez para eliminar este nodo.'),
+    ).toBeInTheDocument()
+    const cancelButton = screen.getByRole('button', { name: 'Cancelar' })
+    fireEvent.click(cancelButton)
+
+    expect(screen.queryByRole('button', { name: 'Cancelar' })).not.toBeInTheDocument()
+
+    // Sin confirmación pendiente ya: la siguiente pulsación vuelve a vetar
+    // (primera pulsación de una confirmación nueva), no borra directamente.
+    const result = await capturedProps?.onBeforeDelete?.(candidates)
+    expect(result).toBe(false)
+  })
+
+  it('pasada la ventana de confirmación sin una segunda pulsación, caduca sola y hay que empezar de nuevo', async () => {
+    vi.useFakeTimers()
+    try {
+      render(<Canvas />)
+      act(() => {
+        useProjectStore.getState().createNode('slide', { x: 0, y: 0 })
+      })
+      const other = otherNodeOfType('slide')
+      const candidates = { nodes: [{ id: other.id, type: 'slide' } as never], edges: [] }
+
+      await act(async () => {
+        await capturedProps?.onBeforeDelete?.(candidates)
+      })
+      expect(screen.getByRole('button', { name: 'Cancelar' })).toBeInTheDocument()
+
+      act(() => {
+        vi.advanceTimersByTime(3000)
+      })
+      expect(screen.queryByRole('button', { name: 'Cancelar' })).not.toBeInTheDocument()
+
+      const result = await capturedProps?.onBeforeDelete?.(candidates)
+      expect(result).toBe(false)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('cambiar el conjunto de nodos seleccionados entre pulsaciones exige una nueva primera confirmación (no confirma el conjunto anterior)', async () => {
+    render(<Canvas />)
+    act(() => {
+      useProjectStore.getState().createNode('slide', { x: 0, y: 0 })
+      useProjectStore.getState().createNode('slide', { x: 50, y: 0 })
+    })
+    const { project } = useProjectStore.getState()
+    const others = project.graph.nodes.filter((n) => n.id !== project.graph.startNodeId)
+    const [nodeA, nodeB] = others
+    if (!nodeA || !nodeB) throw new Error('setup inválido')
+
+    const firstResult = await capturedProps?.onBeforeDelete?.({
+      nodes: [{ id: nodeA.id, type: 'slide' } as never],
+      edges: [],
+    })
+    expect(firstResult).toBe(false)
+
+    const secondResult = await capturedProps?.onBeforeDelete?.({
+      nodes: [{ id: nodeB.id, type: 'slide' } as never],
+      edges: [],
+    })
+    expect(secondResult).toBe(false)
   })
 
   it('onBeforeDelete veta el borrado por completo si el único candidato es la diapositiva de inicio', async () => {
