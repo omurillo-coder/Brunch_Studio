@@ -204,6 +204,54 @@ describe('acciones de dominio: una entrada de historial por acción', () => {
     useProjectStore.getState().undo() // deshace connect
     expect(slideNode(startId).targetNodeId).toBeUndefined()
   })
+
+  it('addVariable produce una entrada deshacible/rehacible', () => {
+    const historyBefore = useProjectStore.getState().history.past.length
+
+    useProjectStore.getState().addVariable({ name: 'puntos', type: 'number', initialValue: 0 })
+    expect(useProjectStore.getState().history.past.length).toBe(historyBefore + 1)
+    expect(useProjectStore.getState().project.variables).toHaveLength(1)
+
+    useProjectStore.getState().undo()
+    expect(useProjectStore.getState().project.variables).toHaveLength(0)
+
+    useProjectStore.getState().redo()
+    expect(useProjectStore.getState().project.variables).toHaveLength(1)
+  })
+
+  it('updateVariable produce una entrada deshacible/rehacible', () => {
+    useProjectStore.getState().addVariable({ name: 'puntos', type: 'number', initialValue: 0 })
+    const variableId = useProjectStore.getState().project.variables[0]?.id
+    if (!variableId) throw new Error('setup inválido')
+    const historyBefore = useProjectStore.getState().history.past.length
+
+    useProjectStore.getState().updateVariable(variableId, { initialValue: 42 })
+    expect(useProjectStore.getState().history.past.length).toBe(historyBefore + 1)
+    expect(useProjectStore.getState().project.variables[0]?.initialValue).toBe(42)
+
+    useProjectStore.getState().undo()
+    expect(useProjectStore.getState().project.variables[0]?.initialValue).toBe(0)
+
+    useProjectStore.getState().redo()
+    expect(useProjectStore.getState().project.variables[0]?.initialValue).toBe(42)
+  })
+
+  it('deleteVariable produce una entrada deshacible/rehacible', () => {
+    useProjectStore.getState().addVariable({ name: 'puntos', type: 'number', initialValue: 0 })
+    const variableId = useProjectStore.getState().project.variables[0]?.id
+    if (!variableId) throw new Error('setup inválido')
+    const historyBefore = useProjectStore.getState().history.past.length
+
+    useProjectStore.getState().deleteVariable(variableId)
+    expect(useProjectStore.getState().history.past.length).toBe(historyBefore + 1)
+    expect(useProjectStore.getState().project.variables).toHaveLength(0)
+
+    useProjectStore.getState().undo()
+    expect(useProjectStore.getState().project.variables).toHaveLength(1)
+
+    useProjectStore.getState().redo()
+    expect(useProjectStore.getState().project.variables).toHaveLength(0)
+  })
 })
 
 describe('drag de nodos', () => {

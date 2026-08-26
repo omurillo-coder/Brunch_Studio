@@ -414,6 +414,9 @@ export function convertTweeToProject(source: string, fallbackName: string): Conv
       updatedAt: now,
     },
     settings: {},
+    // Un proyecto recién importado desde Twee nace sin variables (Twee no
+    // tiene el concepto); igual que `createProject`.
+    variables: [],
     graph: { nodes, startNodeId },
     editor: { viewport: { x: 0, y: 0, zoom: 1 } },
   }

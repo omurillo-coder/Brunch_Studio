@@ -1,16 +1,19 @@
 import { describe, expect, it } from 'vitest'
 import {
+  addVariable,
   createConnectedNode,
   createNode,
   createProject,
   deleteNode,
+  deleteVariable,
   moveNode,
   moveNodes,
   updateNode,
+  updateVariable,
 } from '../project'
 import { connect } from '../graph'
-import { addResponse } from '../responses'
-import type { ProjectDocument } from '../schemas'
+import { addResponse, updateResponse } from '../responses'
+import type { ProjectDocument, SlideNode } from '../schemas'
 
 /** Devuelve el id del primer nodo que NO es la diapositiva de inicio y es
  *  del tipo pedido — atajo cómodo ahora que "slide" es el tipo por defecto y
@@ -377,5 +380,261 @@ describe('createConnectedNode', () => {
     const project = createNode(createProject('P'), 'final', { x: 0, y: 0 })
     const finalId = otherNodeIdOf(project, 'final')
     expect(() => createConnectedNode(project, 'slide', { x: 0, y: 0 }, finalId)).toThrow()
+  })
+})
+
+describe('updateNode — condition/elseTargetNodeId', () => {
+  it('fija condition/elseTargetNodeId en una diapositiva sin tocar targetNodeId', () => {
+    const project = createProject('P')
+    const startId = project.graph.startNodeId
+    const condition = { variableId: 'v1', operator: '==' as const, value: true }
+
+    const updated = updateNode(project, startId, {
+      condition,
+      elseTargetNodeId: startId, // valor arbitrario válido, solo se comprueba que se fije
+    })
+
+    const slide = updated.graph.nodes.find((n) => n.id === startId) as SlideNode
+    expect(slide.condition).toEqual(condition)
+    expect(slide.elseTargetNodeId).toBe(startId)
+  })
+
+  it('borra condition/elseTargetNodeId con null', () => {
+    const project = createProject('P')
+    const startId = project.graph.startNodeId
+    let updated = updateNode(project, startId, {
+      condition: { variableId: 'v1', operator: '==', value: true },
+      elseTargetNodeId: startId,
+    })
+    updated = updateNode(updated, startId, { condition: null, elseTargetNodeId: null })
+
+    const slide = updated.graph.nodes.find((n) => n.id === startId) as SlideNode
+    expect(slide.condition).toBeUndefined()
+    expect(slide.elseTargetNodeId).toBeUndefined()
+  })
+
+  it('lanza si se fija condition/elseTargetNodeId en un nodo final', () => {
+    const project = createNode(createProject('P'), 'final', { x: 0, y: 0 })
+    const finalId = otherNodeIdOf(project, 'final')
+    expect(() => updateNode(project, finalId, { elseTargetNodeId: 'x' })).toThrow()
+  })
+})
+
+describe('addVariable', () => {
+  it('añade una variable numérica y una booleana con id generado', () => {
+    let project = createProject('P')
+    project = addVariable(project, { name: 'puntos', type: 'number', initialValue: 0 })
+    project = addVariable(project, { name: 'ha_hablado', type: 'boolean', initialValue: false })
+
+    expect(project.variables).toHaveLength(2)
+    expect(project.variables[0]).toMatchObject({ name: 'puntos', type: 'number', initialValue: 0 })
+    expect(project.variables[0]?.id).toMatch(/^[0-9a-f-]{36}$/i)
+    expect(project.variables[1]).toMatchObject({
+      name: 'ha_hablado',
+      type: 'boolean',
+      initialValue: false,
+    })
+  })
+
+  it('recorta espacios del nombre', () => {
+    const project = addVariable(createProject('P'), {
+      name: '  puntos  ',
+      type: 'number',
+      initialValue: 0,
+    })
+    expect(project.variables[0]?.name).toBe('puntos')
+  })
+
+  it('lanza si el nombre está vacío tras recortar espacios', () => {
+    expect(() =>
+      addVariable(createProject('P'), { name: '   ', type: 'number', initialValue: 0 }),
+    ).toThrow()
+  })
+
+  it('lanza si ya existe una variable con el mismo nombre', () => {
+    let project = createProject('P')
+    project = addVariable(project, { name: 'puntos', type: 'number', initialValue: 0 })
+    expect(() =>
+      addVariable(project, { name: 'puntos', type: 'number', initialValue: 5 }),
+    ).toThrow()
+  })
+
+  it('lanza si initialValue no es del tipo declarado', () => {
+    const project = createProject('P')
+    expect(() =>
+      addVariable(project, { name: 'x', type: 'number', initialValue: true as unknown as number }),
+    ).toThrow()
+    expect(() =>
+      addVariable(project, {
+        name: 'y',
+        type: 'boolean',
+        initialValue: 1 as unknown as boolean,
+      }),
+    ).toThrow()
+  })
+
+  it('no muta el proyecto original', () => {
+    const project = createProject('P')
+    addVariable(project, { name: 'puntos', type: 'number', initialValue: 0 })
+    expect(project.variables).toEqual([])
+  })
+})
+
+describe('updateVariable', () => {
+  it('actualiza nombre/type/initialValue de forma coherente', () => {
+    let project = addVariable(createProject('P'), {
+      name: 'puntos',
+      type: 'number',
+      initialValue: 0,
+    })
+    const id = project.variables[0]?.id
+    if (!id) throw new Error('setup inválido')
+
+    project = updateVariable(project, id, { name: 'puntuacion', initialValue: 10 })
+    expect(project.variables[0]).toMatchObject({ name: 'puntuacion', initialValue: 10, type: 'number' })
+  })
+
+  it('no toca campos ausentes del patch (undefined)', () => {
+    let project = addVariable(createProject('P'), {
+      name: 'puntos',
+      type: 'number',
+      initialValue: 0,
+    })
+    const id = project.variables[0]?.id
+    if (!id) throw new Error('setup inválido')
+
+    project = updateVariable(project, id, { initialValue: 7 })
+    expect(project.variables[0]?.name).toBe('puntos')
+    expect(project.variables[0]?.initialValue).toBe(7)
+  })
+
+  it('lanza si el nuevo nombre ya lo usa otra variable', () => {
+    let project = addVariable(createProject('P'), { name: 'a', type: 'number', initialValue: 0 })
+    project = addVariable(project, { name: 'b', type: 'number', initialValue: 0 })
+    const bId = project.variables[1]?.id
+    if (!bId) throw new Error('setup inválido')
+
+    expect(() => updateVariable(project, bId, { name: 'a' })).toThrow()
+  })
+
+  it('permite conservar el mismo nombre (no choca consigo misma)', () => {
+    let project = addVariable(createProject('P'), { name: 'a', type: 'number', initialValue: 0 })
+    const id = project.variables[0]?.id
+    if (!id) throw new Error('setup inválido')
+    expect(() => updateVariable(project, id, { name: 'a', initialValue: 3 })).not.toThrow()
+  })
+
+  it('lanza si cambiar solo el type deja initialValue incoherente', () => {
+    let project = addVariable(createProject('P'), { name: 'a', type: 'number', initialValue: 5 })
+    const id = project.variables[0]?.id
+    if (!id) throw new Error('setup inválido')
+    expect(() => updateVariable(project, id, { type: 'boolean' })).toThrow()
+  })
+
+  it('cambiar type e initialValue juntos y coherentes funciona', () => {
+    let project = addVariable(createProject('P'), { name: 'a', type: 'number', initialValue: 5 })
+    const id = project.variables[0]?.id
+    if (!id) throw new Error('setup inválido')
+    project = updateVariable(project, id, { type: 'boolean', initialValue: true })
+    expect(project.variables[0]).toMatchObject({ type: 'boolean', initialValue: true })
+  })
+
+  it('lanza si la variable no existe', () => {
+    const project = createProject('P')
+    expect(() => updateVariable(project, 'no-existe', { name: 'x' })).toThrow()
+  })
+})
+
+describe('deleteVariable', () => {
+  it('elimina la variable del proyecto', () => {
+    let project = addVariable(createProject('P'), { name: 'a', type: 'number', initialValue: 0 })
+    const id = project.variables[0]?.id
+    if (!id) throw new Error('setup inválido')
+    project = deleteVariable(project, id)
+    expect(project.variables).toEqual([])
+  })
+
+  it('lanza si la variable no existe', () => {
+    expect(() => deleteVariable(createProject('P'), 'no-existe')).toThrow()
+  })
+
+  it('limpia la condition de una diapositiva "de continuar" que referenciaba la variable borrada', () => {
+    let project = addVariable(createProject('P'), { name: 'a', type: 'number', initialValue: 0 })
+    const variableId = project.variables[0]?.id
+    if (!variableId) throw new Error('setup inválido')
+    const startId = project.graph.startNodeId
+    project = updateNode(project, startId, {
+      condition: { variableId, operator: '==', value: 1 },
+    })
+
+    project = deleteVariable(project, variableId)
+
+    const slide = project.graph.nodes.find((n) => n.id === startId) as SlideNode
+    expect(slide.condition).toBeUndefined()
+  })
+
+  it('limpia la condition de una respuesta que referenciaba la variable borrada', () => {
+    let project = addVariable(createProject('P'), { name: 'a', type: 'number', initialValue: 0 })
+    const variableId = project.variables[0]?.id
+    if (!variableId) throw new Error('setup inválido')
+    const startId = project.graph.startNodeId
+    project = addResponse(project, startId)
+    const responseId = (project.graph.nodes.find((n) => n.id === startId) as SlideNode).responses[0]
+      ?.id
+    if (!responseId) throw new Error('setup inválido')
+    project = updateResponse(project, startId, responseId, {
+      condition: { variableId, operator: '==', value: 1 },
+    })
+
+    project = deleteVariable(project, variableId)
+
+    const slide = project.graph.nodes.find((n) => n.id === startId) as SlideNode
+    expect(slide.responses[0]?.condition).toBeUndefined()
+  })
+
+  it('quita solo los efectos que referenciaban la variable borrada, conservando el resto de la lista', () => {
+    let project = addVariable(createProject('P'), { name: 'a', type: 'number', initialValue: 0 })
+    project = addVariable(project, { name: 'b', type: 'number', initialValue: 0 })
+    const [varA, varB] = project.variables
+    if (!varA || !varB) throw new Error('setup inválido')
+
+    const startId = project.graph.startNodeId
+    project = addResponse(project, startId)
+    const responseId = (project.graph.nodes.find((n) => n.id === startId) as SlideNode).responses[0]
+      ?.id
+    if (!responseId) throw new Error('setup inválido')
+    project = updateResponse(project, startId, responseId, {
+      effects: [
+        { variableId: varA.id, operation: 'set', value: 1 },
+        { variableId: varB.id, operation: 'increment', value: 2 },
+      ],
+    })
+
+    project = deleteVariable(project, varA.id)
+
+    const slide = project.graph.nodes.find((n) => n.id === startId) as SlideNode
+    expect(slide.responses[0]?.effects).toEqual([
+      { variableId: varB.id, operation: 'increment', value: 2 },
+    ])
+  })
+
+  it('si borrar la variable deja la lista de efectos vacía, el campo queda undefined (no [])', () => {
+    let project = addVariable(createProject('P'), { name: 'a', type: 'number', initialValue: 0 })
+    const varId = project.variables[0]?.id
+    if (!varId) throw new Error('setup inválido')
+
+    const startId = project.graph.startNodeId
+    project = addResponse(project, startId)
+    const responseId = (project.graph.nodes.find((n) => n.id === startId) as SlideNode).responses[0]
+      ?.id
+    if (!responseId) throw new Error('setup inválido')
+    project = updateResponse(project, startId, responseId, {
+      effects: [{ variableId: varId, operation: 'set', value: 1 }],
+    })
+
+    project = deleteVariable(project, varId)
+
+    const slide = project.graph.nodes.find((n) => n.id === startId) as SlideNode
+    expect(slide.responses[0]?.effects).toBeUndefined()
   })
 })

@@ -1,7 +1,13 @@
 import { produce } from 'immer'
 import { createId } from './id'
 import { RESPONSE_LETTERS } from './schemas'
-import type { DecisionResponse, ProjectDocument, SlideNode } from './schemas'
+import type {
+  DecisionResponse,
+  ProjectDocument,
+  SlideNode,
+  VariableCondition,
+  VariableEffect,
+} from './schemas'
 
 /**
  * Localiza la diapositiva sobre la que operan las funciones de respuesta.
@@ -67,12 +73,26 @@ export function addResponse(project: ProjectDocument, slideNodeId: string): Proj
  * `undefined` no toca el campo, `null` lo borra (lo deja `undefined` en la
  * respuesta) y un valor lo fija a ese valor/id. `points` acepta cualquier
  * `number` (positivo, negativo o cero); no hay restricción de rango.
+ *
+ * `effects`/`condition` (variables/condiciones, ver `src/domain/schemas.ts`)
+ * siguen el mismo patrón de patch que el resto: `undefined` no toca,
+ * `null` borra, un valor fija. `effects`, igual que `imageAssetIds` en
+ * `UpdateNodePatch`, REEMPLAZA la lista completa (no es incremental) —
+ * quien llama construye el array final (añadir/quitar un efecto concreto se
+ * hace leyendo `response.effects` actual y llamando con la lista ya
+ * modificada). Ninguno de los dos campos se valida aquí contra el `type` de
+ * la variable referenciada (esa variable vive en `project.variables`, fuera
+ * de la respuesta que se está editando) — responsabilidad de la UI en la
+ * fase de editor, mismo criterio documentado en `VariableConditionSchema`/
+ * `VariableEffectSchema`.
  */
 export interface UpdateResponsePatch {
   text?: string
   points?: number | null
   imageAssetId?: string | null
   audioAssetId?: string | null
+  effects?: VariableEffect[] | null
+  condition?: VariableCondition | null
 }
 
 /**
@@ -108,6 +128,12 @@ export function updateResponse(
         }
         if (patch.audioAssetId !== undefined) {
           response.audioAssetId = patch.audioAssetId === null ? undefined : patch.audioAssetId
+        }
+        if (patch.effects !== undefined) {
+          response.effects = patch.effects === null ? undefined : patch.effects
+        }
+        if (patch.condition !== undefined) {
+          response.condition = patch.condition === null ? undefined : patch.condition
         }
       }
     }

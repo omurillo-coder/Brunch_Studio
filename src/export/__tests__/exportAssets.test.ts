@@ -44,6 +44,7 @@ function project(nodes: (SlideNode | FinalNode)[]): ProjectDocument {
       updatedAt: '2026-01-01T00:00:00.000Z',
     },
     settings: {},
+    variables: [],
     graph: { nodes, startNodeId: nodes[0]?.id ?? SLIDE_A },
     editor: { viewport: { x: 0, y: 0, zoom: 1 } },
   }

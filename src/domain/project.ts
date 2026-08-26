@@ -10,6 +10,9 @@ import type {
   NodeType,
   ProjectDocument,
   SlideNode,
+  VariableCondition,
+  VariableDef,
+  VariableType,
 } from './schemas'
 
 /** Campos editables al crear un nodo (aparte de tipo y posición). */
@@ -31,11 +34,20 @@ export interface CreateNodeExtra {
  * (añadir/quitar/reordenar una imagen concreta se hace leyendo la lista
  * actual del nodo y llamando con la lista ya modificada).
  *
- * `imageAssetIds`/`audioAssetId`/`continueLabel`/`contentOrder` solo aplican
- * a nodos `slide`: un `final` con alguno de estos campos presente en el
- * patch (aunque sea `null`) hace que `updateNode` lance, ver más abajo.
- * `internalNote` es válido en cualquier tipo de nodo (incluidos los
- * `final`), así que no participa de esa guarda.
+ * `imageAssetIds`/`audioAssetId`/`continueLabel`/`contentOrder`/`condition`/
+ * `elseTargetNodeId` solo aplican a nodos `slide`: un `final` con alguno de
+ * estos campos presente en el patch (aunque sea `null`) hace que
+ * `updateNode` lance, ver más abajo. `internalNote` es válido en cualquier
+ * tipo de nodo (incluidos los `final`), así que no participa de esa guarda.
+ *
+ * `condition`/`elseTargetNodeId` (enrutado condicional de una diapositiva
+ * "de continuar", ver `SlideNodeSchema` en `src/domain/schemas.ts`): mismo
+ * patrón de patch que el resto — `undefined` no toca, `null` borra,
+ * `VariableCondition`/id fija. Deliberadamente NO se valida aquí que
+ * `condition.value` case con el `type` de la variable referenciada (esa
+ * variable vive en `project.variables`, fuera del nodo que se está
+ * editando); es responsabilidad de la UI en la fase de editor, igual que se
+ * documenta en el comentario de `VariableConditionSchema`.
  */
 export interface UpdateNodePatch {
   title?: string
@@ -45,6 +57,8 @@ export interface UpdateNodePatch {
   continueLabel?: string | null
   contentOrder?: ContentOrder
   internalNote?: string | null
+  condition?: VariableCondition | null
+  elseTargetNodeId?: string | null
 }
 
 function newSlideNode(
@@ -89,6 +103,7 @@ export function createProject(name: string): ProjectDocument {
       updatedAt: now,
     },
     settings: {},
+    variables: [],
     graph: {
       nodes: [startSlide],
       startNodeId: startSlide.id,
@@ -272,10 +287,12 @@ export function updateNode(
     patch.imageAssetIds !== undefined ||
     patch.audioAssetId !== undefined ||
     patch.continueLabel !== undefined ||
-    patch.contentOrder !== undefined
+    patch.contentOrder !== undefined ||
+    patch.condition !== undefined ||
+    patch.elseTargetNodeId !== undefined
   if (setsSlideOnlyField && node && node.type !== 'slide') {
     throw new Error(
-      `El nodo "${nodeId}" es de tipo "${node.type}" y no admite imagen/audio adjuntos, texto de continuar ni orden de contenido.`,
+      `El nodo "${nodeId}" es de tipo "${node.type}" y no admite imagen/audio adjuntos, texto de continuar, orden de contenido ni enrutado condicional.`,
     )
   }
 
@@ -299,6 +316,13 @@ export function updateNode(
       }
       if (patch.contentOrder !== undefined) {
         draftNode.contentOrder = patch.contentOrder
+      }
+      if (patch.condition !== undefined) {
+        draftNode.condition = patch.condition === null ? undefined : patch.condition
+      }
+      if (patch.elseTargetNodeId !== undefined) {
+        draftNode.elseTargetNodeId =
+          patch.elseTargetNodeId === null ? undefined : patch.elseTargetNodeId
       }
     }
     touchUpdatedAt(draft)
@@ -356,4 +380,210 @@ export function createConnectedNode(
 
   const connected = connect(withNewNode, sourceNodeId, newNode.id, sourceResponseId)
   return { project: connected, nodeId: newNode.id }
+}
+
+// ---------------------------------------------------------------------------
+// Variables del proyecto
+// ---------------------------------------------------------------------------
+//
+// Sección independiente del resto de `project.ts` (que gira en torno al
+// grafo de nodos): estas funciones manipulan `project.variables`, la lista
+// PLANA de definiciones de variable del proyecto (ver `VariableDefSchema` y
+// el comentario de "por qué a nivel raíz del documento" en
+// `src/domain/schemas.ts`). Nunca tocan `project.graph` salvo `deleteVariable`,
+// que limpia referencias colgantes (ver más abajo).
+
+function findVariableIndex(project: ProjectDocument, variableId: string): number {
+  return project.variables.findIndex((variable) => variable.id === variableId)
+}
+
+/**
+ * Valida que un nombre de variable sea utilizable: no vacío tras recortar
+ * espacios (mismo criterio que el resto de textos del dominio) y que no
+ * coincida ya con el de otra variable del proyecto.
+ *
+ * Nota sobre unicidad: la comparación es exacta tras `trim()` (sensible a
+ * mayúsculas/minúsculas), NO normalizada — "Puntos" y "puntos" se consideran
+ * nombres distintos. Es una decisión deliberadamente simple para esta fase
+ * (ver comentario del enunciado: "no hace falta forzar unicidad estricta a
+ * nivel de schema si es complicado"): evita la complejidad de decidir una
+ * normalización (¿case-insensitive? ¿colapsar espacios internos?) que ni el
+ * editor ni el reproductor necesitan todavía. `excludeVariableId` permite
+ * que `updateVariable` valide el nuevo nombre contra las DEMÁS variables sin
+ * chocar consigo misma cuando el nombre no cambia.
+ */
+function assertUsableVariableName(
+  project: ProjectDocument,
+  name: string,
+  excludeVariableId?: string,
+): string {
+  const trimmed = name.trim()
+  if (trimmed === '') {
+    throw new Error('El nombre de una variable no puede estar vacío.')
+  }
+  const clash = project.variables.find(
+    (variable) => variable.id !== excludeVariableId && variable.name === trimmed,
+  )
+  if (clash) {
+    throw new Error(`Ya existe una variable con el nombre "${trimmed}".`)
+  }
+  return trimmed
+}
+
+/**
+ * Valida que `initialValue` sea del tipo primitivo de JavaScript que
+ * corresponde a `type` ("number" -> `number`, "boolean" -> `boolean`). Es la
+ * única comprobación de coherencia tipo/valor que SÍ puede hacer el dominio
+ * (a diferencia del schema Zod, ver comentario de `VariableDefSchema`):
+ * aquí `type` y `value` llegan juntos en la misma llamada, así que no hace
+ * falta ir a buscar la variable referenciada a otra parte del documento.
+ */
+function assertValueMatchesType(type: VariableType, value: number | boolean): void {
+  const actual = typeof value
+  if ((type === 'number' && actual !== 'number') || (type === 'boolean' && actual !== 'boolean')) {
+    throw new Error(
+      `El valor (${JSON.stringify(value)}) no es del tipo "${type}" declarado para la variable.`,
+    )
+  }
+}
+
+/** Campos necesarios para crear una variable nueva; el `id` lo genera
+ *  `addVariable` (mismo patrón que `addResponse`, que tampoco recibe el id
+ *  de la respuesta que crea). */
+export interface AddVariableInput {
+  name: string
+  type: VariableType
+  initialValue: number | boolean
+}
+
+/**
+ * Añade una variable nueva al proyecto. Lanza `Error` si el nombre (tras
+ * recortar espacios) está vacío, si ya existe una variable con ese nombre, o
+ * si `initialValue` no es del tipo primitivo que corresponde a `type` — ver
+ * `assertUsableVariableName`/`assertValueMatchesType`.
+ */
+export function addVariable(project: ProjectDocument, input: AddVariableInput): ProjectDocument {
+  const name = assertUsableVariableName(project, input.name)
+  assertValueMatchesType(input.type, input.initialValue)
+
+  const newVariable: VariableDef = {
+    id: createId(),
+    name,
+    type: input.type,
+    initialValue: input.initialValue,
+  }
+
+  return produce(project, (draft) => {
+    draft.variables.push(newVariable)
+    touchUpdatedAt(draft)
+  })
+}
+
+/**
+ * Campos editables de una variable ya creada mediante `updateVariable`.
+ *
+ * A diferencia de `UpdateNodePatch`/`UpdateResponsePatch`, ningún campo de
+ * `VariableDef` es opcional/borrable (nombre, tipo e `initialValue` son
+ * siempre obligatorios), así que la semántica de patch aquí es más simple:
+ * `undefined` no toca el campo, un valor lo fija — no existe un tercer caso
+ * "borrar con `null`" porque no hay nada que dejar vacío.
+ */
+export interface UpdateVariablePatch {
+  name?: string
+  type?: VariableType
+  initialValue?: number | boolean
+}
+
+/**
+ * Actualiza una variable ya existente. Lanza `Error` si la variable no
+ * existe, si el nuevo nombre (cuando se indica) está vacío o ya está en uso
+ * por OTRA variable, o si la combinación resultante de `type`/`initialValue`
+ * (mezclando lo que trae el patch con lo que ya tenía la variable) queda
+ * incoherente — p.ej. cambiar solo `type` a "boolean" dejando un
+ * `initialValue` numérico sin actualizarlo en la misma llamada.
+ *
+ * No permite cambiar `id` (no forma parte del patch, igual que en el resto
+ * del dominio).
+ */
+export function updateVariable(
+  project: ProjectDocument,
+  variableId: string,
+  patch: UpdateVariablePatch,
+): ProjectDocument {
+  const index = findVariableIndex(project, variableId)
+  if (index === -1) {
+    throw new Error(`No existe una variable con id "${variableId}".`)
+  }
+  const current = project.variables[index]
+  if (!current) {
+    throw new Error(`No existe una variable con id "${variableId}".`)
+  }
+
+  const name = patch.name !== undefined ? assertUsableVariableName(project, patch.name, variableId) : undefined
+
+  const resultingType = patch.type ?? current.type
+  const resultingInitialValue = patch.initialValue ?? current.initialValue
+  if (patch.type !== undefined || patch.initialValue !== undefined) {
+    assertValueMatchesType(resultingType, resultingInitialValue)
+  }
+
+  return produce(project, (draft) => {
+    const draftVariable = draft.variables[index]
+    if (!draftVariable) return
+    if (name !== undefined) draftVariable.name = name
+    if (patch.type !== undefined) draftVariable.type = patch.type
+    if (patch.initialValue !== undefined) draftVariable.initialValue = patch.initialValue
+    touchUpdatedAt(draft)
+  })
+}
+
+/**
+ * Elimina una variable del proyecto y limpia cualquier referencia colgante
+ * hacia ella repartida por el grafo:
+ * - `condition` de una diapositiva "de continuar", si referenciaba esta
+ *   variable, se borra (vuelve a `undefined`).
+ * - `condition` de una respuesta de decisión, igual.
+ * - `effects` de una respuesta de decisión: se quitan SOLO los efectos que
+ *   referenciaban esta variable (los demás se conservan); si la lista queda
+ *   vacía, el campo se deja en `undefined` en vez de `[]`, igual criterio
+ *   que "ausente = sin efectos" del schema.
+ *
+ * Decisión de diseño: limpiar en vez de dejar la referencia colgante. Un
+ * `variableId` que ya no existe en `project.variables` no tiene ningún
+ * significado razonable para el motor del reproductor (fase futura) ni para
+ * el editor — a diferencia de `targetNodeId`/`continueLabel`, que quedan
+ * "dormidos" porque SIGUEN siendo datos válidos por si se reactivan (ver
+ * `addResponse`/`removeResponse`), una condición/efecto sobre un id de
+ * variable borrado no puede "reactivarse": el id ya no significa nada. Lanza
+ * `Error` si la variable no existe, mismo criterio que `deleteNode`.
+ */
+export function deleteVariable(project: ProjectDocument, variableId: string): ProjectDocument {
+  const index = findVariableIndex(project, variableId)
+  if (index === -1) {
+    throw new Error(`No existe una variable con id "${variableId}".`)
+  }
+
+  return produce(project, (draft) => {
+    draft.variables = draft.variables.filter((variable) => variable.id !== variableId)
+
+    for (const node of draft.graph.nodes) {
+      if (node.type !== 'slide') continue
+
+      if (node.condition?.variableId === variableId) {
+        node.condition = undefined
+      }
+
+      for (const response of node.responses) {
+        if (response.condition?.variableId === variableId) {
+          response.condition = undefined
+        }
+        if (response.effects) {
+          const remaining = response.effects.filter((effect) => effect.variableId !== variableId)
+          response.effects = remaining.length > 0 ? remaining : undefined
+        }
+      }
+    }
+
+    touchUpdatedAt(draft)
+  })
 }

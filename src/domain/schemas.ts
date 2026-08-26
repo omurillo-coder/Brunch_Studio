@@ -45,6 +45,109 @@ export const RESPONSE_LETTERS = ['A', 'B', 'C', 'D'] as const
 
 export const ResponseLetterSchema = z.enum(RESPONSE_LETTERS)
 
+// ---------------------------------------------------------------------------
+// Variables y condiciones
+// ---------------------------------------------------------------------------
+//
+// Fase 1 del milestone "Variables/condiciones": solo el modelo de dominio.
+// Estos tipos son el CONTRATO que consumirán la fase de editor/UI (formulario
+// de variables, selector de condición/efectos en el Inspector) y la fase de
+// reproductor/export (motor de recorrido que mantiene el estado de variables
+// y evalúa condiciones) — cualquier cambio de forma aquí las afecta a ambas.
+
+/**
+ * Los dos tipos de variable soportados en esta fase. Deliberadamente solo
+ * dos (no texto, no listas): cubren los dos usos previstos —contadores/
+ * puntuaciones acumuladas ("numérico") y flags de progreso ("booleano")— sin
+ * la complejidad añadida de validar/editar tipos más ricos. Ampliar el
+ * conjunto de tipos en el futuro es aditivo (un valor más en el enum) y no
+ * debería requerir migración de los documentos existentes.
+ */
+export const VARIABLE_TYPES = ['number', 'boolean'] as const
+export const VariableTypeSchema = z.enum(VARIABLE_TYPES)
+
+/**
+ * Definición de una variable de proyecto. Vive en `ProjectDocument.variables`
+ * (ver más abajo por qué a nivel raíz del documento y no dentro de `graph`).
+ *
+ * `initialValue` debe ser coherente con `type` ("number" -> `number`,
+ * "boolean" -> `boolean`), pero Zod no puede exigirlo de forma declarativa
+ * aquí: `z.union([z.number(), z.boolean()])` acepta ambas formas para
+ * cualquier `type`. Validar la coherencia tipo/valor es responsabilidad de
+ * quien construye/edita la variable (ver `addVariable`/`updateVariable` en
+ * `src/domain/project.ts`, que sí la comprueban), nunca del propio schema.
+ */
+export const VariableDefSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  type: VariableTypeSchema,
+  initialValue: z.union([z.number(), z.boolean()]),
+})
+
+/**
+ * Operadores de comparación disponibles en una `VariableCondition`. Los seis
+ * tienen sentido sobre una variable numérica; sobre una variable booleana
+ * solo `==`/`!=` son significativos (compara contra `true`/`false`). No se
+ * restringe a nivel de schema qué operadores admite cada `type` porque el
+ * schema no conoce el `type` de la variable referenciada por `variableId`
+ * (vive en otro punto del documento, `ProjectDocument.variables`) — sería
+ * validación fuera de contexto, ver el comentario de `VariableConditionSchema`.
+ * `evaluateCondition` (`src/domain/variables.ts`) documenta qué ocurre en
+ * tiempo de evaluación si de todos modos se guarda una combinación sin
+ * sentido (p.ej. `>` sobre un booleano): nunca lanza, evalúa a `false`.
+ */
+export const COMPARISON_OPERATORS = ['==', '!=', '>', '>=', '<', '<='] as const
+export const ComparisonOperatorSchema = z.enum(COMPARISON_OPERATORS)
+
+/**
+ * Condición sobre el valor actual de una variable en tiempo de recorrido.
+ * Dos usos en esta fase (ver `DecisionResponseSchema.condition` y
+ * `SlideNodeSchema.condition`): visibilidad de una respuesta de decisión, y
+ * enrutado condicional de una diapositiva "de continuar".
+ *
+ * Mismo criterio que `VariableDefSchema.initialValue`: `value` acepta
+ * `number | boolean` sin comprobar aquí que coincide con el `type` de la
+ * variable referenciada — no es responsabilidad del schema (necesita
+ * contexto de otra parte del documento), sino del dominio/UI en fases
+ * futuras.
+ */
+export const VariableConditionSchema = z.object({
+  variableId: z.string().uuid(),
+  operator: ComparisonOperatorSchema,
+  value: z.union([z.number(), z.boolean()]),
+})
+
+/**
+ * Efecto sobre una variable al elegir una respuesta de decisión (ver
+ * `DecisionResponseSchema.effects`). Unión discriminada por `operation`:
+ * - `set`: fija la variable a `value` (`number | boolean`, coherente con el
+ *   `type` de la variable en teoría, sin comprobación aquí — mismo criterio
+ *   que el resto de este bloque).
+ * - `increment`/`decrement`: suma/resta `value` (siempre `number`, ya que
+ *   solo tienen sentido sobre una variable numérica). Se admiten en el
+ *   schema también para una variable booleana porque el schema no sabe el
+ *   `type` de `variableId`; `applyVariableEffects`
+ *   (`src/domain/variables.ts`) documenta que en ese caso el efecto es un
+ *   no-op silencioso, nunca un error.
+ */
+export const VariableEffectSchema = z.discriminatedUnion('operation', [
+  z.object({
+    variableId: z.string().uuid(),
+    operation: z.literal('set'),
+    value: z.union([z.number(), z.boolean()]),
+  }),
+  z.object({
+    variableId: z.string().uuid(),
+    operation: z.literal('increment'),
+    value: z.number(),
+  }),
+  z.object({
+    variableId: z.string().uuid(),
+    operation: z.literal('decrement'),
+    value: z.number(),
+  }),
+])
+
 export const DecisionResponseSchema = z.object({
   id: z.string().uuid(),
   letter: ResponseLetterSchema,
@@ -53,6 +156,21 @@ export const DecisionResponseSchema = z.object({
   audioAssetId: z.string().uuid().optional(),
   points: z.number().optional(),
   targetNodeId: z.string().uuid().optional(),
+  /**
+   * Efectos sobre variables aplicados SOLO al elegir esta respuesta (nunca
+   * al avance simple "continuar" de una diapositiva sin decisiones — alcance
+   * deliberadamente acotado en esta fase). `undefined`/array vacío se tratan
+   * igual ("sin efectos"); ver `UpdateResponsePatch` en
+   * `src/domain/responses.ts` para la semántica de "patch" al editarlos.
+   */
+  effects: z.array(VariableEffectSchema).optional(),
+  /**
+   * Condición de visibilidad de esta respuesta: si está presente, el Player
+   * solo debe ofrecerla cuando `evaluateCondition` da `true` contra el
+   * estado de variables del recorrido. Ausente = siempre visible (compat.
+   * total con el comportamiento actual).
+   */
+  condition: VariableConditionSchema.optional(),
 })
 
 // ---------------------------------------------------------------------------
@@ -106,10 +224,43 @@ export const ContentOrderSchema = z.enum(CONTENT_ORDERS)
 export const SlideNodeSchema = z.object({
   ...baseNodeFields,
   type: z.literal('slide'),
-  /** Destino de "Continuar". Solo se usa si `responses` está vacío. */
+  /**
+   * Destino de "Continuar". Solo se usa si `responses` está vacío.
+   *
+   * Con la llegada de `condition` (más abajo), su significado se amplía sin
+   * romper compatibilidad: "destino cuando NO hay `condition`, o cuando
+   * `condition` se evalúa a VERDADERA". Si `condition` está ausente (el caso
+   * de todo documento existente hasta esta fase), el comportamiento es
+   * EXACTAMENTE el de siempre — este campo nunca cambia de significado para
+   * quien no usa condiciones.
+   */
   targetNodeId: z.string().uuid().optional(),
   /** Texto personalizado del botón de continuar; por defecto "Continuar". */
   continueLabel: z.string().optional(),
+  /**
+   * Enrutado condicional automático de una diapositiva "de continuar". Solo
+   * tiene efecto cuando `responses` está vacío (una diapositiva de decisión
+   * enruta por respuesta elegida, no por esta vía) — igual que
+   * `targetNodeId`/`continueLabel` quedan "dormidos" en modo decisión, ver
+   * comentario de la clase de diapositiva más arriba.
+   *
+   * Si está presente, `resolveSlideTarget` (`src/domain/variables.ts`)
+   * evalúa esta condición contra el estado de variables del recorrido:
+   * VERDADERA -> `targetNodeId`, FALSA -> `elseTargetNodeId`. Si está
+   * ausente, el destino es siempre `targetNodeId` sin evaluar nada — el
+   * comportamiento actual, intacto.
+   */
+  condition: VariableConditionSchema.optional(),
+  /**
+   * Destino cuando `condition` está presente y se evalúa a FALSA. Sin
+   * `condition`, este campo no tiene ningún efecto (puede quedar "dormido"
+   * si se llegó a definir y luego se quitó la condición, mismo criterio de
+   * no-borrado-agresivo que el resto del dominio). Puede quedar `undefined`
+   * aun con `condition` presente: significa "sin destino cuando la condición
+   * es falsa", tratado como cualquier otro destino ausente (dead-end en el
+   * Player).
+   */
+  elseTargetNodeId: z.string().uuid().optional(),
   responses: z.array(DecisionResponseSchema).max(4),
   /**
    * Imágenes adjuntas a la diapositiva, en el orden en que se apilan (una
@@ -175,6 +326,24 @@ export const ProjectDocumentSchema = z.object({
   schemaVersion: z.literal(1),
   metadata: ProjectMetadataSchema,
   settings: ProjectSettingsSchema,
+  /**
+   * Variables del proyecto (contadores/flags que el recorrido puede leer y
+   * modificar, ver `VariableDefSchema`).
+   *
+   * Vive a nivel RAÍZ del documento, hermano de `graph`, no dentro de
+   * `graph`: una variable es un dato de PROYECTO (como `settings`), no de
+   * TOPOLOGÍA del grafo (como `nodes`/`startNodeId`) — se define una vez y la
+   * referencian por id nodos/respuestas repartidos por todo el grafo, igual
+   * que los assets (`imageAssetId`/`audioAssetId`) tampoco viven dentro de
+   * `graph` aunque los nodos los referencien.
+   *
+   * `.default([])`: un documento SIN este campo (cualquier `.brunch`
+   * guardado antes de esta fase) parsea igualmente con `variables: []`, sin
+   * necesitar código de migración explícito en `src/domain/migration.ts` —
+   * es un cambio puramente aditivo. Ver el test de compatibilidad en
+   * `src/domain/__tests__/migration.test.ts`.
+   */
+  variables: z.array(VariableDefSchema).default([]),
   graph: ProjectGraphSchema,
   editor: EditorStateSchema,
 })
@@ -185,6 +354,11 @@ export const ProjectDocumentSchema = z.object({
 
 export type NodePosition = z.infer<typeof NodePositionSchema>
 export type ResponseLetter = z.infer<typeof ResponseLetterSchema>
+export type VariableType = z.infer<typeof VariableTypeSchema>
+export type VariableDef = z.infer<typeof VariableDefSchema>
+export type ComparisonOperator = z.infer<typeof ComparisonOperatorSchema>
+export type VariableCondition = z.infer<typeof VariableConditionSchema>
+export type VariableEffect = z.infer<typeof VariableEffectSchema>
 export type DecisionResponse = z.infer<typeof DecisionResponseSchema>
 export type ContentOrder = z.infer<typeof ContentOrderSchema>
 

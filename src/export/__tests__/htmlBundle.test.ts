@@ -111,6 +111,7 @@ function sampleProject(): ProjectDocument {
       updatedAt: '2026-01-01T00:00:00.000Z',
     },
     settings: {},
+    variables: [],
     graph: { nodes: [slide, decision, final], startNodeId: SLIDE_ID },
     editor: { viewport: { x: 0, y: 0, zoom: 1 } },
   }
@@ -175,6 +176,7 @@ function multiImageProject(contentOrder: 'text-first' | 'image-first'): ProjectD
       updatedAt: '2026-01-01T00:00:00.000Z',
     },
     settings: {},
+    variables: [],
     graph: { nodes: [slide, final], startNodeId: MULTI_IMAGE_SLIDE_ID },
     editor: { viewport: { x: 0, y: 0, zoom: 1 } },
   }
@@ -320,6 +322,7 @@ describe('buildHtmlBundle — contenido del archivo generado', () => {
         updatedAt: '2026-01-01T00:00:00.000Z',
       },
       settings: {},
+      variables: [],
       graph: {
         nodes: [
           {

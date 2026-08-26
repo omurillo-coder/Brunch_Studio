@@ -18,6 +18,7 @@ function sampleProject(overrides: Partial<ProjectDocument['metadata']> = {}): Pr
       ...overrides,
     },
     settings: {},
+    variables: [],
     graph: {
       nodes: [
         {

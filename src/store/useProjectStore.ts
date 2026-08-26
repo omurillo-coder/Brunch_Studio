@@ -2,24 +2,29 @@ import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import {
   addResponse as domainAddResponse,
+  addVariable as domainAddVariable,
   connect as domainConnect,
   createConnectedNode as domainCreateConnectedNode,
   createNode as domainCreateNode,
   createProject,
   deleteNode as domainDeleteNode,
+  deleteVariable as domainDeleteVariable,
   disconnect as domainDisconnect,
   moveNode as domainMoveNode,
   moveNodes as domainMoveNodes,
   removeResponse as domainRemoveResponse,
   updateNode as domainUpdateNode,
   updateResponse as domainUpdateResponse,
+  updateVariable as domainUpdateVariable,
 } from '../domain'
 import type {
+  AddVariableInput,
   CreateNodeExtra,
   NodeMove,
   NodeType,
   UpdateNodePatch,
   UpdateResponsePatch,
+  UpdateVariablePatch,
 } from '../domain'
 import type {
   ContextMenuState,
@@ -188,6 +193,13 @@ export interface ProjectStoreActions {
   updateResponse: (slideNodeId: string, responseId: string, patch: UpdateResponsePatch) => void
   connect: (sourceNodeId: string, targetNodeId: string, responseId?: string) => void
   disconnect: (sourceNodeId: string, responseId?: string) => void
+
+  // -- Variables del proyecto (fase 1 de "Variables/condiciones"): mismo
+  // -- patrón que el resto de acciones de dominio, una entrada de historial
+  // -- por acción --
+  addVariable: (input: AddVariableInput) => void
+  updateVariable: (variableId: string, patch: UpdateVariablePatch) => void
+  deleteVariable: (variableId: string) => void
 
   // -- Crear + conectar en una sola operación desde el menú contextual del
   // -- lienzo ("¿Qué quieres añadir?", fase 7) --
@@ -358,6 +370,33 @@ export const useProjectStore = create<ProjectStoreState>()(
 
     disconnect: (sourceNodeId, responseId) => {
       const next = domainDisconnect(get().project, sourceNodeId, responseId)
+      set((state) => {
+        state.history.past.push(state.project as ProjectDocument)
+        state.history.future = []
+        state.project = next
+      })
+    },
+
+    addVariable: (input) => {
+      const next = domainAddVariable(get().project, input)
+      set((state) => {
+        state.history.past.push(state.project as ProjectDocument)
+        state.history.future = []
+        state.project = next
+      })
+    },
+
+    updateVariable: (variableId, patch) => {
+      const next = domainUpdateVariable(get().project, variableId, patch)
+      set((state) => {
+        state.history.past.push(state.project as ProjectDocument)
+        state.history.future = []
+        state.project = next
+      })
+    },
+
+    deleteVariable: (variableId) => {
+      const next = domainDeleteVariable(get().project, variableId)
       set((state) => {
         state.history.past.push(state.project as ProjectDocument)
         state.history.future = []

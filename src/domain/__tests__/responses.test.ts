@@ -226,4 +226,45 @@ describe('updateResponse', () => {
     expect(found?.points).toBe(3)
     expect(found?.text).toBe('nuevo texto')
   })
+
+  const VARIABLE_ID = '33333333-3333-3333-3333-333333333333'
+
+  it('fija effects/condition, reemplazando la lista de effects completa (no incremental)', () => {
+    const { project: initial, slideId } = withSlide()
+    let project = addResponse(initial, slideId)
+    const responseA = responsesOf(project, slideId)[0]
+    if (!responseA) throw new Error('setup inválido')
+
+    project = updateResponse(project, slideId, responseA.id, {
+      effects: [{ variableId: VARIABLE_ID, operation: 'set', value: 1 }],
+      condition: { variableId: VARIABLE_ID, operator: '==', value: true },
+    })
+    let found = responsesOf(project, slideId).find((r) => r.id === responseA.id)
+    expect(found?.effects).toEqual([{ variableId: VARIABLE_ID, operation: 'set', value: 1 }])
+    expect(found?.condition).toEqual({ variableId: VARIABLE_ID, operator: '==', value: true })
+
+    // Un segundo `updateResponse` con una lista distinta REEMPLAZA, no añade.
+    project = updateResponse(project, slideId, responseA.id, {
+      effects: [{ variableId: VARIABLE_ID, operation: 'increment', value: 2 }],
+    })
+    found = responsesOf(project, slideId).find((r) => r.id === responseA.id)
+    expect(found?.effects).toEqual([{ variableId: VARIABLE_ID, operation: 'increment', value: 2 }])
+  })
+
+  it('borra effects/condition con null', () => {
+    const { project: initial, slideId } = withSlide()
+    let project = addResponse(initial, slideId)
+    const responseA = responsesOf(project, slideId)[0]
+    if (!responseA) throw new Error('setup inválido')
+
+    project = updateResponse(project, slideId, responseA.id, {
+      effects: [{ variableId: VARIABLE_ID, operation: 'set', value: 1 }],
+      condition: { variableId: VARIABLE_ID, operator: '==', value: true },
+    })
+    project = updateResponse(project, slideId, responseA.id, { effects: null, condition: null })
+
+    const found = responsesOf(project, slideId).find((r) => r.id === responseA.id)
+    expect(found?.effects).toBeUndefined()
+    expect(found?.condition).toBeUndefined()
+  })
 })

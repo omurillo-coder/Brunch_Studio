@@ -395,3 +395,21 @@ describe('parseOrMigrateProjectDocument — documento irreconocible', () => {
     expect(() => parseOrMigrateProjectDocument('texto')).toThrow(ProjectMigrationError)
   })
 })
+
+describe('compatibilidad: documento sin `variables` (formato de hoy)', () => {
+  it('parsea con variables: [] sin código de migración adicional', () => {
+    // La forma NUEVA de hoy (nodos `slide`/`final`, con `graph.startNodeId`)
+    // ya no lleva `variables` porque el campo no existía antes de esta fase.
+    // Es aditivo por diseño: `ProjectDocumentSchema.variables` tiene
+    // `.default([])`, así que no hace falta ningún esquema/transformación
+    // dedicados en `migration.ts` para reconocer esta forma — a diferencia
+    // de las migraciones legacy/singular-image de arriba, que sí necesitan
+    // su propio esquema de reconocimiento.
+    const current = createProject('Sin variables')
+    const raw = JSON.parse(JSON.stringify(current)) as Record<string, unknown>
+    delete raw.variables // simula un `.brunch` guardado antes de esta fase
+
+    const migrated = parseOrMigrateProjectDocument(raw)
+    expect(migrated.variables).toEqual([])
+  })
+})

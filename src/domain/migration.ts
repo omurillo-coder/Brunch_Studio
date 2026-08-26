@@ -235,6 +235,11 @@ function migrateLegacyDocument(legacy: LegacyProjectDocument): ProjectDocument {
     schemaVersion: 1,
     metadata: legacy.metadata,
     settings: legacy.settings,
+    // El modelo antiguo (start/content/decision/final) es anterior a la
+    // existencia de variables: no hay nada que migrar, nace vacío. Mismo
+    // resultado que produce `ProjectDocumentSchema.variables.default([])`
+    // al parsear un documento sin el campo, ver comentario de ese schema.
+    variables: [],
     graph: { nodes, startNodeId },
     editor: legacy.editor,
   }
@@ -334,6 +339,10 @@ function migrateSingularImageDocument(doc: SingularImageProjectDocument): Projec
     schemaVersion: 1,
     metadata: doc.metadata,
     settings: doc.settings,
+    // Esta forma intermedia (una sola imagen por diapositiva) tampoco tenía
+    // variables todavía: mismo criterio que `migrateLegacyDocument`, nace
+    // vacío.
+    variables: [],
     graph: {
       nodes: doc.graph.nodes.map(singularImageNodeToNode),
       startNodeId: doc.graph.startNodeId,
