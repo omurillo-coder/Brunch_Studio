@@ -15,6 +15,13 @@
     "moduleDetection": "force",
     "noEmit": true,
     "jsx": "react-jsx",
+    /* `nspell` se distribuye solo como CommonJS (`export =`, ver
+       `@types/nspell`); sin este flag TS rechaza su `import NSpell from
+       'nspell'` (ver `src/domain/spellingDictionary.ts`). Vite ya hace el
+       interop real en tiempo de ejecución (pre-empaqueta las dependencias
+       CJS a ESM); este flag solo relaja la comprobación de tipos para que
+       coincida con ese comportamiento real. */
+    "allowSyntheticDefaultImports": true,
 
     /* Strictness */
     "strict": true,

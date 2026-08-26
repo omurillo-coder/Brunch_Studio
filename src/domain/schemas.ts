@@ -368,6 +368,25 @@ export const IntroNodeSchema = z.object({
 })
 
 /**
+ * Paleta cerrada de colores disponibles para colorear la tarjeta de una
+ * diapositiva `slide` en el lienzo (nunca `intro`/`final`, que ya tienen su
+ * propio fondo fijo por tipo — azul y verde clarito respectivamente, ver
+ * `--bs-color-final-bg`/`--bs-color-intro-bg` en `src/styles/tokens.css`).
+ *
+ * Deliberadamente una paleta CERRADA con nombre (`z.enum`), no un selector de
+ * color libre (`<input type="color">`): más sencillo de usar para quien monta
+ * el escenario sin ser una persona técnica, y encaja con el sistema de
+ * tokens de color ya establecido — cada nombre mapea a un token
+ * `--bs-color-slide-<nombre>-bg` con su propia variante de modo oscuro, mismo
+ * patrón que `--bs-color-final-bg`/`--bs-color-intro-bg` (ver `tokens.css`
+ * para los valores hexadecimales exactos y el contraste de texto calculado
+ * en cada uno). Seis colores sobrios elegidos para ser bien diferenciables
+ * entre sí y respecto al azul de `final`/verde de `intro`.
+ */
+export const SLIDE_COLORS = ['yellow', 'orange', 'pink', 'purple', 'cyan', 'gray'] as const
+export const SlideColorSchema = z.enum(SLIDE_COLORS)
+
+/**
  * Diapositiva: el único tipo de nodo "con salida" del modelo narrativo
  * (aparte del nodo `intro`, que también tiene una única salida pero no es
  * narrativo, ver `IntroNodeSchema`). Una misma diapositiva puede comportarse
@@ -422,6 +441,20 @@ export const SlideNodeSchema = z.object({
    * Player).
    */
   elseTargetNodeId: z.string().uuid().optional(),
+  /**
+   * Color de la tarjeta de esta diapositiva en el lienzo (uno de
+   * `SLIDE_COLORS` más arriba), para que quien monta el escenario distinga
+   * de un vistazo qué diapositivas pertenecen a qué rama/hilo narrativo.
+   * `undefined`/ausente = sin colorear (fondo neutro de siempre,
+   * `--bs-color-surface`). Cambio puramente aditivo: cualquier documento
+   * `.brunch` guardado antes de esta fase sigue abriendo igual, sin
+   * necesitar código de migración en `src/domain/migration.ts` — ver el test
+   * de compatibilidad en `src/domain/__tests__/schemas.test.ts`. Solo tiene
+   * sentido en `slide`: ni `intro` ni `final` llevan este campo en su
+   * schema (tienen su propio fondo fijo por tipo, ver comentario de
+   * `SlideColorSchema`).
+   */
+  color: SlideColorSchema.optional(),
   responses: z.array(DecisionResponseSchema).max(4),
   /**
    * Contenido de la diapositiva: bloques de texto/imagen/audio en el orden
@@ -546,6 +579,7 @@ export type VariableCondition = z.infer<typeof VariableConditionSchema>
 export type VariableEffect = z.infer<typeof VariableEffectSchema>
 export type DecisionResponse = z.infer<typeof DecisionResponseSchema>
 export type ContentBlock = z.infer<typeof ContentBlockSchema>
+export type SlideColor = z.infer<typeof SlideColorSchema>
 
 export type IntroNode = z.infer<typeof IntroNodeSchema>
 export type SlideNode = z.infer<typeof SlideNodeSchema>

@@ -1,0 +1,121 @@
+/* Insignia flotante discreta, esquina superior derecha del lienzo (ver
+   comentario de `DiagnosticsPanel.tsx`) -- deliberadamente lejos de
+   `Controls`/auto-layout, anclados abajo a la izquierda por
+   `@xyflow/react`. */
+.wrapper {
+  position: absolute;
+  top: var(--bs-space-4);
+  right: var(--bs-space-4);
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--bs-space-2);
+}
+
+.badge {
+  display: flex;
+  align-items: center;
+  gap: var(--bs-space-1);
+  padding: var(--bs-space-1) var(--bs-space-3);
+  border: 1px solid var(--bs-color-warning);
+  border-radius: var(--bs-radius-lg);
+  background: var(--bs-color-warning-bg);
+  color: var(--bs-color-warning-contrast);
+  font-size: var(--bs-font-size-sm);
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: var(--bs-shadow-sm);
+}
+
+.badge:hover {
+  background: var(--bs-color-warning);
+}
+
+.badgeIcon {
+  font-size: var(--bs-font-size-md);
+  line-height: 1;
+}
+
+.badgeCount {
+  min-width: 1em;
+  text-align: center;
+}
+
+.list {
+  width: 320px;
+  max-height: min(60vh, 420px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--bs-space-3);
+  padding: var(--bs-space-3);
+  background: var(--bs-color-surface);
+  border: 1px solid var(--bs-color-border);
+  border-radius: var(--bs-radius-md);
+  box-shadow: var(--bs-shadow-sm);
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--bs-space-1);
+}
+
+.groupHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--bs-space-2);
+}
+
+.groupTitle {
+  font-size: var(--bs-font-size-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--bs-color-text-muted);
+}
+
+.rescanButton {
+  font-size: var(--bs-font-size-xs);
+  padding: var(--bs-space-1) var(--bs-space-2);
+  border: 1px solid var(--bs-color-border);
+  border-radius: var(--bs-radius-sm);
+  background: var(--bs-color-bg);
+  color: var(--bs-color-text);
+  cursor: pointer;
+}
+
+.rescanButton:hover:not(:disabled) {
+  border-color: var(--bs-color-border-strong);
+}
+
+.rescanButton:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.emptyGroup {
+  margin: 0;
+  font-size: var(--bs-font-size-sm);
+  color: var(--bs-color-text-faint);
+}
+
+.issueRow {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: var(--bs-space-2);
+  border: none;
+  border-radius: var(--bs-radius-sm);
+  background: transparent;
+  color: var(--bs-color-text);
+  font-size: var(--bs-font-size-sm);
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.issueRow:hover {
+  background: var(--bs-color-bg);
+}

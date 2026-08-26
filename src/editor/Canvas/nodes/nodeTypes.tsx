@@ -1,7 +1,7 @@
 import { Handle, Position } from '@xyflow/react'
 import type { NodeProps } from '@xyflow/react'
 import { MAX_RESPONSES } from '../../../domain'
-import type { NodeType } from '../../../domain'
+import type { NodeType, SlideColor } from '../../../domain'
 import type { CanvasFlowNode, CanvasNodeData, CanvasResponseSummary } from '../adapter'
 import { IN_HANDLE_ID, OUT_HANDLE_ID, responseHandleId } from '../handles'
 import styles from './NodeCard.module.css'
@@ -55,18 +55,32 @@ function displayTitle(title: string): string {
  *  Inicio": ahora también se pinta sobre un `intro` sin `targetNodeId`. */
 const NO_OUTGOING_WARNING_TEXT = 'Este nodo no tiene ninguna salida conectada'
 
+/** Mapa color de paleta -> clase CSS del fondo correspondiente
+ *  (`NodeCard.module.css`). Solo se consulta para nodos `slide` con
+ *  `data.color` fijado, ver `cardClassName`. */
+const SLIDE_COLOR_CARD_CLASS: Record<SlideColor, string | undefined> = {
+  yellow: styles.cardSlideYellow,
+  orange: styles.cardSlideOrange,
+  pink: styles.cardSlidePink,
+  purple: styles.cardSlidePurple,
+  cyan: styles.cardSlideCyan,
+  gray: styles.cardSlideGray,
+}
+
 /** Combina las clases modificadoras de `.card` según el resaltado calculado
  *  en `adapter.ts` (puntos 1 y 4) y el tipo de nodo. Centralizado aquí para
  *  que `SlideNodeView`/`FinalNodeView`/`IntroNodeView` no dupliquen la
  *  combinación. `cardFinal` (fondo azul clarito) solo se aplica a `final`;
  *  `cardIntro` (fondo verde clarito, milestone "Diapositiva de Inicio") solo
- *  a `intro` — las diapositivas `slide` mantienen su fondo neutro sin
- *  cambios. */
+ *  a `intro`; una `slide` con `data.color` fijado usa el token de esa
+ *  entrada de la paleta (ver `SLIDE_COLOR_CARD_CLASS`) — sin color, mantiene
+ *  su fondo neutro sin cambios, igual que siempre. */
 function cardClassName(data: CanvasNodeData): string {
   return [
     styles.card,
     data.nodeType === 'final' && styles.cardFinal,
     data.nodeType === 'intro' && styles.cardIntro,
+    data.nodeType === 'slide' && data.color && SLIDE_COLOR_CARD_CLASS[data.color],
     data.hasNoOutgoing && styles.cardWarning,
     data.isHighlighted && styles.cardHighlighted,
     data.isDimmed && styles.cardDimmed,

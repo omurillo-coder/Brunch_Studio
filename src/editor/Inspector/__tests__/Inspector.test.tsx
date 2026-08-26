@@ -1755,3 +1755,88 @@ describe('Inspector — diapositiva de Inicio (nodo `intro`, milestone "Diaposit
     expect(screen.queryByText(/^Duplicar/)).not.toBeInTheDocument()
   })
 })
+
+describe('Inspector — color de una diapositiva (paleta cerrada)', () => {
+  it('una diapositiva `slide` muestra la sección "Color" con las pastillas de la paleta más "Sin color"', () => {
+    const id = startNodeId()
+    act(() => {
+      useProjectStore.getState().selectNode(id)
+    })
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    expect(screen.getByText('Color')).toBeInTheDocument()
+    expect(screen.getByLabelText('Sin color')).toBeInTheDocument()
+    expect(screen.getByLabelText('Amarillo')).toBeInTheDocument()
+    expect(screen.getByLabelText('Naranja')).toBeInTheDocument()
+    expect(screen.getByLabelText('Rosa')).toBeInTheDocument()
+    expect(screen.getByLabelText('Morado')).toBeInTheDocument()
+    expect(screen.getByLabelText('Cian')).toBeInTheDocument()
+    expect(screen.getByLabelText('Gris')).toBeInTheDocument()
+  })
+
+  it('hacer clic en una pastilla llama a updateNode con ese color; "Sin color" llama con null', () => {
+    const id = startNodeId()
+    act(() => {
+      useProjectStore.getState().selectNode(id)
+    })
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    fireEvent.click(screen.getByLabelText('Morado'))
+    expect(slideNode(id).color).toBe('purple')
+    expect(screen.getByLabelText('Morado')).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByLabelText('Sin color')).toHaveAttribute('aria-pressed', 'false')
+
+    fireEvent.click(screen.getByLabelText('Cian'))
+    expect(slideNode(id).color).toBe('cyan')
+    expect(screen.getByLabelText('Cian')).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByLabelText('Morado')).toHaveAttribute('aria-pressed', 'false')
+
+    fireEvent.click(screen.getByLabelText('Sin color'))
+    expect(slideNode(id).color).toBeUndefined()
+    expect(screen.getByLabelText('Sin color')).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('sin color fijado, "Sin color" empieza marcada como seleccionada', () => {
+    const id = startNodeId()
+    act(() => {
+      useProjectStore.getState().selectNode(id)
+    })
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    expect(screen.getByLabelText('Sin color')).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('no aparece la sección "Color" para un nodo Final', () => {
+    act(() => {
+      useProjectStore.getState().createNode('final', { x: 100, y: 0 })
+    })
+    const finalId = useProjectStore
+      .getState()
+      .project.graph.nodes.find((n) => n.type === 'final')?.id
+    if (!finalId) throw new Error('setup inválido: no se creó el nodo final')
+    act(() => {
+      useProjectStore.getState().selectNode(finalId)
+    })
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    expect(screen.queryByText('Color')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Sin color')).not.toBeInTheDocument()
+  })
+
+  it('no aparece la sección "Color" para el nodo `intro`', () => {
+    act(() => {
+      useProjectStore.getState().createNode('intro', { x: 0, y: 0 })
+    })
+    const introId = useProjectStore
+      .getState()
+      .project.graph.nodes.find((n) => n.type === 'intro')?.id
+    if (!introId) throw new Error('setup inválido: no se creó el nodo intro')
+    act(() => {
+      useProjectStore.getState().selectNode(introId)
+    })
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    expect(screen.queryByText('Color')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Sin color')).not.toBeInTheDocument()
+  })
+})

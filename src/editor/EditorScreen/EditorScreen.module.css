@@ -10,3 +10,17 @@
   display: flex;
   min-height: 0;
 }
+
+/* Envoltorio del lienzo: únicamente para darle a `DiagnosticsPanel`
+   (`position: absolute`, ver su propio CSS) un contenedor posicionado
+   sobre el que anclarse en una esquina, sin tocar `Canvas.module.css` (fuera
+   de alcance de esta tarea) ni el propio `Canvas`. Mismo `flex: 1 1 auto`
+   que tenía `Canvas` directamente en `.body` antes de este envoltorio: el
+   lienzo sigue ocupando exactamente el mismo espacio. */
+.canvasArea {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+}

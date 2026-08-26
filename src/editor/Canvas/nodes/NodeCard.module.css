@@ -74,6 +74,42 @@
   background: var(--bs-color-intro-bg);
 }
 
+/* Color opcional de una diapositiva `slide` (paleta cerrada,
+   `SLIDE_COLORS` en `src/domain/schemas.ts`): mismo criterio que
+   `.cardFinal`/`.cardIntro` — solo cambia el fondo, mismo texto
+   `--bs-color-text` ya comprobado con contraste AAA sobre cada uno de estos
+   seis tonos en claro y en oscuro (ver `tokens.css`). Nunca se aplica a
+   `intro`/`final` (que tienen su propio fondo fijo por tipo, arriba) ni se
+   combina con `.cardFinal`/`.cardIntro`: `cardClassName` en `nodeTypes.tsx`
+   solo añade una de estas clases cuando `data.nodeType === 'slide'`. El
+   anillo de selección (`.selected .card`) y el aviso "sin salida"
+   (`.cardWarning`) tampoco tocan `background`, así que se combinan sin
+   conflicto encima de cualquiera de estos fondos, igual que ya ocurre con
+   `.cardFinal`/`.cardIntro`. */
+.cardSlideYellow {
+  background: var(--bs-color-slide-yellow-bg);
+}
+
+.cardSlideOrange {
+  background: var(--bs-color-slide-orange-bg);
+}
+
+.cardSlidePink {
+  background: var(--bs-color-slide-pink-bg);
+}
+
+.cardSlidePurple {
+  background: var(--bs-color-slide-purple-bg);
+}
+
+.cardSlideCyan {
+  background: var(--bs-color-slide-cyan-bg);
+}
+
+.cardSlideGray {
+  background: var(--bs-color-slide-gray-bg);
+}
+
 /* Insignia de aviso (punto 1): un indicador pequeño y barato, no un icono
    con librería aparte. Círculo sólido en la esquina superior derecha de la
    tarjeta, con "!" — `title` en el propio `<span>` (ver `nodeTypes.tsx`)

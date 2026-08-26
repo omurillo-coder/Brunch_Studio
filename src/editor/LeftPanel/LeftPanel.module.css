@@ -69,8 +69,18 @@
   overflow-y: auto;
 }
 
+/* Fila de un nodo: el botón principal (`.nodeItem`) más los controles de
+   reordenar (`.reorderControls`), lado a lado — ver comentario de
+   `isSearching`/`reorderNode` en `LeftPanel.tsx`. */
+.nodeRow {
+  display: flex;
+  align-items: center;
+  gap: var(--bs-space-1);
+}
+
 .nodeItem {
-  width: 100%;
+  flex: 1 1 auto;
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: var(--bs-space-2);
@@ -131,4 +141,36 @@
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+}
+
+/* Controles de reordenar (↑/↓): mismo estilo visual que
+   `.contentBlockMoveButton` de `Inspector.module.css` (bloques de contenido
+   de una diapositiva), pero en columna en vez de en fila porque aquí
+   acompañan a una fila estrecha del panel izquierdo, no a una cabecera
+   horizontal. */
+.reorderControls {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.reorderButton {
+  padding: 0 var(--bs-space-1);
+  border: 1px solid var(--bs-color-border);
+  border-radius: var(--bs-radius-sm);
+  background: var(--bs-color-bg);
+  color: var(--bs-color-text);
+  font-size: var(--bs-font-size-xs);
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.reorderButton:hover:not(:disabled) {
+  border-color: var(--bs-color-accent);
+}
+
+.reorderButton:disabled {
+  cursor: default;
+  opacity: 0.4;
 }

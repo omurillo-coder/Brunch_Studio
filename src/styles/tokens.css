@@ -81,6 +81,30 @@
      da 15.1:1 (AAA de sobra, igual de riguroso que el azul de `final`). */
   --bs-color-intro-bg: #e3f5e8;
 
+  /* Paleta cerrada de color de una diapositiva `slide` (nunca `intro`/
+     `final`, que ya tienen su propio fondo fijo por tipo, azul/verde de
+     arriba): seis pastillas con nombre, mismo criterio de diseño que
+     `--bs-color-final-bg`/`--bs-color-intro-bg` (fondo pastel sobrio, sin
+     resultar chillón) y elegidas para ser bien diferenciables entre sí y
+     respecto a esas dos. Texto encima siempre `--bs-color-text`
+     (nunca un token de texto aparte, igual que `final`/`intro`), contraste
+     calculado con la misma fórmula WCAG que el resto de este archivo:
+     - Amarillo #fbf0c2: 15.00:1 (AAA)
+     - Naranja  #fbe0c8: 13.57:1 (AAA)
+     - Rosa     #fbdcec: 13.53:1 (AAA)
+     - Morado   #eadcf9: 13.17:1 (AAA)
+     - Cian     #d7f0ef: 14.39:1 (AAA)
+     - Gris cálido #ece7e1: 13.97:1 (AAA)
+     Nombres del enum (`SLIDE_COLORS` en `src/domain/schemas.ts`): yellow,
+     orange, pink, purple, cyan, gray — mismos nombres que el sufijo de cada
+     token de aquí abajo. */
+  --bs-color-slide-yellow-bg: #fbf0c2;
+  --bs-color-slide-orange-bg: #fbe0c8;
+  --bs-color-slide-pink-bg: #fbdcec;
+  --bs-color-slide-purple-bg: #eadcf9;
+  --bs-color-slide-cyan-bg: #d7f0ef;
+  --bs-color-slide-gray-bg: #ece7e1;
+
   /* Espaciado */
   --bs-space-1: 4px;
   --bs-space-2: 8px;
@@ -149,6 +173,22 @@
        (mismo criterio que `--bs-color-final-bg` arriba). Contraste:
        `--bs-color-text` (#ededef) sobre este verde da 12.2:1 (AAA). */
     --bs-color-intro-bg: #16301f;
+    /* Misma paleta de color de diapositiva oscurecida para fondo oscuro
+       (mismo criterio que `--bs-color-final-bg`/`--bs-color-intro-bg` de
+       arriba: tono aclarado en claro se oscurece manteniendo el matiz, texto
+       `--bs-color-text` #ededef encima). Contraste WCAG:
+       - Amarillo #3a3016: 11.13:1 (AAA)
+       - Naranja  #3d2814: 11.88:1 (AAA)
+       - Rosa     #3a1e2c: 12.81:1 (AAA)
+       - Morado   #2c1f3d: 13.11:1 (AAA)
+       - Cian     #123230: 11.78:1 (AAA)
+       - Gris cálido #332f2a: 11.36:1 (AAA) */
+    --bs-color-slide-yellow-bg: #3a3016;
+    --bs-color-slide-orange-bg: #3d2814;
+    --bs-color-slide-pink-bg: #3a1e2c;
+    --bs-color-slide-purple-bg: #2c1f3d;
+    --bs-color-slide-cyan-bg: #123230;
+    --bs-color-slide-gray-bg: #332f2a;
     --bs-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
   }
 }

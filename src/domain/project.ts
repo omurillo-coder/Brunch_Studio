@@ -8,6 +8,7 @@ import type {
   NodePosition,
   NodeType,
   ProjectDocument,
+  SlideColor,
   SlideNode,
   VariableCondition,
   VariableDef,
@@ -64,6 +65,13 @@ export interface CreateNodeExtra {
  * editando); es responsabilidad de la UI en la fase de editor, igual que se
  * documenta en el comentario de `VariableConditionSchema`.
  *
+ * `color` (paleta cerrada de color de una diapositiva, ver `SlideColorSchema`
+ * en `src/domain/schemas.ts`): mismo patrón de patch que `continueLabel` —
+ * `undefined` no toca, `null` borra (vuelve a "sin colorear"), un nombre de
+ * la paleta lo fija. Solo aplica a un nodo `slide`: si el patch lo incluye
+ * (aunque sea `null`) y el nodo es `intro`/`final`, `updateNode` lanza, mismo
+ * criterio que `continueLabel`/`condition`/`elseTargetNodeId`.
+ *
  * `cicloId`/`asignaturaId`/`caseName` (milestone "Diapositiva de Inicio",
  * ver `IntroNodeSchema`): solo aplican a un nodo `intro`; si el patch los
  * incluye (aunque sea `null`, para los dos primeros) y el nodo es `slide` o
@@ -85,6 +93,7 @@ export interface UpdateNodePatch {
   internalNote?: string | null
   condition?: VariableCondition | null
   elseTargetNodeId?: string | null
+  color?: SlideColor | null
   cicloId?: string | null
   asignaturaId?: string | null
   caseName?: string
@@ -394,10 +403,11 @@ export function updateNode(
   const setsSlideOnlyField =
     patch.continueLabel !== undefined ||
     patch.condition !== undefined ||
-    patch.elseTargetNodeId !== undefined
+    patch.elseTargetNodeId !== undefined ||
+    patch.color !== undefined
   if (setsSlideOnlyField && node && node.type !== 'slide') {
     throw new Error(
-      `El nodo "${nodeId}" es de tipo "${node.type}" y no admite texto de continuar ni enrutado condicional.`,
+      `El nodo "${nodeId}" es de tipo "${node.type}" y no admite texto de continuar, enrutado condicional ni color.`,
     )
   }
   if (patch.body !== undefined && node && node.type !== 'final') {
@@ -433,6 +443,9 @@ export function updateNode(
       if (patch.elseTargetNodeId !== undefined) {
         draftNode.elseTargetNodeId =
           patch.elseTargetNodeId === null ? undefined : patch.elseTargetNodeId
+      }
+      if (patch.color !== undefined) {
+        draftNode.color = patch.color === null ? undefined : patch.color
       }
     }
     if (draftNode.type === 'intro') {
@@ -605,6 +618,14 @@ export function duplicateNode(
           targetNodeId: undefined,
         })),
         content: source.content.map((block) => ({ ...block, id: createId() })),
+        // A diferencia de las conexiones salientes, el color es una marca
+        // puramente visual (de qué rama/hilo narrativo forma parte una
+        // diapositiva para quien monta el escenario) sin ningún efecto en el
+        // recorrido — no hay motivo para limpiarla al duplicar, al
+        // contrario: lo más útil es que la copia nazca marcada igual que el
+        // original, ya que normalmente se duplica precisamente para crear
+        // otra variante dentro de la MISMA rama.
+        color: source.color,
       }
       duplicate = node
       break

@@ -1,16 +1,14 @@
-// 'node:fs'/'node:url' no están en los tipos de la app (tsconfig.app.json
-// solo declara "types": ["vite/client"], a propósito: el código de la app
-// corre en el navegador/webview, no en Node). Este archivo es solo de test,
-// y Vitest sí corre sobre Node de verdad, así que el import funciona en
-// tiempo de ejecución; se suprime aquí solo el aviso de tipos (por línea),
-// en vez de añadir "node" a los tipos de toda la app. Import vía `?raw`
-// (soportado por Vite) se descartó: el `test.css` por defecto de Vitest
-// intercepta CUALQUIER import de un `.css` (con o sin `?raw`) y lo sustituye
-// por el objeto vacío de CSS Modules, así que no llega a devolver el texto
-// fuente.
-// @ts-expect-error -- ver nota de arriba
+// 'node:fs'/'node:url' no están declarados por "types" de tsconfig.app.json
+// (solo lista "vite/client", a propósito: el código de la app corre en el
+// navegador/webview, no en Node) -- pero SÍ quedan disponibles como efecto
+// colateral de `@types/nspell` (milestone "Rinconcito de avisos", ver
+// `src/domain/spellingDictionary.ts`), cuyo `.d.ts` lleva un
+// `/// <reference types="node" />` que trae los tipos de Node al programa
+// entero de todos modos. Mientras esa dependencia siga instalada, este
+// import no necesita supresión de tipos (si en algún momento desaparece,
+// TypeScript volverá a marcar estas dos líneas y hará falta reintroducir un
+// `@ts-expect-error` aquí, con la misma nota).
 import { fileURLToPath } from 'node:url'
-// @ts-expect-error -- ver nota de arriba
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 

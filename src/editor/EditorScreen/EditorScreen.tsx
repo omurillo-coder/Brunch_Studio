@@ -4,6 +4,7 @@ import { LeftPanel } from '../LeftPanel/LeftPanel'
 import { Inspector } from '../Inspector/Inspector'
 import { VariablesPanel } from '../Variables/VariablesPanel'
 import { Canvas } from '../Canvas/Canvas'
+import { DiagnosticsPanel } from '../Diagnostics/DiagnosticsPanel'
 import { PlayerScreen } from '../../player/PlayerScreen'
 import { usePreviewMode } from '../../store'
 import { loadLeftPanelVisible, saveLeftPanelVisible } from '../uiPreferences'
@@ -119,7 +120,10 @@ export function EditorScreen({ filePath, onCloseProject }: EditorScreenProps) {
       />
       <div className={styles.body}>
         {leftPanelVisible && <LeftPanel />}
-        <Canvas />
+        <div className={styles.canvasArea}>
+          <Canvas />
+          <DiagnosticsPanel />
+        </div>
         {variablesPanelVisible ? (
           <VariablesPanel onClose={() => setVariablesPanelVisible(false)} />
         ) : (

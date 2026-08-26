@@ -13,6 +13,7 @@ import {
   DEFAULT_CONTINUE_LABEL,
   MAX_RESPONSES,
   RESPONSE_LETTERS,
+  SLIDE_COLORS,
   deriveEdges,
 } from '../../domain'
 import type {
@@ -23,6 +24,7 @@ import type {
   Node,
   NodeType,
   ProjectDocument,
+  SlideColor,
   SlideNode,
   VariableCondition,
   VariableDef,
@@ -97,6 +99,82 @@ function nodeOptionLabel(node: Node): string {
 function sortByLetter(responses: DecisionResponse[]): DecisionResponse[] {
   return [...responses].sort(
     (a, b) => RESPONSE_LETTERS.indexOf(a.letter) - RESPONSE_LETTERS.indexOf(b.letter),
+  )
+}
+
+/** Etiqueta legible de cada color de la paleta cerrada (Tarea "Colorear
+ *  diapositivas"), usada como `title`/`aria-label` de su pastilla — nunca
+ *  como texto visible aparte (el propio color de fondo de la pastilla ya
+ *  identifica la opción). */
+const SLIDE_COLOR_LABEL: Record<SlideColor, string> = {
+  yellow: 'Amarillo',
+  orange: 'Naranja',
+  pink: 'Rosa',
+  purple: 'Morado',
+  cyan: 'Cian',
+  gray: 'Gris',
+}
+
+/** Mapa color de paleta -> clase CSS de la pastilla correspondiente
+ *  (`Inspector.module.css`), mismo criterio de mapa explícito que
+ *  `SLIDE_COLOR_CARD_CLASS` en `nodeTypes.tsx` (evita indexar `styles` con
+ *  una cadena construida dinámicamente). */
+const SLIDE_COLOR_SWATCH_CLASS: Record<SlideColor, string | undefined> = {
+  yellow: styles.colorSwatchYellow,
+  orange: styles.colorSwatchOrange,
+  pink: styles.colorSwatchPink,
+  purple: styles.colorSwatchPurple,
+  cyan: styles.colorSwatchCyan,
+  gray: styles.colorSwatchGray,
+}
+
+/**
+ * Color de una diapositiva `slide` (nunca `intro`/`final`, que ya tienen su
+ * propio fondo fijo por tipo — ver comentario de `SlideColorSchema` en
+ * `src/domain/schemas.ts`): fila de pastillas clicables, una por cada color
+ * de `SLIDE_COLORS` más "Sin color" para volver a `null`. Situada junto al
+ * campo "Referencia" (ver `NodeFields`) por ser, junto al título, uno de los
+ * primeros datos que identifican la diapositiva de un vistazo.
+ *
+ * La pastilla del color actualmente elegido se marca con `.colorSwatchSelected`
+ * (borde de acento + halo, mismo criterio que el anillo de selección del
+ * lienzo) y `aria-pressed`, para que el estado "elegido" sea perceptible
+ * tanto visual como programáticamente (lectores de pantalla).
+ */
+function SlideColorSection({ node }: { node: SlideNode }) {
+  const updateNode = useProjectStore((state) => state.updateNode)
+
+  function swatchClassName(selected: boolean, colorClass?: string): string {
+    return [styles.colorSwatch, colorClass, selected && styles.colorSwatchSelected]
+      .filter(Boolean)
+      .join(' ')
+  }
+
+  return (
+    <div className={styles.colorSection}>
+      <span className={styles.label}>Color</span>
+      <div className={styles.colorSwatchRow} role="group" aria-label="Color de la diapositiva">
+        <button
+          type="button"
+          className={swatchClassName(!node.color, styles.colorSwatchNone)}
+          aria-pressed={!node.color}
+          aria-label="Sin color"
+          title="Sin color"
+          onClick={() => updateNode(node.id, { color: null })}
+        />
+        {SLIDE_COLORS.map((color) => (
+          <button
+            key={color}
+            type="button"
+            className={swatchClassName(node.color === color, SLIDE_COLOR_SWATCH_CLASS[color])}
+            aria-pressed={node.color === color}
+            aria-label={SLIDE_COLOR_LABEL[color]}
+            title={SLIDE_COLOR_LABEL[color]}
+            onClick={() => updateNode(node.id, { color })}
+          />
+        ))}
+      </div>
+    </div>
   )
 }
 
@@ -2024,6 +2102,7 @@ function NodeFields({
           onKeyDown={handleTitleKeyDown}
         />
       </div>
+      {node.type === 'slide' && <SlideColorSection node={node} />}
       {node.type === 'final' && (
         <div>
           <span id="inspector-node-body-label" className={styles.label}>

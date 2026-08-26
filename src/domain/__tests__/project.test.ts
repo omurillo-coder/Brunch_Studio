@@ -291,6 +291,48 @@ describe('updateNode', () => {
   })
 })
 
+describe('updateNode — color (paleta cerrada de color de una diapositiva)', () => {
+  it('fija, cambia y borra el color', () => {
+    let project = createProject('P')
+    const startId = project.graph.startNodeId
+
+    project = updateNode(project, startId, { color: 'yellow' })
+    let node = project.graph.nodes.find((n) => n.id === startId)
+    expect(node?.type === 'slide' ? node.color : undefined).toBe('yellow')
+
+    project = updateNode(project, startId, { color: 'purple' })
+    node = project.graph.nodes.find((n) => n.id === startId)
+    expect(node?.type === 'slide' ? node.color : undefined).toBe('purple')
+
+    // `undefined` no toca el campo.
+    project = updateNode(project, startId, { title: 'X' })
+    node = project.graph.nodes.find((n) => n.id === startId)
+    expect(node?.type === 'slide' ? node.color : undefined).toBe('purple')
+
+    // `null` lo borra (vuelve a "sin colorear").
+    project = updateNode(project, startId, { color: null })
+    node = project.graph.nodes.find((n) => n.id === startId)
+    expect(node?.type === 'slide' ? node.color : 'missing').toBeUndefined()
+  })
+
+  it('lanza error al fijar color en un nodo final', () => {
+    const project = createNode(createProject('P'), 'final', { x: 0, y: 0 })
+    const finalId = otherNodeIdOf(project, 'final')
+
+    expect(() => updateNode(project, finalId, { color: 'cyan' })).toThrow()
+    expect(() => updateNode(project, finalId, { color: null })).toThrow()
+  })
+
+  it('lanza error al fijar color en el nodo intro', () => {
+    let project = createProject('P')
+    project = createNode(project, 'intro', { x: 0, y: 0 })
+    const introId = project.graph.nodes.find((n) => n.type === 'intro')?.id
+    if (!introId) throw new Error('No se creó el nodo intro')
+
+    expect(() => updateNode(project, introId, { color: 'gray' })).toThrow()
+  })
+})
+
 describe('createConnectedNode', () => {
   it('crea y conecta en una sola llamada desde una diapositiva sin respuestas (sin sourceResponseId)', () => {
     const project = createProject('P')
@@ -392,6 +434,17 @@ describe('duplicateNode', () => {
 
     // Inmutabilidad: el proyecto original no se toca.
     expect(project.graph.nodes).toHaveLength(1)
+  })
+
+  it('la copia SÍ conserva el color del original (a diferencia de las conexiones, es una marca puramente visual sin efecto en el recorrido)', () => {
+    let project = createProject('P')
+    const startId = project.graph.startNodeId
+    project = updateNode(project, startId, { color: 'purple' })
+
+    const { project: updated, nodeId } = duplicateNode(project, startId, { x: 40, y: 40 })
+
+    const copy = updated.graph.nodes.find((n) => n.id === nodeId) as SlideNode
+    expect(copy.color).toBe('purple')
   })
 
   it('la copia NO conserva targetNodeId/condition/elseTargetNodeId del original (decisión de diseño deliberada)', () => {

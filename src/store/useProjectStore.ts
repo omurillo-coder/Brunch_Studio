@@ -17,6 +17,7 @@ import {
   moveContentBlock as domainMoveContentBlock,
   moveNode as domainMoveNode,
   moveNodes as domainMoveNodes,
+  reorderNode as domainReorderNode,
   removeContentBlock as domainRemoveContentBlock,
   removeResponse as domainRemoveResponse,
   updateNode as domainUpdateNode,
@@ -194,6 +195,10 @@ export interface ProjectStoreActions {
   createNode: (type: NodeType, position: NodePosition, extra?: CreateNodeExtra) => void
   deleteNode: (nodeId: string) => void
   moveNode: (nodeId: string, position: NodePosition) => void
+  // -- Orden de aparición en el panel izquierdo (puramente organizativo,
+  // -- ver `src/domain/nodeOrder.ts`: no afecta al recorrido/export/
+  // -- auto-layout) --
+  reorderNode: (nodeId: string, toIndex: number) => void
   updateNode: (nodeId: string, patch: UpdateNodePatch) => void
   addResponse: (slideNodeId: string) => void
   removeResponse: (slideNodeId: string, responseId: string) => void
@@ -347,6 +352,15 @@ export const useProjectStore = create<ProjectStoreState>()(
 
     moveNode: (nodeId, position) => {
       const next = domainMoveNode(get().project, nodeId, position)
+      set((state) => {
+        state.history.past.push(state.project as ProjectDocument)
+        state.history.future = []
+        state.project = next
+      })
+    },
+
+    reorderNode: (nodeId, toIndex) => {
+      const next = domainReorderNode(get().project, nodeId, toIndex)
       set((state) => {
         state.history.past.push(state.project as ProjectDocument)
         state.history.future = []

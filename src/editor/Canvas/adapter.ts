@@ -7,6 +7,7 @@ import type {
   Node as DomainNode,
   NodeType,
   ProjectDocument,
+  SlideColor,
 } from '../../domain'
 import { extractPlainText, parseRichBody } from '../richText/richTextContent'
 import { IN_HANDLE_ID, OUT_HANDLE_ID, parseResponseHandleId, responseHandleId } from './handles'
@@ -55,6 +56,14 @@ interface BaseCanvasNodeData {
   /** Solo presente en nodos `slide`; vacío si la diapositiva no tiene
    *  respuestas (y por tanto se comporta como "de continuar"). */
   responses?: CanvasResponseSummary[]
+  /**
+   * Color opcional de la tarjeta (paleta cerrada, ver `SlideColorSchema` en
+   * `src/domain/schemas.ts`). Solo presente en nodos `slide` — `intro`/
+   * `final` no tienen este campo en su schema, tienen su propio fondo fijo
+   * por tipo (ver `cardClassName`/`.cardFinal`/`.cardIntro`). `undefined` =
+   * sin colorear, fondo neutro de siempre.
+   */
+  color?: SlideColor
   /** `true` solo para la diapositiva de inicio (`graph.startNodeId`). */
   isStart: boolean
   /**
@@ -248,6 +257,7 @@ function toNodeData(node: DomainNode, startNodeId: string): BaseCanvasNodeData {
       id: response.id,
       text: response.text,
     }))
+    base.color = node.color
   }
   return base
 }

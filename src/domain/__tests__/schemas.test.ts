@@ -6,6 +6,8 @@ import {
   NODE_TYPES,
   NodeSchema,
   ProjectDocumentSchema,
+  SLIDE_COLORS,
+  SlideColorSchema,
   SlideNodeSchema,
   VariableConditionSchema,
   VariableDefSchema,
@@ -254,6 +256,63 @@ describe('SlideNodeSchema — condition/elseTargetNodeId opcionales', () => {
   it('rechaza un elseTargetNodeId que no es uuid', () => {
     const result = SlideNodeSchema.safeParse({ ...base, elseTargetNodeId: 'no-es-uuid' })
     expect(result.success).toBe(false)
+  })
+})
+
+describe('SlideColorSchema / SlideNodeSchema.color (paleta cerrada de color)', () => {
+  const base = {
+    id: NODE_ID,
+    number: 1,
+    position: { x: 0, y: 0 },
+    title: '',
+    type: 'slide' as const,
+    responses: [],
+    content: [],
+  }
+
+  it('SLIDE_COLORS tiene exactamente los seis nombres de la paleta', () => {
+    expect(SLIDE_COLORS).toEqual(['yellow', 'orange', 'pink', 'purple', 'cyan', 'gray'])
+  })
+
+  it('SlideColorSchema acepta cada uno de los seis nombres de SLIDE_COLORS', () => {
+    for (const color of SLIDE_COLORS) {
+      expect(SlideColorSchema.safeParse(color).success).toBe(true)
+    }
+  })
+
+  it('SlideColorSchema rechaza un nombre fuera de la paleta', () => {
+    expect(SlideColorSchema.safeParse('red').success).toBe(false)
+    expect(SlideColorSchema.safeParse('').success).toBe(false)
+  })
+
+  it('acepta una diapositiva sin `color` (comportamiento actual intacto, campo puramente aditivo)', () => {
+    const result = SlideNodeSchema.safeParse(base)
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data.color).toBeUndefined()
+    }
+  })
+
+  it('acepta una diapositiva con cada color válido de la paleta', () => {
+    for (const color of SLIDE_COLORS) {
+      const result = SlideNodeSchema.safeParse({ ...base, color })
+      expect(result.success).toBe(true)
+    }
+  })
+
+  it('rechaza un color fuera de la paleta cerrada', () => {
+    const result = SlideNodeSchema.safeParse({ ...base, color: 'turquoise' })
+    expect(result.success).toBe(false)
+  })
+
+  it('un documento completo (ProjectDocumentSchema) sin `color` en su diapositiva sigue abriendo bien', () => {
+    const project = createProject('Proyecto sin color')
+    const result = ProjectDocumentSchema.safeParse(project)
+    expect(result.success).toBe(true)
+    if (result.success) {
+      const slide = result.data.graph.nodes.find((node) => node.type === 'slide')
+      expect(slide && slide.type === 'slide' ? slide.color : 'missing').toBeUndefined()
+    }
   })
 })
 

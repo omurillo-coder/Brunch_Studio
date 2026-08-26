@@ -365,6 +365,25 @@ describe('bloques de contenido de una diapositiva (milestone "Bloques de conteni
     useProjectStore.getState().redo()
     expect(slideNode(startId).content.map((b) => b.id)).toEqual([secondId, firstId])
   })
+
+  it('reorderNode produce una entrada deshacible/rehacible', () => {
+    useProjectStore.getState().createNode('final', { x: 50, y: 50 })
+    const finalId = nodeIdOf('final')
+    const idsBefore = useProjectStore.getState().project.graph.nodes.map((n) => n.id)
+    const historyBefore = useProjectStore.getState().history.past.length
+
+    useProjectStore.getState().reorderNode(finalId, 0)
+    const idsAfter = useProjectStore.getState().project.graph.nodes.map((n) => n.id)
+    expect(idsAfter[0]).toBe(finalId)
+    expect(idsAfter).not.toEqual(idsBefore)
+    expect(useProjectStore.getState().history.past.length).toBe(historyBefore + 1)
+
+    useProjectStore.getState().undo()
+    expect(useProjectStore.getState().project.graph.nodes.map((n) => n.id)).toEqual(idsBefore)
+
+    useProjectStore.getState().redo()
+    expect(useProjectStore.getState().project.graph.nodes.map((n) => n.id)).toEqual(idsAfter)
+  })
 })
 
 describe('drag de nodos', () => {

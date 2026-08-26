@@ -109,6 +109,7 @@ export function LeftPanel() {
   const createNode = useProjectStore((state) => state.createNode)
   const selectNode = useProjectStore((state) => state.selectNode)
   const focusNode = useProjectStore((state) => state.focusNode)
+  const reorderNode = useProjectStore((state) => state.reorderNode)
   const viewportCenter = useViewportCenter()
   // Sistema de guiaje: qué diapositiva está seleccionada ahora mismo, para
   // iluminarla en la lista (mismo criterio que el lienzo, que ya resalta la
@@ -117,6 +118,17 @@ export function LeftPanel() {
 
   const [searchQuery, setSearchQuery] = useState('')
   const normalizedQuery = searchQuery.trim().toLowerCase()
+  // Reordenar (↑/↓, ver `reorderNode` en `src/domain/nodeOrder.ts`) opera
+  // sobre el índice REAL dentro de `project.graph.nodes`, mientras que con un
+  // buscador activo `visibleNodes` es un SUBCONJUNTO filtrado: "subir/bajar"
+  // dentro de esa vista parcial sería ambiguo respecto a la posición real en
+  // el array completo (¿un puesto en la lista filtrada, o hasta el hueco
+  // entre los dos nodos ocultos más cercanos?). Se opta por deshabilitar los
+  // controles mientras el buscador tiene texto, en vez de intentar resolver
+  // esa ambigüedad — se reactivan en cuanto se borra la búsqueda, momento en
+  // el que `visibleNodes` vuelve a ser exactamente `project.graph.nodes` y el
+  // índice de la lista vuelve a coincidir con el índice real.
+  const isSearching = normalizedQuery !== ''
 
   // Botón "+ Inicio" (Tarea 1, milestone "Diapositiva de Inicio"): existe
   // siempre por consistencia visual con los otros dos botones y como red de
@@ -191,8 +203,8 @@ export function LeftPanel() {
       </div>
 
       <ul className={styles.nodeList}>
-        {visibleNodes.map((node) => (
-          <li key={node.id}>
+        {visibleNodes.map((node, index) => (
+          <li key={node.id} className={styles.nodeRow}>
             {/* `focusNode` selecciona el nodo (igual que `selectNode`) y
                 además pide al lienzo que centre la vista en él, sin que
                 este componente conozca `@xyflow/react` — ver
@@ -229,6 +241,40 @@ export function LeftPanel() {
                   campo no cambia, solo el texto que ve el usuario. */}
               <span className={styles.nodeTitle}>{node.title.trim() || 'Sin referencia'}</span>
             </button>
+            {/* Reordenar (puramente organizativo, ver `reorderNode` en
+                `src/domain/nodeOrder.ts`): botones fuera del `<button>` de
+                arriba (un `<button>` dentro de otro `<button>` es HTML
+                inválido), deshabilitados en los extremos de la lista real y,
+                los dos a la vez, mientras el buscador tiene texto — ver
+                `isSearching` más arriba. */}
+            <div className={styles.reorderControls}>
+              <button
+                type="button"
+                className={styles.reorderButton}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  reorderNode(node.id, index - 1)
+                }}
+                disabled={isSearching || index === 0}
+                aria-label={`Subir "${node.title.trim() || 'Sin referencia'}"`}
+                title={isSearching ? 'Borra la búsqueda para reordenar' : undefined}
+              >
+                ↑
+              </button>
+              <button
+                type="button"
+                className={styles.reorderButton}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  reorderNode(node.id, index + 1)
+                }}
+                disabled={isSearching || index === visibleNodes.length - 1}
+                aria-label={`Bajar "${node.title.trim() || 'Sin referencia'}"`}
+                title={isSearching ? 'Borra la búsqueda para reordenar' : undefined}
+              >
+                ↓
+              </button>
+            </div>
           </li>
         ))}
         {normalizedQuery && visibleNodes.length === 0 && (

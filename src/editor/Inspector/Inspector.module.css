@@ -126,6 +126,86 @@
   border-color: var(--bs-color-accent);
 }
 
+/* Color de una diapositiva `slide` (paleta cerrada): fila de pastillas
+   clicables, una por color más "Sin color". Envuelve si el panel es
+   estrecho — nunca rompe el ancho del Inspector. */
+.colorSection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--bs-space-1);
+}
+
+.colorSwatchRow {
+  display: flex;
+  align-items: center;
+  gap: var(--bs-space-2);
+  flex-wrap: wrap;
+}
+
+.colorSwatch {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--bs-color-border-strong);
+  cursor: pointer;
+}
+
+.colorSwatch:hover {
+  border-color: var(--bs-color-accent);
+}
+
+/* Pastilla actualmente elegida: mismo criterio de anillo que el resto de
+   controles seleccionables de la app (ver `.selected .card` en
+   `NodeCard.module.css`: borde de acento + halo translúcido). */
+.colorSwatchSelected {
+  border-color: var(--bs-color-accent);
+  box-shadow: 0 0 0 2px var(--bs-color-focus-ring);
+}
+
+/* "Sin color": círculo neutro con una línea diagonal, mismo lenguaje visual
+   que un símbolo "sin/prohibido" — no es un color de la paleta, así que no
+   usa ningún token `--bs-color-slide-*-bg`. */
+.colorSwatchNone {
+  position: relative;
+  background: var(--bs-color-surface);
+}
+
+.colorSwatchNone::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  top: 50%;
+  height: 1px;
+  background: var(--bs-color-text-faint);
+  transform: rotate(-45deg);
+}
+
+.colorSwatchYellow {
+  background: var(--bs-color-slide-yellow-bg);
+}
+
+.colorSwatchOrange {
+  background: var(--bs-color-slide-orange-bg);
+}
+
+.colorSwatchPink {
+  background: var(--bs-color-slide-pink-bg);
+}
+
+.colorSwatchPurple {
+  background: var(--bs-color-slide-purple-bg);
+}
+
+.colorSwatchCyan {
+  background: var(--bs-color-slide-cyan-bg);
+}
+
+.colorSwatchGray {
+  background: var(--bs-color-slide-gray-bg);
+}
+
 .responsesSection {
   display: flex;
   flex-direction: column;
