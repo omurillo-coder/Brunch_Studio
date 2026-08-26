@@ -60,6 +60,12 @@ export interface TopbarProps {
   leftPanelVisible: boolean
   /** Alterna la visibilidad del panel izquierdo. */
   onToggleLeftPanel: () => void
+  /** Estado actual de visibilidad del panel de variables (fase 2 del
+   *  milestone "Variables/condiciones", Tarea 1); vive en `EditorScreen`,
+   *  mismo criterio que `leftPanelVisible`. */
+  variablesPanelVisible: boolean
+  /** Alterna la visibilidad del panel de variables. */
+  onToggleVariablesPanel: () => void
 }
 
 /**
@@ -73,7 +79,13 @@ export interface TopbarProps {
  * cosas de la interfaz que hablan del documento entero y no de la selección
  * actual.
  */
-export function Topbar({ filePath, leftPanelVisible, onToggleLeftPanel }: TopbarProps) {
+export function Topbar({
+  filePath,
+  leftPanelVisible,
+  onToggleLeftPanel,
+  variablesPanelVisible,
+  onToggleVariablesPanel,
+}: TopbarProps) {
   const project = useProject()
   const saveStatus = useProjectStore((state) => state.saveStatus)
   const canUndo = useCanUndo()
@@ -144,6 +156,19 @@ export function Topbar({ filePath, leftPanelVisible, onToggleLeftPanel }: Topbar
           title="Rehacer (Cmd/Ctrl+Shift+Z)"
         >
           ↻
+        </button>
+        {/* Panel de variables del proyecto (fase 2 "Variables/condiciones",
+            Tarea 1): botón toggle, mismo criterio visual que
+            "Exportar HTML"/"Exportar SCORM" (borde + fondo neutro), con
+            `aria-pressed` reflejando si el panel está abierto — ver
+            `VariablesPanel` en `EditorScreen`. */}
+        <button
+          type="button"
+          className={styles.exportButton}
+          onClick={onToggleVariablesPanel}
+          aria-pressed={variablesPanelVisible}
+        >
+          Variables
         </button>
         {/* Resultado de la última exportación. `role="alert"` solo para el
             fallo (interrumpe al lector de pantalla porque hay algo que

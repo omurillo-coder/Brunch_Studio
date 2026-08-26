@@ -19,6 +19,13 @@ import styles from './Edge.module.css'
  * - Punto 4 (resaltado de selección): `data.isHighlighted`/`data.isDimmed`,
  *   calculados en `adapter.ts` a partir de `selectedNodeIds`, deciden la
  *   clase CSS aplicada al trazo.
+ * - Rama "si no" (fase 2 del milestone "Variables/condiciones"):
+ *   `data.isElse` (calculado en `adapter.ts` a partir de `Edge.kind` de
+ *   dominio, ver `deriveEdges`) pinta el trazo discontinuo y añade una
+ *   pequeña etiqueta "si no" en el punto medio de la curva — sobrio,
+ *   distinguible de un vistazo de una arista normal, sin introducir un
+ *   sistema de etiquetas general para el resto de aristas (que
+ *   deliberadamente no llevan ninguna, ver comentario más abajo).
  */
 export const BRUNCH_EDGE_TYPE = 'brunchEdge'
 
@@ -33,17 +40,33 @@ export function BrunchEdge({
 }: EdgeProps<CanvasFlowEdge>) {
   const edgeData = data as CanvasEdgeData | undefined
   const offset = laneOffset(edgeData?.laneIndex ?? 0)
-  const { path } = buildOffsetEdgePath({ sourceX, sourceY, targetX, targetY, offset })
+  const { path, labelX, labelY } = buildOffsetEdgePath({ sourceX, sourceY, targetX, targetY, offset })
 
   const className = [
     styles.path,
     edgeData?.isHighlighted && styles.highlighted,
     edgeData?.isDimmed && styles.dimmed,
+    edgeData?.isElse && styles.pathElse,
   ]
     .filter(Boolean)
     .join(' ')
 
-  return <BaseEdge path={path} markerStart={markerStart} markerEnd={markerEnd} className={className} />
+  return (
+    <>
+      <BaseEdge path={path} markerStart={markerStart} markerEnd={markerEnd} className={className} />
+      {edgeData?.isElse && (
+        <text
+          x={labelX}
+          y={labelY}
+          className={edgeData.isDimmed ? `${styles.elseLabel} ${styles.dimmed}` : styles.elseLabel}
+          textAnchor="middle"
+          dominantBaseline="middle"
+        >
+          si no
+        </text>
+      )}
+    </>
+  )
 }
 
 /**

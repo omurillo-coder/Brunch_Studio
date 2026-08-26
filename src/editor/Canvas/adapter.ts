@@ -274,6 +274,11 @@ export interface CanvasEdgeData extends Record<string, unknown> {
   /** `true` cuando hay una selección activa y esta arista no sale de un
    *  nodo seleccionado: se atenúa para dar contraste. */
   isDimmed: boolean
+  /** `true` para la arista de la rama "si no" (`Edge.kind === 'else'` en
+   *  dominio, ver `deriveEdges`): se pinta discontinua y con una etiqueta
+   *  "si no" (ver `edges/edgeTypes.tsx`), para distinguirla de un vistazo de
+   *  una arista normal. */
+  isElse: boolean
 }
 
 /**
@@ -310,6 +315,7 @@ export function toFlowEdges(
       laneSize: lane.laneSize,
       isHighlighted,
       isDimmed: hasSelection && !isHighlighted,
+      isElse: edge.kind === 'else',
     }
     return {
       id: edge.id,

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Topbar } from '../Topbar/Topbar'
 import { LeftPanel } from '../LeftPanel/LeftPanel'
 import { Inspector } from '../Inspector/Inspector'
+import { VariablesPanel } from '../Variables/VariablesPanel'
 import { Canvas } from '../Canvas/Canvas'
 import { PlayerScreen } from '../../player/PlayerScreen'
 import { usePreviewMode } from '../../store'
@@ -60,6 +61,20 @@ export interface EditorScreenProps {
  * ocultarse, `LeftPanel` simplemente no se monta: `Canvas` (`flex: 1 1 auto`
  * en `EditorScreen.module.css`) ocupa el espacio liberado sin más cambios de
  * layout.
+ *
+ * Panel de variables (fase 2 del milestone "Variables/condiciones", Tarea
+ * 1): `variablesPanelVisible` es, igual que `leftPanelVisible`, un estado
+ * local puramente de sesión de edición — a propósito SIN persistir en
+ * `localStorage` (a diferencia del panel izquierdo): es un panel de uso
+ * puntual (crear/ajustar variables), no una preferencia de layout estable
+ * que tenga sentido recordar entre sesiones. Cuando está visible,
+ * SUSTITUYE al `Inspector` en vez de convivir con él (uno de los tres
+ * diseños que sugiere el enunciado de la tarea) — ambos son paneles de
+ * ancho similar a la derecha del lienzo, y mostrarlos a la vez recortaría
+ * mucho el espacio del lienzo sin aportar nada (editar variables no
+ * depende de qué nodo esté seleccionado). El botón "Variables" de `Topbar`
+ * alterna este estado; el propio `VariablesPanel` también puede cerrarse
+ * con su botón "✕" interno (mismo callback `onClose`).
  */
 export function EditorScreen({ filePath, onCloseProject }: EditorScreenProps) {
   const previewMode = usePreviewMode()
@@ -71,6 +86,7 @@ export function EditorScreen({ filePath, onCloseProject }: EditorScreenProps) {
   // `useWindowCloseGuard.ts`.
   useWindowCloseGuard({ flushPendingSave })
   const [leftPanelVisible, setLeftPanelVisible] = useState(() => loadLeftPanelVisible())
+  const [variablesPanelVisible, setVariablesPanelVisible] = useState(false)
 
   useEffect(() => {
     saveLeftPanelVisible(leftPanelVisible)
@@ -98,11 +114,17 @@ export function EditorScreen({ filePath, onCloseProject }: EditorScreenProps) {
         filePath={filePath}
         leftPanelVisible={leftPanelVisible}
         onToggleLeftPanel={() => setLeftPanelVisible((visible) => !visible)}
+        variablesPanelVisible={variablesPanelVisible}
+        onToggleVariablesPanel={() => setVariablesPanelVisible((visible) => !visible)}
       />
       <div className={styles.body}>
         {leftPanelVisible && <LeftPanel />}
         <Canvas />
-        <Inspector filePath={filePath} />
+        {variablesPanelVisible ? (
+          <VariablesPanel onClose={() => setVariablesPanelVisible(false)} />
+        ) : (
+          <Inspector filePath={filePath} />
+        )}
       </div>
     </div>
   )

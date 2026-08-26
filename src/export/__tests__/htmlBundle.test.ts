@@ -1,7 +1,14 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { buildHtmlBundle } from '../htmlBundle'
+import { BUNDLE_ELEMENT_ID } from '../exportedPlayerScript'
 import type { ExportAssetMap } from '../exportAssets'
-import type { DecisionResponse, FinalNode, ProjectDocument, SlideNode } from '../../domain'
+import type {
+  DecisionResponse,
+  FinalNode,
+  ProjectDocument,
+  SlideNode,
+  VariableDef,
+} from '../../domain'
 
 /**
  * Tests del generador del `index.html` autónomo (Milestone 3, fase 1).
@@ -583,5 +590,194 @@ describe('buildHtmlBundle — varias imágenes por diapositiva y orden de conten
     expect(images.map((img) => img.getAttribute('src'))).toEqual([
       'data:image/png;base64,U0VDT05EQQ==',
     ])
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Variables/condiciones (FASE 3 del milestone "Variables/condiciones")
+// ---------------------------------------------------------------------------
+
+const FLAG_VAR_ID = '88888888-8888-4888-8888-888888888801'
+const COUNTER_VAR_ID = '88888888-8888-4888-8888-888888888802'
+
+const VAR_START_ID = '99999999-1111-4111-8111-111111111111'
+const VAR_ROUTER_ID = '99999999-2222-4222-8222-222222222222'
+const VAR_FINAL_TRUE_ID = '99999999-3333-4333-8333-333333333333'
+const VAR_FINAL_FALSE_ID = '99999999-4444-4444-8444-444444444444'
+const VAR_RESPONSE_ACTIVATE_ID = '99999999-5555-4555-8555-555555555551'
+const VAR_RESPONSE_SKIP_ID = '99999999-5555-4555-8555-555555555552'
+const VAR_RESPONSE_HIDDEN_ID = '99999999-5555-4555-8555-555555555553'
+
+/**
+ * Documento con variables/condiciones/efectos completo (mismo escenario que
+ * `runtime.test.ts`, pero como export): una diapositiva de decisión con TRES
+ * respuestas —
+ *   A "Activar" (sin condición, con efectos: fija `flag=true` e incrementa
+ *     `contador` en 5),
+ *   B "Omitir" (sin condición, sin efectos),
+ *   C "Solo si ya está activo" (con `condition: flag == true`, oculta al
+ *     empezar porque `flag` arranca en `false`) —
+ * seguida de una diapositiva "de continuar" SIN respuestas que enruta con
+ * `condition`/`elseTargetNodeId` según el valor de `flag` tras la elección.
+ */
+function variablesProject(): ProjectDocument {
+  const flag: VariableDef = { id: FLAG_VAR_ID, name: 'flag', type: 'boolean', initialValue: false }
+  const counter: VariableDef = {
+    id: COUNTER_VAR_ID,
+    name: 'contador',
+    type: 'number',
+    initialValue: 0,
+  }
+
+  const start: SlideNode = {
+    id: VAR_START_ID,
+    number: 1,
+    type: 'slide',
+    position: { x: 0, y: 0 },
+    title: 'Decisión con condiciones',
+    body: richBody('¿Qué haces?'),
+    targetNodeId: undefined,
+    continueLabel: undefined,
+    responses: [
+      makeResponse({
+        id: VAR_RESPONSE_ACTIVATE_ID,
+        letter: 'A',
+        text: 'Activar',
+        targetNodeId: VAR_ROUTER_ID,
+        effects: [
+          { variableId: FLAG_VAR_ID, operation: 'set', value: true },
+          { variableId: COUNTER_VAR_ID, operation: 'increment', value: 5 },
+        ],
+      }),
+      makeResponse({
+        id: VAR_RESPONSE_SKIP_ID,
+        letter: 'B',
+        text: 'Omitir',
+        targetNodeId: VAR_ROUTER_ID,
+      }),
+      makeResponse({
+        id: VAR_RESPONSE_HIDDEN_ID,
+        letter: 'C',
+        text: 'Solo si ya está activo',
+        targetNodeId: VAR_ROUTER_ID,
+        condition: { variableId: FLAG_VAR_ID, operator: '==', value: true },
+      }),
+    ],
+    imageAssetIds: [],
+    audioAssetId: undefined,
+    contentOrder: 'text-first',
+  }
+
+  const router: SlideNode = {
+    id: VAR_ROUTER_ID,
+    number: 2,
+    type: 'slide',
+    position: { x: 300, y: 0 },
+    title: 'Enrutador condicional',
+    body: richBody('Calculando destino…'),
+    targetNodeId: VAR_FINAL_TRUE_ID,
+    elseTargetNodeId: VAR_FINAL_FALSE_ID,
+    condition: { variableId: FLAG_VAR_ID, operator: '==', value: true },
+    continueLabel: 'Ver resultado',
+    responses: [],
+    imageAssetIds: [],
+    audioAssetId: undefined,
+    contentOrder: 'text-first',
+  }
+
+  const finalTrue: FinalNode = {
+    id: VAR_FINAL_TRUE_ID,
+    number: 3,
+    type: 'final',
+    position: { x: 600, y: -50 },
+    title: 'Final activado',
+    body: richBody('Terminaste con el flag activado.'),
+  }
+
+  const finalFalse: FinalNode = {
+    id: VAR_FINAL_FALSE_ID,
+    number: 4,
+    type: 'final',
+    position: { x: 600, y: 50 },
+    title: 'Final no activado',
+    body: richBody('Terminaste sin activar el flag.'),
+  }
+
+  return {
+    schemaVersion: 1,
+    metadata: {
+      id: '99999999-9999-4999-8999-999999999996',
+      name: 'Proyecto con variables',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    },
+    settings: {},
+    variables: [flag, counter],
+    graph: { nodes: [start, router, finalTrue, finalFalse], startNodeId: VAR_START_ID },
+    editor: { viewport: { x: 0, y: 0, zoom: 1 } },
+  }
+}
+
+describe('buildHtmlBundle — project.variables viaja íntegro en el bundle exportado', () => {
+  it('el JSON embebido contiene project.variables tal cual, sin que la limpieza de campos de editor lo toque', () => {
+    const html = buildHtmlBundle(variablesProject(), {})
+
+    const marker = `<script type="application/json" id="${BUNDLE_ELEMENT_ID}">`
+    const start = html.indexOf(marker) + marker.length
+    const end = html.indexOf('</script>', start)
+    const embedded = JSON.parse(html.slice(start, end)) as { project: ProjectDocument }
+
+    expect(embedded.project.variables).toEqual(variablesProject().variables)
+  })
+})
+
+describe('buildHtmlBundle — comportamiento del HTML generado: variables/condiciones (jsdom)', () => {
+  beforeEach(() => {
+    document.body.innerHTML = ''
+  })
+
+  it('una respuesta con condición no cumplida no se pinta como opción (flag arranca en false)', () => {
+    runExportedBundle(buildHtmlBundle(variablesProject(), {}))
+
+    const optionTexts = [
+      ...document.querySelectorAll<HTMLButtonElement>('#brunch-root .optionButton'),
+    ].map((button) => button.textContent)
+    expect(optionTexts).toEqual(['Activar', 'Omitir'])
+    expect(optionTexts).not.toContain('Solo si ya está activo')
+  })
+
+  it('elegir "Activar" aplica sus efectos y el enrutador condicional lleva al Final "activado"', () => {
+    runExportedBundle(buildHtmlBundle(variablesProject(), {}))
+    clickButton('Activar')
+
+    // Diapositiva "de continuar" (VAR_ROUTER_ID): su condición ahora es
+    // verdadera (flag=true tras el efecto de "Activar").
+    clickButton('Ver resultado')
+
+    expect(currentCard().querySelector('.body')?.textContent).toContain(
+      'Terminaste con el flag activado.',
+    )
+  })
+
+  it('elegir "Omitir" (sin efectos) deja flag=false y el enrutador lleva al Final "no activado"', () => {
+    runExportedBundle(buildHtmlBundle(variablesProject(), {}))
+    clickButton('Omitir')
+    clickButton('Ver resultado')
+
+    expect(currentCard().querySelector('.body')?.textContent).toContain(
+      'Terminaste sin activar el flag.',
+    )
+  })
+
+  it('"Reintentar" reinicia las variables: tras reiniciar, la respuesta condicionada vuelve a estar oculta', () => {
+    runExportedBundle(buildHtmlBundle(variablesProject(), {}))
+    clickButton('Activar')
+    clickButton('Ver resultado')
+    clickButton('Reintentar')
+
+    const optionTexts = [
+      ...document.querySelectorAll<HTMLButtonElement>('#brunch-root .optionButton'),
+    ].map((button) => button.textContent)
+    expect(optionTexts).toEqual(['Activar', 'Omitir'])
   })
 })

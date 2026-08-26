@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createNode, createProject } from '../project'
+import { createNode, createProject, updateNode } from '../project'
 import { connect } from '../graph'
 import { addResponse } from '../responses'
 import { validateProject } from '../validation'
@@ -113,5 +113,33 @@ describe('validateProject', () => {
 
     const issues = validateProject(project)
     expect(issues.some((issue) => issue.code === 'NO_REACHABLE_FINAL')).toBe(true)
+  })
+
+  it('un destino solo alcanzable por la rama "si no" (elseTargetNodeId) no se marca inalcanzable (fase 2)', () => {
+    // Inicio -> (si) Final A ; Inicio -> (si no) Final B. Final B NO tiene
+    // ninguna arista "normal" entrante, solo la de `elseTargetNodeId`: antes
+    // de que `deriveEdges` la contemplara, el BFS de alcanzabilidad la
+    // habría marcado erróneamente como huérfana.
+    let project = createNode(createProject('P'), 'final', { x: 100, y: 0 })
+    project = createNode(project, 'final', { x: 200, y: 0 })
+    const startId = project.graph.startNodeId
+    const [finalSi, finalNo] = project.graph.nodes.filter((node) => node.type === 'final')
+    if (!finalSi || !finalNo) throw new Error('setup inválido')
+
+    project = connect(project, startId, finalSi.id)
+    project = updateNode(project, startId, {
+      condition: {
+        variableId: '00000000-0000-4000-8000-000000000001',
+        operator: '==',
+        value: true,
+      },
+      elseTargetNodeId: finalNo.id,
+    })
+
+    const issues = validateProject(project)
+    expect(
+      issues.some((issue) => issue.code === 'UNREACHABLE_NODE' && issue.nodeId === finalNo.id),
+    ).toBe(false)
+    expect(issues).toEqual([])
   })
 })

@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import { addResponse, connect, createNode, createProject, updateResponse } from '../../domain'
-import type { DecisionResponse, ProjectDocument } from '../../domain'
+import {
+  addResponse,
+  addVariable,
+  connect,
+  createNode,
+  createProject,
+  updateNode,
+  updateResponse,
+  updateVariable,
+} from '../../domain'
+import type { DecisionResponse, ProjectDocument, VariableDef } from '../../domain'
 import { advance, choose, getInitialState, getView, restart } from '../runtime'
 
 /** Ids de los nodos del tipo pedido, en orden de aparición en el documento. */
@@ -154,7 +163,11 @@ describe('runtime del Player', () => {
     const { project, decisionId } = buildFullGraph()
     let state = getInitialState(project)
     state = advance(project, state) // ahora en decisionId
-    expect(advance(project, state)).toEqual({ currentNodeId: decisionId, totalPoints: null })
+    expect(advance(project, state)).toEqual({
+      currentNodeId: decisionId,
+      totalPoints: null,
+      variables: {},
+    })
   })
 
   it('advance es un no-op sobre un nodo final', () => {
@@ -260,5 +273,286 @@ describe('runtime del Player: puntuación acumulada (totalPoints)', () => {
     expect(state.totalPoints).toBe(5)
 
     expect(restart(project).totalPoints).toBeNull()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Variables/condiciones (FASE 3 del milestone "Variables/condiciones")
+// ---------------------------------------------------------------------------
+
+/** Añade dos variables (una numérica, una booleana) a un proyecto recién
+ *  creado y devuelve sus `VariableDef` para que los tests puedan construir
+ *  efectos/condiciones que las referencien por id. */
+function withTwoVariables(): {
+  project: ProjectDocument
+  counter: VariableDef
+  flag: VariableDef
+} {
+  let project = createProject('P')
+  project = addVariable(project, { name: 'contador', type: 'number', initialValue: 3 })
+  project = addVariable(project, { name: 'activo', type: 'boolean', initialValue: false })
+  const [counter, flag] = project.variables as [VariableDef, VariableDef]
+  return { project, counter, flag }
+}
+
+describe('runtime del Player: siembra y reinicio de variables', () => {
+  it('getInitialState siembra state.variables a partir de project.variables (initialValue)', () => {
+    const { project, counter, flag } = withTwoVariables()
+
+    const state = getInitialState(project)
+    expect(state.variables).toEqual({ [counter.id]: 3, [flag.id]: false })
+  })
+
+  it('un proyecto sin variables arranca con state.variables = {}', () => {
+    const project = createProject('P')
+    expect(getInitialState(project).variables).toEqual({})
+  })
+
+  it('restart reinicia las variables a su initialValue tras haberlas modificado', () => {
+    let { project, counter } = withTwoVariables()
+    project = createNode(project, 'final', { x: 200, y: 0 })
+    const startId = project.graph.startNodeId
+    const finalId = project.graph.nodes.find((node) => node.type === 'final')!.id
+    project = addResponse(project, startId)
+    const responseA = responsesOf(project, startId).find((r) => r.letter === 'A')
+    if (!responseA) throw new Error('setup inválido')
+    project = connect(project, startId, finalId, responseA.id)
+    project = updateResponse(project, startId, responseA.id, {
+      effects: [{ variableId: counter.id, operation: 'set', value: 99 }],
+    })
+
+    let state = getInitialState(project)
+    state = choose(project, state, responseA.id)
+    expect(state.variables[counter.id]).toBe(99)
+
+    const restarted = restart(project)
+    expect(restarted.variables[counter.id]).toBe(3)
+    expect(restarted).toEqual(getInitialState(project))
+  })
+})
+
+describe('runtime del Player: choose aplica efectos sobre variables', () => {
+  /** inicio -[A]-> final, con la respuesta A cargada de efectos numéricos y
+   *  booleanos sobre las dos variables de `withTwoVariables()`. */
+  function buildEffectsGraph() {
+    const { project: base, counter, flag } = withTwoVariables()
+    let project = createNode(base, 'final', { x: 200, y: 0 })
+    const startId = project.graph.startNodeId
+    const finalId = project.graph.nodes.find((node) => node.type === 'final')!.id
+    project = addResponse(project, startId)
+    const responseA = responsesOf(project, startId).find((r) => r.letter === 'A')
+    if (!responseA) throw new Error('setup inválido')
+    project = connect(project, startId, finalId, responseA.id)
+    return { project, startId, finalId, responseA, counter, flag }
+  }
+
+  it('"set" numérico fija el valor exacto en state.variables', () => {
+    let { project, startId, responseA, counter } = buildEffectsGraph()
+    project = updateResponse(project, startId, responseA.id, {
+      effects: [{ variableId: counter.id, operation: 'set', value: 42 }],
+    })
+
+    const next = choose(project, getInitialState(project), responseA.id)
+    expect(next.variables[counter.id]).toBe(42)
+  })
+
+  it('"increment"/"decrement" suman/restan sobre el valor numérico actual', () => {
+    let { project, startId, responseA, counter } = buildEffectsGraph()
+    project = updateResponse(project, startId, responseA.id, {
+      effects: [{ variableId: counter.id, operation: 'increment', value: 4 }],
+    })
+    let next = choose(project, getInitialState(project), responseA.id)
+    expect(next.variables[counter.id]).toBe(7) // 3 + 4
+
+    project = updateResponse(project, startId, responseA.id, {
+      effects: [{ variableId: counter.id, operation: 'decrement', value: 5 }],
+    })
+    next = choose(project, getInitialState(project), responseA.id)
+    expect(next.variables[counter.id]).toBe(-2) // 3 - 5
+  })
+
+  it('"set" booleano fija el flag', () => {
+    let { project, startId, responseA, flag } = buildEffectsGraph()
+    project = updateResponse(project, startId, responseA.id, {
+      effects: [{ variableId: flag.id, operation: 'set', value: true }],
+    })
+
+    const next = choose(project, getInitialState(project), responseA.id)
+    expect(next.variables[flag.id]).toBe(true)
+  })
+
+  it('una respuesta sin "effects" deja state.variables intacto', () => {
+    const { project, responseA, counter, flag } = buildEffectsGraph()
+    const state = getInitialState(project)
+
+    const next = choose(project, state, responseA.id)
+    expect(next.variables).toEqual({ [counter.id]: 3, [flag.id]: false })
+  })
+
+  it('totalPoints (puntuación) y variables no se mezclan: choose actualiza ambos de forma independiente', () => {
+    let { project, startId, responseA, counter } = buildEffectsGraph()
+    project = updateResponse(project, startId, responseA.id, {
+      points: 10,
+      effects: [{ variableId: counter.id, operation: 'increment', value: 1 }],
+    })
+
+    const next = choose(project, getInitialState(project), responseA.id)
+    expect(next.totalPoints).toBe(10)
+    expect(next.variables[counter.id]).toBe(4)
+  })
+})
+
+describe('runtime del Player: filtrado de respuestas por condición', () => {
+  /** inicio con dos respuestas (A -[final A], B -[final B]); A lleva una
+   *  `condition` sobre `flag`, B no lleva ninguna. */
+  function buildConditionalDecisionGraph() {
+    const { project: base, flag } = withTwoVariables()
+    let project = createNode(base, 'final', { x: 200, y: -50 })
+    project = createNode(project, 'final', { x: 200, y: 50 })
+    const startId = project.graph.startNodeId
+    const finals = project.graph.nodes.filter((node) => node.type === 'final')
+    const finalAId = finals[0]!.id
+    const finalBId = finals[1]!.id
+
+    project = addResponse(project, startId) // A
+    project = addResponse(project, startId) // B
+    const startNode = project.graph.nodes.find((node) => node.id === startId)
+    const responseA = startNode?.type === 'slide' ? startNode.responses.find((r) => r.letter === 'A') : undefined
+    const responseB = startNode?.type === 'slide' ? startNode.responses.find((r) => r.letter === 'B') : undefined
+    if (!responseA || !responseB) throw new Error('setup inválido')
+
+    project = connect(project, startId, finalAId, responseA.id)
+    project = connect(project, startId, finalBId, responseB.id)
+    project = updateResponse(project, startId, responseA.id, {
+      condition: { variableId: flag.id, operator: '==', value: true },
+    })
+
+    return { project, startId, responseA, responseB, flag }
+  }
+
+  it('una respuesta con condición no cumplida no aparece en visibleResponses', () => {
+    const { project, responseB } = buildConditionalDecisionGraph()
+
+    const view = getView(project, getInitialState(project)) // flag = false por defecto
+    expect(view.kind).toBe('decision')
+    if (view.kind === 'decision') {
+      expect(view.visibleResponses.map((response) => response.id)).toEqual([responseB.id])
+    }
+  })
+
+  it('cuando la condición se cumple, la respuesta sí aparece en visibleResponses', () => {
+    let { project, responseA, responseB, flag } = buildConditionalDecisionGraph()
+    // Fuerza flag=true cambiando su initialValue (no hay otro nodo de origen
+    // desde el que aplicar un efecto en este grafo mínimo).
+    project = updateVariable(project, flag.id, { initialValue: true })
+
+    const view = getView(project, getInitialState(project))
+    expect(view.kind).toBe('decision')
+    if (view.kind === 'decision') {
+      expect(view.visibleResponses.map((response) => response.id).sort()).toEqual(
+        [responseA.id, responseB.id].sort(),
+      )
+    }
+  })
+
+  it('una respuesta sin "condition" siempre se muestra (comportamiento actual, sin cambios)', () => {
+    const { project, responseB } = buildConditionalDecisionGraph()
+    const view = getView(project, getInitialState(project))
+    expect(view.kind).toBe('decision')
+    if (view.kind === 'decision') {
+      expect(view.visibleResponses.some((response) => response.id === responseB.id)).toBe(true)
+    }
+  })
+
+  it('si TODAS las respuestas quedan filtradas por condición, la vista es dead-end', () => {
+    const { project: base, flag } = withTwoVariables()
+    let project = createNode(base, 'final', { x: 200, y: 0 })
+    const startId = project.graph.startNodeId
+    const finalId = project.graph.nodes.find((node) => node.type === 'final')!.id
+    project = addResponse(project, startId)
+    const responseA = responsesOf(project, startId).find((r) => r.letter === 'A')
+    if (!responseA) throw new Error('setup inválido')
+    project = connect(project, startId, finalId, responseA.id)
+    project = updateResponse(project, startId, responseA.id, {
+      condition: { variableId: flag.id, operator: '==', value: true }, // flag=false: nunca se cumple
+    })
+
+    const view = getView(project, getInitialState(project))
+    expect(view.kind).toBe('dead-end')
+  })
+
+  it('elegir la respuesta visible (B) sigue navegando y aplicando sus efectos con normalidad', () => {
+    const { project, responseB } = buildConditionalDecisionGraph()
+    const next = choose(project, getInitialState(project), responseB.id)
+    expect(next.currentNodeId).not.toBeNull()
+  })
+})
+
+describe('runtime del Player: enrutado condicional de una diapositiva "de continuar"', () => {
+  /** inicio ("de continuar", condición sobre `flag`) -> Final VERDADERO
+   *                                                   -> Final FALSO (elseTargetNodeId) */
+  function buildConditionalContinueGraph() {
+    const { project: base, flag } = withTwoVariables()
+    let project = createNode(base, 'final', { x: 200, y: -50 })
+    project = createNode(project, 'final', { x: 200, y: 50 })
+    const startId = project.graph.startNodeId
+    const finals = project.graph.nodes.filter((node) => node.type === 'final')
+    const finalTrueId = finals[0]!.id
+    const finalFalseId = finals[1]!.id
+
+    project = connect(project, startId, finalTrueId) // targetNodeId = rama VERDADERA
+    project = updateNode(project, startId, {
+      condition: { variableId: flag.id, operator: '==', value: true },
+      elseTargetNodeId: finalFalseId,
+    })
+
+    return { project, startId, finalTrueId, finalFalseId, flag }
+  }
+
+  it('condición VERDADERA: getView es "continue" y advance/choose llevan a targetNodeId', () => {
+    let { project, startId, finalTrueId, flag } = buildConditionalContinueGraph()
+    project = updateVariable(project, flag.id, { initialValue: true })
+
+    const state = getInitialState(project)
+    expect(getView(project, state).kind).toBe('continue')
+
+    const next = advance(project, state)
+    expect(next.currentNodeId).toBe(finalTrueId)
+    expect(next.currentNodeId).not.toBe(startId)
+  })
+
+  it('condición FALSA: getView es "continue" y advance lleva a elseTargetNodeId', () => {
+    const { project, startId, finalFalseId } = buildConditionalContinueGraph()
+
+    // flag = false (initialValue por defecto de withTwoVariables): condición falsa.
+    const state = getInitialState(project)
+    expect(getView(project, state).kind).toBe('continue')
+
+    const next = advance(project, state)
+    expect(next.currentNodeId).toBe(finalFalseId)
+    expect(next.currentNodeId).not.toBe(startId)
+  })
+
+  it('sin "condition", el comportamiento es exactamente el de siempre (regresión)', () => {
+    const { project } = buildFullGraph()
+    // buildFullGraph ya cubre el caso "de continuar" sin condición: el
+    // destino es siempre targetNodeId, sin evaluar nada. Repetido aquí de
+    // forma explícita para dejar constancia de la regresión cubierta.
+    const state = getInitialState(project)
+    const view = getView(project, state)
+    expect(view.kind).toBe('continue')
+    const next = advance(project, state)
+    expect(next.currentNodeId).not.toBeNull()
+  })
+
+  it('sin "elseTargetNodeId" y condición FALSA: dead-end (destino ausente, mismo criterio que cualquier otro)', () => {
+    let { project, startId } = buildConditionalContinueGraph()
+    project = updateNode(project, startId, { elseTargetNodeId: null })
+
+    // flag = false (initialValue por defecto): condición falsa, y ahora sin
+    // elseTargetNodeId al que ir.
+    const state = getInitialState(project)
+    expect(getView(project, state).kind).toBe('dead-end')
+    expect(advance(project, state)).toEqual(state)
   })
 })

@@ -216,9 +216,87 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
     return null;
   }
 
+  // -------------------------------------------------------------------------
+  // Variables/condiciones (traducción literal de src/domain/variables.ts)
+  // -------------------------------------------------------------------------
+
+  /** Traducción literal de \`applyVariableEffects\`: devuelve un estado NUEVO,
+   *  no muta \`variables\`. \`set\` fija el valor; \`increment\`/\`decrement\` son
+   *  no-op silencioso si el valor actual no es un \`number\` (booleana o
+   *  ausente), mismo criterio que el dominio. */
+  function applyVariableEffects(variables, effects) {
+    var state = variables;
+    for (var i = 0; i < effects.length; i += 1) {
+      var effect = effects[i];
+      if (effect.operation === 'set') {
+        state = Object.assign({}, state);
+        state[effect.variableId] = effect.value;
+        continue;
+      }
+      var current = state[effect.variableId];
+      if (typeof current !== 'number') {
+        continue;
+      }
+      var delta = effect.operation === 'increment' ? effect.value : -effect.value;
+      state = Object.assign({}, state);
+      state[effect.variableId] = current + delta;
+    }
+    return state;
+  }
+
+  /** Traducción literal de \`evaluateCondition\`: \`==\`/\`!=\` siempre
+   *  significativos (incluida una variable ausente del estado, tratada como
+   *  \`undefined\`); los operadores de orden solo si ambos lados son \`number\`,
+   *  \`false\` en cualquier otro caso, nunca lanza. */
+  function evaluateCondition(variables, condition) {
+    var current = variables[condition.variableId];
+
+    if (condition.operator === '==') {
+      return current === condition.value;
+    }
+    if (condition.operator === '!=') {
+      return current !== condition.value;
+    }
+
+    if (typeof current !== 'number' || typeof condition.value !== 'number') {
+      return false;
+    }
+
+    var target = condition.value;
+    switch (condition.operator) {
+      case '>':
+        return current > target;
+      case '>=':
+        return current >= target;
+      case '<':
+        return current < target;
+      case '<=':
+        return current <= target;
+      default:
+        return false;
+    }
+  }
+
+  /** Traducción literal de \`resolveSlideTarget\`: sin \`condition\`, siempre
+   *  \`node.targetNodeId\`; con \`condition\`, decide entre \`targetNodeId\`
+   *  (verdadera) y \`elseTargetNodeId\` (falsa). No se llama nunca sobre un
+   *  nodo con respuestas (mismo criterio que el dominio, comprobado en cada
+   *  llamador de abajo). */
+  function resolveSlideTarget(node, variables) {
+    if (!node.condition) {
+      return node.targetNodeId;
+    }
+    return evaluateCondition(variables, node.condition) ? node.targetNodeId : node.elseTargetNodeId;
+  }
+
   function getInitialState() {
     var start = findNode(project.graph.startNodeId);
-    return { currentNodeId: start ? start.id : null, totalPoints: null };
+    var variableDefs = project.variables || [];
+    var variables = {};
+    for (var i = 0; i < variableDefs.length; i += 1) {
+      variables[variableDefs[i].id] = variableDefs[i].initialValue;
+    }
+    return { currentNodeId: start ? start.id : null, totalPoints: null, variables: variables };
   }
 
   function restart() {
@@ -232,6 +310,20 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
       }
     }
     return false;
+  }
+
+  /** Traducción literal del filtrado de \`visibleResponses\` en \`getView\`
+   *  (\`src/player/runtime.ts\`): las respuestas sin \`condition\`, más las que
+   *  la tienen y evalúan a verdadera contra \`state.variables\`. */
+  function visibleResponsesOf(responses, variables) {
+    var visible = [];
+    for (var i = 0; i < responses.length; i += 1) {
+      var response = responses[i];
+      if (!response.condition || evaluateCondition(variables, response.condition)) {
+        visible.push(response);
+      }
+    }
+    return visible;
   }
 
   function getView(state) {
@@ -250,12 +342,14 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
 
     var responses = node.responses || [];
     if (responses.length > 0) {
-      return hasAnyTarget(responses)
-        ? { kind: 'decision', node: node }
+      var visibleResponses = visibleResponsesOf(responses, state.variables);
+      return hasAnyTarget(visibleResponses)
+        ? { kind: 'decision', node: node, visibleResponses: visibleResponses }
         : { kind: 'dead-end', node: node };
     }
 
-    return node.targetNodeId
+    var target = resolveSlideTarget(node, state.variables);
+    return target
       ? { kind: 'continue', node: node }
       : { kind: 'dead-end', node: node };
   }
@@ -269,10 +363,14 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
       return state;
     }
     var responses = node.responses || [];
-    if (responses.length > 0 || !node.targetNodeId) {
+    if (responses.length > 0) {
       return state;
     }
-    return { currentNodeId: node.targetNodeId, totalPoints: state.totalPoints };
+    var target = resolveSlideTarget(node, state.variables);
+    if (!target) {
+      return state;
+    }
+    return { currentNodeId: target, totalPoints: state.totalPoints, variables: state.variables };
   }
 
   function choose(state, responseId) {
@@ -303,7 +401,8 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
       response.points === undefined
         ? state.totalPoints
         : (state.totalPoints === null ? 0 : state.totalPoints) + response.points;
-    return { currentNodeId: response.targetNodeId, totalPoints: totalPoints };
+    var variables = applyVariableEffects(state.variables, response.effects || []);
+    return { currentNodeId: response.targetNodeId, totalPoints: totalPoints, variables: variables };
   }
 
   // -------------------------------------------------------------------------
@@ -472,9 +571,11 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
 
     if (view.kind === 'decision') {
       // Mismo criterio que en 'continue': el título del nodo no se pinta.
+      // Las opciones vienen de \`view.visibleResponses\` (ya filtradas por
+      // \`condition\` en \`getView\`), nunca de \`view.node.responses\` a pelo.
       appendBodyAndMedia(card, view.node, null);
       var options = el('div', 'options');
-      var sorted = sortByLetter(view.node.responses || []);
+      var sorted = sortByLetter(view.visibleResponses || []);
       for (var i = 0; i < sorted.length; i += 1) {
         options.appendChild(buildOption(sorted[i], i + 1));
       }

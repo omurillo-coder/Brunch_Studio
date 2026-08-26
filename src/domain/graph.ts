@@ -18,6 +18,16 @@ export interface Edge {
   target: string
   /** Para aristas de respuesta: id de la respuesta que origina la arista. */
   sourceHandle?: string
+  /**
+   * Presente y a `'else'` únicamente para la arista de la rama "si no" de
+   * una diapositiva "de continuar" con `condition`+`elseTargetNodeId`
+   * (ver más abajo). Ausente (`undefined`) para cualquier otra arista
+   * ("normal": de "Continuar" o de una respuesta) — así un consumidor que
+   * no conoce este campo (p.ej. un test antiguo con `toEqual` sobre el
+   * objeto completo) no se ve afectado, porque `toEqual` trata una
+   * propiedad `undefined` como ausente.
+   */
+  kind?: 'else'
 }
 
 /**
@@ -26,8 +36,21 @@ export interface Edge {
  *
  * Para una diapositiva:
  * - Con respuestas (`responses.length > 0`): una arista por cada respuesta
- *   que tenga destino.
- * - Sin respuestas: una única arista desde su `targetNodeId`, si lo tiene.
+ *   que tenga destino. `condition`/`elseTargetNodeId` quedan "dormidos" en
+ *   este modo (mismo criterio que en el resto del dominio, ver
+ *   `SlideNodeSchema`), así que no generan ninguna arista adicional aquí.
+ * - Sin respuestas ("de continuar"): una arista desde `targetNodeId`, si lo
+ *   tiene, MÁS — fase 2 del milestone "Variables/condiciones" — una arista
+ *   adicional de tipo `kind: 'else'` hacia `elseTargetNodeId` cuando la
+ *   diapositiva tiene AMBOS `condition` y `elseTargetNodeId` (sin
+ *   `condition`, `elseTargetNodeId` no tiene ningún efecto en el Player —
+ *   ver `resolveSlideTarget` — así que tampoco debe generar arista visual;
+ *   y sin `elseTargetNodeId` no hay destino al que dibujarla). Que esta
+ *   arista se derive aquí, junto con la normal, es deliberado: así
+ *   `validateProject` (alcanzabilidad, BFS sobre `deriveEdges`) y el
+ *   indicador visual de "sin salida" del lienzo (`adapter.ts`,
+ *   `nodeIdsWithOutgoingEdge`) cuentan la rama "si no" como una salida
+ *   válida gratis, sin lógica duplicada en ningún otro sitio.
  *
  * Los nodos `final` no tienen salida: no generan aristas.
  */
@@ -48,11 +71,22 @@ export function deriveEdges(project: ProjectDocument): Edge[] {
           })
         }
       }
-    } else if (node.targetNodeId) {
+      continue
+    }
+
+    if (node.targetNodeId) {
       edges.push({
         id: `${node.id}->${node.targetNodeId}`,
         source: node.id,
         target: node.targetNodeId,
+      })
+    }
+    if (node.condition && node.elseTargetNodeId) {
+      edges.push({
+        id: `${node.id}:else->${node.elseTargetNodeId}`,
+        source: node.id,
+        target: node.elseTargetNodeId,
+        kind: 'else',
       })
     }
   }

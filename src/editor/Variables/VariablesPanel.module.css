@@ -1,0 +1,229 @@
+/**
+ * Panel de variables del proyecto (Tarea 1, fase 2 "Variables/condiciones").
+ * Mismo tono visual que `Inspector.module.css` (mismos tokens, mismos
+ * patrones de `.label`/`.input`/`.select`/confirmación inline de borrado) —
+ * deliberadamente NO se reimporta ese módulo (los CSS modules no comparten
+ * clases entre sí) sino que se repiten aquí los estilos base necesarios,
+ * consistentes en valores con los de `Inspector.module.css`.
+ */
+
+.panel {
+  flex: 0 0 320px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--bs-space-4);
+  border-left: 1px solid var(--bs-color-border);
+  background: var(--bs-color-surface);
+  overflow-y: auto;
+  padding: var(--bs-space-4);
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--bs-space-2);
+}
+
+.title {
+  margin: 0;
+  font-size: var(--bs-font-size-lg);
+  font-weight: 600;
+}
+
+.closeButton {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: var(--bs-radius-sm);
+  background: transparent;
+  color: var(--bs-color-text-muted);
+  font-size: var(--bs-font-size-md);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.closeButton:hover {
+  background: var(--bs-color-bg);
+  border-color: var(--bs-color-border);
+  color: var(--bs-color-text);
+}
+
+.intro {
+  margin: 0;
+  color: var(--bs-color-text-muted);
+  font-size: var(--bs-font-size-sm);
+}
+
+.label {
+  display: block;
+  margin-bottom: var(--bs-space-1);
+  font-size: var(--bs-font-size-xs);
+  color: var(--bs-color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.input,
+.select {
+  width: 100%;
+  padding: var(--bs-space-2);
+  border: 1px solid var(--bs-color-border);
+  border-radius: var(--bs-radius-sm);
+  background: var(--bs-color-bg);
+  color: var(--bs-color-text);
+  font-size: var(--bs-font-size-md);
+}
+
+.input:focus,
+.select:focus {
+  border-color: var(--bs-color-accent);
+}
+
+.checkboxLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--bs-space-2);
+  font-size: var(--bs-font-size-md);
+  color: var(--bs-color-text);
+}
+
+.addForm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--bs-space-3);
+  padding-bottom: var(--bs-space-4);
+  border-bottom: 1px solid var(--bs-color-border);
+}
+
+.addButton {
+  align-self: flex-start;
+  padding: var(--bs-space-2) var(--bs-space-3);
+  border: 1px solid var(--bs-color-border);
+  border-radius: var(--bs-radius-sm);
+  background: var(--bs-color-bg);
+  color: var(--bs-color-text);
+  font-size: var(--bs-font-size-sm);
+  cursor: pointer;
+}
+
+.addButton:hover {
+  border-color: var(--bs-color-accent);
+}
+
+.error {
+  margin: 0;
+  font-size: var(--bs-font-size-xs);
+  color: var(--bs-color-danger);
+}
+
+.variableList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--bs-space-3);
+}
+
+.variableRow {
+  display: flex;
+  flex-direction: column;
+  gap: var(--bs-space-2);
+  padding: var(--bs-space-3);
+  border: 1px solid var(--bs-color-border);
+  border-radius: var(--bs-radius-sm);
+}
+
+.variableRowHeader {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.typeBadge {
+  font-size: var(--bs-font-size-xs);
+  color: var(--bs-color-text-muted);
+  background: var(--bs-color-bg);
+  border-radius: var(--bs-radius-sm);
+  padding: 1px 6px;
+}
+
+.emptyState {
+  margin: 0;
+  padding: var(--bs-space-2);
+  border: 1px dashed var(--bs-color-border);
+  border-radius: var(--bs-radius-sm);
+  color: var(--bs-color-text-muted);
+  font-size: var(--bs-font-size-sm);
+}
+
+.deleteButton {
+  align-self: flex-start;
+  padding: var(--bs-space-1) var(--bs-space-3);
+  border: 1px solid var(--bs-color-danger);
+  border-radius: var(--bs-radius-sm);
+  background: var(--bs-color-danger-bg);
+  color: var(--bs-color-danger);
+  font-size: var(--bs-font-size-sm);
+  cursor: pointer;
+}
+
+.deleteButton:hover {
+  background: var(--bs-color-danger);
+  color: var(--bs-color-danger-contrast);
+}
+
+/* Confirmación inline de borrado: mismo patrón exacto que
+   `.deleteNodeConfirm` en `Inspector.module.css`. */
+.deleteConfirm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--bs-space-2);
+  align-self: flex-start;
+  padding: var(--bs-space-2) var(--bs-space-3);
+  border: 1px solid var(--bs-color-danger);
+  border-radius: var(--bs-radius-sm);
+  background: var(--bs-color-danger-bg);
+}
+
+.deleteConfirmText {
+  font-size: var(--bs-font-size-sm);
+  color: var(--bs-color-text);
+}
+
+.deleteConfirmActions {
+  display: flex;
+  gap: var(--bs-space-2);
+}
+
+.deleteConfirmButton {
+  padding: var(--bs-space-1) var(--bs-space-3);
+  border: none;
+  border-radius: var(--bs-radius-sm);
+  background: var(--bs-color-danger);
+  color: var(--bs-color-danger-contrast);
+  font-size: var(--bs-font-size-sm);
+  cursor: pointer;
+}
+
+.deleteConfirmButton:hover {
+  background: var(--bs-color-danger-hover);
+}
+
+.cancelDeleteButton {
+  padding: var(--bs-space-1) var(--bs-space-3);
+  border: 1px solid var(--bs-color-border);
+  border-radius: var(--bs-radius-sm);
+  background: var(--bs-color-surface);
+  color: var(--bs-color-text);
+  font-size: var(--bs-font-size-sm);
+  cursor: pointer;
+}
+
+.cancelDeleteButton:hover {
+  background: var(--bs-color-bg);
+}

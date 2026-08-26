@@ -30,7 +30,13 @@ function renderTopbar(services: Partial<AppServices> = {}, extra?: ReactElement)
   return render(
     <AppServicesProvider services={services}>
       {extra}
-      <Topbar filePath={TEST_FILE_PATH} leftPanelVisible onToggleLeftPanel={vi.fn()} />
+      <Topbar
+        filePath={TEST_FILE_PATH}
+        leftPanelVisible
+        onToggleLeftPanel={vi.fn()}
+        variablesPanelVisible={false}
+        onToggleVariablesPanel={vi.fn()}
+      />
     </AppServicesProvider>,
   )
 }
@@ -142,6 +148,8 @@ describe('Topbar', () => {
           filePath={TEST_FILE_PATH}
           leftPanelVisible
           onToggleLeftPanel={onToggleLeftPanel}
+          variablesPanelVisible={false}
+          onToggleVariablesPanel={vi.fn()}
         />
       </AppServicesProvider>,
     )
@@ -156,12 +164,39 @@ describe('Topbar', () => {
   it('el botón de panel izquierdo muestra "Mostrar" cuando está oculto', () => {
     render(
       <AppServicesProvider services={{}}>
-        <Topbar filePath={TEST_FILE_PATH} leftPanelVisible={false} onToggleLeftPanel={vi.fn()} />
+        <Topbar
+          filePath={TEST_FILE_PATH}
+          leftPanelVisible={false}
+          onToggleLeftPanel={vi.fn()}
+          variablesPanelVisible={false}
+          onToggleVariablesPanel={vi.fn()}
+        />
       </AppServicesProvider>,
     )
 
     const button = screen.getByLabelText('Mostrar panel izquierdo')
     expect(button).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it('el botón "Variables" refleja variablesPanelVisible y llama a onToggleVariablesPanel', () => {
+    const onToggleVariablesPanel = vi.fn()
+    render(
+      <AppServicesProvider services={{}}>
+        <Topbar
+          filePath={TEST_FILE_PATH}
+          leftPanelVisible
+          onToggleLeftPanel={vi.fn()}
+          variablesPanelVisible
+          onToggleVariablesPanel={onToggleVariablesPanel}
+        />
+      </AppServicesProvider>,
+    )
+
+    const button = screen.getByText('Variables')
+    expect(button).toHaveAttribute('aria-pressed', 'true')
+
+    fireEvent.click(button)
+    expect(onToggleVariablesPanel).toHaveBeenCalledTimes(1)
   })
 })
 

@@ -345,7 +345,7 @@ export function PlayerScreen({ filePath }: PlayerScreenProps) {
               emptyBodyFallback={null}
             />
             <div className={styles.options}>
-              {sortByLetter(view.node.responses).map((response, index) => (
+              {sortByLetter(view.visibleResponses).map((response, index) => (
                 <ResponseOption
                   key={response.id}
                   response={response}

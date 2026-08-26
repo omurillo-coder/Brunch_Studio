@@ -157,6 +157,27 @@ describe('EditorScreen — panel izquierdo ocultable (tarea 1)', () => {
   })
 })
 
+describe('EditorScreen — panel de variables (fase 2 "Variables/condiciones", Tarea 1)', () => {
+  it('el botón "Variables" de Topbar sustituye el Inspector por el panel de variables, y su "✕" lo devuelve', () => {
+    renderEditorScreen()
+
+    // Por defecto: el Inspector está montado (sin selección, resumen del
+    // proyecto) y el panel de variables no.
+    expect(screen.getByText('Nodos totales')).toBeInTheDocument()
+    expect(screen.queryByText('Variables del proyecto')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByText('Variables'))
+
+    expect(screen.getByText('Variables del proyecto')).toBeInTheDocument()
+    expect(screen.queryByText('Nodos totales')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByLabelText('Cerrar panel de variables'))
+
+    expect(screen.getByText('Nodos totales')).toBeInTheDocument()
+    expect(screen.queryByText('Variables del proyecto')).not.toBeInTheDocument()
+  })
+})
+
 describe('EditorScreen — "Cerrar proyecto"', () => {
   beforeEach(() => {
     vi.useFakeTimers()

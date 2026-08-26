@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { createNode, createProject } from '../project'
+import { createNode, createProject, updateNode } from '../project'
 import { connect, disconnect, deriveEdges } from '../graph'
 import { addResponse } from '../responses'
 import type { ProjectDocument } from '../schemas'
+
+/** Id de variable de pega, solo para condiciones de prueba (no necesita
+ *  existir en `project.variables`: `deriveEdges` no la consulta). */
+const FAKE_VARIABLE_ID = '00000000-0000-4000-8000-000000000001'
 
 /** Primer nodo del tipo pedido que no sea la diapositiva de inicio. */
 function otherNodeIdOf(project: ProjectDocument, type: 'slide' | 'final'): string {
@@ -139,5 +143,72 @@ describe('deriveEdges', () => {
   it('los nodos final no generan aristas', () => {
     const project = createNode(createProject('P'), 'final', { x: 0, y: 0 })
     expect(deriveEdges(project)).toEqual([])
+  })
+})
+
+describe('deriveEdges — rama "si no" (fase 2, Variables/condiciones)', () => {
+  it('con condition + elseTargetNodeId, genera una arista adicional kind: "else" hacia ese destino', () => {
+    let project = createNode(createProject('P'), 'final', { x: 100, y: 0 })
+    project = createNode(project, 'final', { x: 200, y: 0 })
+    const startId = project.graph.startNodeId
+    const [finalSi, finalNo] = project.graph.nodes.filter((node) => node.type === 'final')
+    if (!finalSi || !finalNo) throw new Error('setup inválido')
+
+    project = connect(project, startId, finalSi.id)
+    project = updateNode(project, startId, {
+      condition: { variableId: FAKE_VARIABLE_ID, operator: '==', value: true },
+      elseTargetNodeId: finalNo.id,
+    })
+
+    const edges = deriveEdges(project)
+    expect(edges).toContainEqual({
+      id: `${startId}:else->${finalNo.id}`,
+      source: startId,
+      target: finalNo.id,
+      kind: 'else',
+    })
+    // La arista normal de "Continuar" se conserva intacta junto a la nueva.
+    expect(edges).toContainEqual({ id: `${startId}->${finalSi.id}`, source: startId, target: finalSi.id })
+    expect(edges).toHaveLength(2)
+  })
+
+  it('con condition pero sin elseTargetNodeId, no genera arista "else" (no hay destino)', () => {
+    let project = createProject('P')
+    project = updateNode(project, project.graph.startNodeId, {
+      condition: { variableId: FAKE_VARIABLE_ID, operator: '==', value: true },
+    })
+
+    expect(deriveEdges(project)).toEqual([])
+  })
+
+  it('con elseTargetNodeId pero sin condition, no genera arista "else" (dormido)', () => {
+    let project = createNode(createProject('P'), 'final', { x: 100, y: 0 })
+    const startId = project.graph.startNodeId
+    const finalId = otherNodeIdOf(project, 'final')
+    project = updateNode(project, startId, { elseTargetNodeId: finalId })
+
+    expect(deriveEdges(project)).toEqual([])
+  })
+
+  it('en modo decisión (con respuestas), condition/elseTargetNodeId quedan dormidos: sin arista "else"', () => {
+    let project = createNode(createProject('P'), 'final', { x: 100, y: 0 })
+    project = createNode(project, 'final', { x: 200, y: 0 })
+    const startId = project.graph.startNodeId
+    const [finalA, finalB] = project.graph.nodes.filter((node) => node.type === 'final')
+    if (!finalA || !finalB) throw new Error('setup inválido')
+
+    project = addResponse(project, startId)
+    const responseId = responseIdsOf(project, startId)[0]
+    if (!responseId) throw new Error('setup inválido')
+    project = connect(project, startId, finalA.id, responseId)
+
+    project = updateNode(project, startId, {
+      condition: { variableId: FAKE_VARIABLE_ID, operator: '==', value: true },
+      elseTargetNodeId: finalB.id,
+    })
+
+    const edges = deriveEdges(project)
+    expect(edges.some((edge) => edge.kind === 'else')).toBe(false)
+    expect(edges).toHaveLength(1)
   })
 })

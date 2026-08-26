@@ -1178,6 +1178,190 @@ describe('Inspector — navegación rápida entre diapositivas conectadas (tarea
   })
 })
 
+describe('Inspector — condición y efectos de variables de una respuesta (fase 2 "Variables/condiciones", Tarea 2)', () => {
+  it('sin variables en el proyecto, muestra un aviso en vez de un desplegable vacío', () => {
+    const decisionId = createSlideWithTwoResponses()
+    act(() => {
+      useProjectStore.getState().selectNode(decisionId)
+    })
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    expect(
+      screen.getAllByText(/Todavía no hay variables en el proyecto/)[0],
+    ).toBeInTheDocument()
+    expect(screen.queryByText('Condición de visibilidad')).not.toBeInTheDocument()
+    expect(screen.queryByText('Efectos al elegir esta respuesta')).not.toBeInTheDocument()
+  })
+
+  it('añadir y quitar una condición de visibilidad numérica', () => {
+    act(() => {
+      useProjectStore.getState().addVariable({ name: 'Puntos', type: 'number', initialValue: 0 })
+    })
+    const decisionId = createSlideWithTwoResponses()
+    act(() => {
+      useProjectStore.getState().selectNode(decisionId)
+    })
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    fireEvent.click(screen.getAllByRole('button', { name: '+ Añadir condición' })[0]!)
+
+    const responseA = slideNode(decisionId).responses.find((r) => r.letter === 'A')
+    expect(responseA?.condition).toEqual({ variableId: expect.any(String), operator: '==', value: 0 })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Quitar condición' }))
+    expect(
+      slideNode(decisionId).responses.find((r) => r.letter === 'A')?.condition,
+    ).toBeUndefined()
+  })
+
+  it('el operador de una condición se acota a ==/!= cuando la variable es booleana', () => {
+    act(() => {
+      useProjectStore.getState().addVariable({ name: 'Aprobado', type: 'boolean', initialValue: false })
+    })
+    const decisionId = createSlideWithTwoResponses()
+    act(() => {
+      useProjectStore.getState().selectNode(decisionId)
+    })
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    fireEvent.click(screen.getAllByRole('button', { name: '+ Añadir condición' })[0]!)
+
+    const operatorSelect = document.getElementById(
+      `inspector-response-condition-${slideNode(decisionId).responses[0]?.id}-operator`,
+    ) as HTMLSelectElement
+    const optionValues = Array.from(operatorSelect.options).map((option) => option.value)
+    expect(optionValues).toEqual(['==', '!='])
+
+    // El valor se muestra como Sí/No, no como campo numérico.
+    const valueSelect = document.getElementById(
+      `inspector-response-condition-${slideNode(decisionId).responses[0]?.id}-value`,
+    ) as HTMLSelectElement
+    expect(valueSelect.tagName).toBe('SELECT')
+  })
+
+  it('añadir un efecto "set" numérico y editar su valor', () => {
+    act(() => {
+      useProjectStore.getState().addVariable({ name: 'Puntos', type: 'number', initialValue: 0 })
+    })
+    const decisionId = createSlideWithTwoResponses()
+    act(() => {
+      useProjectStore.getState().selectNode(decisionId)
+    })
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    fireEvent.click(screen.getAllByRole('button', { name: '+ Añadir efecto' })[0]!)
+
+    const responseA = slideNode(decisionId).responses.find((r) => r.letter === 'A')
+    expect(responseA?.effects).toEqual([{ variableId: expect.any(String), operation: 'set', value: 0 }])
+
+    const valueField = screen.getByLabelText('Valor del efecto 1')
+    fireEvent.change(valueField, { target: { value: '7' } })
+    fireEvent.blur(valueField)
+
+    expect(
+      slideNode(decisionId).responses.find((r) => r.letter === 'A')?.effects?.[0]?.value,
+    ).toBe(7)
+  })
+
+  it('la operación de un efecto se acota a "set" cuando la variable es booleana (sin sumar/restar)', () => {
+    act(() => {
+      useProjectStore.getState().addVariable({ name: 'Aprobado', type: 'boolean', initialValue: false })
+    })
+    const decisionId = createSlideWithTwoResponses()
+    act(() => {
+      useProjectStore.getState().selectNode(decisionId)
+    })
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    fireEvent.click(screen.getAllByRole('button', { name: '+ Añadir efecto' })[0]!)
+
+    const operationSelect = screen.getByLabelText('Operación del efecto 1') as HTMLSelectElement
+    const optionValues = Array.from(operationSelect.options).map((option) => option.value)
+    expect(optionValues).toEqual(['set'])
+  })
+
+  it('quitar un efecto lo elimina de la lista; sin efectos restantes, el campo queda sin definir', () => {
+    act(() => {
+      useProjectStore.getState().addVariable({ name: 'Puntos', type: 'number', initialValue: 0 })
+    })
+    const decisionId = createSlideWithTwoResponses()
+    act(() => {
+      useProjectStore.getState().selectNode(decisionId)
+    })
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    fireEvent.click(screen.getAllByRole('button', { name: '+ Añadir efecto' })[0]!)
+    fireEvent.click(screen.getByRole('button', { name: 'Quitar efecto 1' }))
+
+    expect(
+      slideNode(decisionId).responses.find((r) => r.letter === 'A')?.effects,
+    ).toBeUndefined()
+  })
+})
+
+describe('Inspector — enrutado condicional de una diapositiva "de continuar" (fase 2, Tarea 3)', () => {
+  it('sin variables en el proyecto, muestra un aviso en vez del control de activar', () => {
+    act(() => {
+      useProjectStore.getState().selectNode(startNodeId())
+    })
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    expect(screen.getByText('Enrutado condicional')).toBeInTheDocument()
+    expect(
+      screen.getByText(/Todavía no hay variables en el proyecto/),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: '+ Activar enrutado condicional' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('activar fija una condición por defecto; fijar el destino "si no"; desactivar limpia ambos campos', () => {
+    act(() => {
+      useProjectStore.getState().addVariable({ name: 'Puntos', type: 'number', initialValue: 0 })
+      useProjectStore.getState().createNode('final', { x: 100, y: 0 }, { title: 'Final si no' })
+      useProjectStore.getState().selectNode(startNodeId())
+    })
+    const finalId = useProjectStore.getState().project.graph.nodes.find((n) => n.type === 'final')?.id
+    if (!finalId) throw new Error('setup inválido')
+
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    fireEvent.click(screen.getByRole('button', { name: '+ Activar enrutado condicional' }))
+
+    expect(slideNode(startNodeId()).condition).toEqual({
+      variableId: expect.any(String),
+      operator: '==',
+      value: 0,
+    })
+    expect(screen.getByLabelText('Destino "si no"')).toBeInTheDocument()
+
+    const elseSelect = screen.getByLabelText('Destino "si no"') as HTMLSelectElement
+    fireEvent.change(elseSelect, { target: { value: finalId } })
+    expect(slideNode(startNodeId()).elseTargetNodeId).toBe(finalId)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Desactivar enrutado condicional' }))
+
+    const node = slideNode(startNodeId())
+    expect(node.condition).toBeUndefined()
+    expect(node.elseTargetNodeId).toBeUndefined()
+    // Vuelve al estado "sin activar".
+    expect(screen.getByRole('button', { name: '+ Activar enrutado condicional' })).toBeInTheDocument()
+  })
+
+  it('el enrutado condicional no aparece cuando la diapositiva tiene respuestas (modo decisión)', () => {
+    act(() => {
+      useProjectStore.getState().addVariable({ name: 'Puntos', type: 'number', initialValue: 0 })
+    })
+    const decisionId = createSlideWithTwoResponses()
+    act(() => {
+      useProjectStore.getState().selectNode(decisionId)
+    })
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    expect(screen.queryByText('Enrutado condicional')).not.toBeInTheDocument()
+  })
+})
+
 describe('Inspector — botón "+ Añadir respuesta" en el flujo del listado (tarea 9)', () => {
   it('el botón aparece justo después de la última respuesta en el DOM', () => {
     const decisionId = createSlideWithTwoResponses()

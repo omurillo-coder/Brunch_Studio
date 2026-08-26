@@ -20,3 +20,22 @@
 .dimmed {
   opacity: 0.35;
 }
+
+/* Rama "si no" de un enrutado condicional (fase 2 "Variables/condiciones"):
+   trazo discontinuo, mismo color neutro que una arista normal en reposo (el
+   resaltado/atenuado de selección se sigue aplicando encima vía
+   `.highlighted`/`.dimmed`, que se combinan con esta clase en `edgeTypes.tsx`). */
+.pathElse {
+  stroke-dasharray: 5 4;
+}
+
+.elseLabel {
+  fill: var(--bs-color-text-muted);
+  font-size: var(--bs-font-size-xs);
+  font-family: var(--bs-font-sans);
+  paint-order: stroke;
+  stroke: var(--bs-color-surface);
+  stroke-width: 3px;
+  pointer-events: none;
+  user-select: none;
+}

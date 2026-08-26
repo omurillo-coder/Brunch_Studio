@@ -293,7 +293,7 @@ describe('toFlowEdges', () => {
         sourceHandle: OUT_HANDLE_ID,
         targetHandle: IN_HANDLE_ID,
         type: BRUNCH_EDGE_TYPE,
-        data: { laneIndex: 0, laneSize: 1, isHighlighted: false, isDimmed: false },
+        data: { laneIndex: 0, laneSize: 1, isHighlighted: false, isDimmed: false, isElse: false },
       },
     ])
   })
@@ -315,7 +315,7 @@ describe('toFlowEdges', () => {
         sourceHandle: responseHandleId(responseId),
         targetHandle: IN_HANDLE_ID,
         type: BRUNCH_EDGE_TYPE,
-        data: { laneIndex: 0, laneSize: 1, isHighlighted: false, isDimmed: false },
+        data: { laneIndex: 0, laneSize: 1, isHighlighted: false, isDimmed: false, isElse: false },
       },
     ])
   })
@@ -324,6 +324,26 @@ describe('toFlowEdges', () => {
     const base = createProject('P')
     const project = addResponse(base, base.graph.startNodeId)
     expect(toFlowEdges(project)).toEqual([])
+  })
+
+  it('la arista "si no" (fase 2, Variables/condiciones) lleva data.isElse: true', () => {
+    let project = createNode(createProject('P'), 'final', { x: 100, y: 0 })
+    project = createNode(project, 'final', { x: 200, y: 0 })
+    const startId = project.graph.startNodeId
+    const [finalSi, finalNo] = project.graph.nodes.filter((n) => n.type === 'final')
+    if (!finalSi || !finalNo) throw new Error('setup inválido')
+
+    project = connect(project, startId, finalSi.id)
+    project = updateNode(project, startId, {
+      condition: { variableId: crypto.randomUUID(), operator: '==', value: true },
+      elseTargetNodeId: finalNo.id,
+    })
+
+    const edges = toFlowEdges(project)
+    const elseEdge = edges.find((edge) => edge.target === finalNo.id)
+    const normalEdge = edges.find((edge) => edge.target === finalSi.id)
+    expect(elseEdge?.data).toMatchObject({ isElse: true })
+    expect(normalEdge?.data).toMatchObject({ isElse: false })
   })
 })
 
