@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useProject, useProjectStore } from '../store'
 import { DEFAULT_CONTINUE_LABEL, RESPONSE_LETTERS } from '../domain'
-import type { DecisionResponse, SlideNode } from '../domain'
+import type { ContentBlock, DecisionResponse, SlideNode } from '../domain'
 import { advance, choose, getInitialState, getView } from './runtime'
 import type { PlayerState } from './runtime'
 import { useAppServices } from '../app/AppServicesContext'
@@ -16,40 +16,6 @@ import styles from './PlayerScreen.module.css'
 function sortByLetter(responses: DecisionResponse[]): DecisionResponse[] {
   return [...responses].sort(
     (a, b) => RESPONSE_LETTERS.indexOf(a.letter) - RESPONSE_LETTERS.indexOf(b.letter),
-  )
-}
-
-/**
- * Bloque de imágenes de un nodo: TODAS las de `imageAssetIds`, apiladas en
- * columna (una debajo de otra, a ancho completo) en el orden del array —
- * ese orden es justo lo que el Inspector permite reordenar con ↑/↓. Nunca un
- * carrusel ni una galería con interacción: es la decisión de diseño de esta
- * fase. Cada imagen se monta con `key={assetId}` para que un cambio de asset
- * concreto (añadida, reemplazada indirectamente al quitar/reañadir) arranque
- * su propia carga desde cero sin afectar a las demás.
- */
-function NodeImages({
-  imageAssetIds,
-  filePath,
-  assetRepository,
-}: {
-  imageAssetIds: string[]
-  filePath: string
-  assetRepository: AssetRepository
-}) {
-  if (imageAssetIds.length === 0) return null
-  return (
-    <>
-      {imageAssetIds.map((assetId) => (
-        <PlayerImage
-          key={assetId}
-          assetId={assetId}
-          filePath={filePath}
-          assetRepository={assetRepository}
-          alt="Imagen de esta pantalla"
-        />
-      ))}
-    </>
   )
 }
 
@@ -98,86 +64,93 @@ function PlayerAudio({
   return <audio className={styles.audio} controls src={dataUri} />
 }
 
-/** Imágenes (apiladas, en orden) + audio a nivel de nodo (Diapositiva).
- *  `null` si el nodo no tiene ningún adjunto. La posición de este bloque
- *  respecto al cuerpo de texto la decide quien llama, según
- *  `node.contentOrder` (ver `SlideBody`/las vistas `continue`/`decision` más
- *  abajo). */
-function NodeMedia({
-  node,
+/**
+ * Un bloque de `SlideNode.content`, pintado según su `type` (milestone
+ * "Bloques de contenido"): texto vía `RichTextView`, imagen/audio vía
+ * `PlayerImage`/`PlayerAudio` — la misma resolución de asset que antes se
+ * llamaba una vez por nodo, ahora generalizada a llamarse por cada bloque de
+ * su tipo. Un bloque de texto vacío (sin escribir nada aún) no pinta nada,
+ * mismo criterio de "vacío = nada" que el antiguo `body` único.
+ *
+ * `key`: el llamador (`SlideContent`) ya pone `key={block.id}` en cada
+ * instancia de este componente para la identidad de lista; aquí, en el
+ * elemento raíz que devuelve cada rama, se añade además `key={block.assetId}`
+ * para imagen/audio — mismo motivo que documenta `PlayerImage`/`PlayerAudio`
+ * más abajo: si el asset de un bloque cambiara, fuerza a React a montar una
+ * instancia nueva en vez de reutilizar un `dataUri` que ya no corresponde.
+ */
+function ContentBlockView({
+  block,
   filePath,
   assetRepository,
 }: {
-  node: SlideNode
+  block: ContentBlock
   filePath: string
   assetRepository: AssetRepository
 }) {
-  if (node.imageAssetIds.length === 0 && !node.audioAssetId) {
-    return null
-  }
-  return (
-    <div className={styles.mediaSection}>
-      <NodeImages
-        imageAssetIds={node.imageAssetIds}
-        filePath={filePath}
-        assetRepository={assetRepository}
-      />
-      {node.audioAssetId && (
+  switch (block.type) {
+    case 'text':
+      if (!block.body.trim()) return null
+      return <RichTextView body={block.body} className={styles.body} />
+    case 'image':
+      return (
+        <PlayerImage
+          key={block.assetId}
+          assetId={block.assetId}
+          filePath={filePath}
+          assetRepository={assetRepository}
+          alt="Imagen de esta pantalla"
+        />
+      )
+    case 'audio':
+      return (
         <PlayerAudio
-          key={node.audioAssetId}
-          assetId={node.audioAssetId}
+          key={block.assetId}
+          assetId={block.assetId}
           filePath={filePath}
           assetRepository={assetRepository}
         />
-      )}
-    </div>
-  )
-}
-
-/** Cuerpo de texto de una diapositiva (`continue`/`decision`), con el
- *  respaldo de siempre si está vacío. `emptyFallback` es `null` para "no
- *  pintar nada si no hay cuerpo" (vista `decision`, mismo criterio que ya
- *  aplicaba antes de esta sección). */
-function SlideBody({ node, emptyFallback }: { node: SlideNode; emptyFallback: string | null }) {
-  if (node.body.trim()) {
-    return <RichTextView body={node.body} className={styles.body} />
+      )
   }
-  if (emptyFallback === null) return null
-  return <p className={styles.body}>{emptyFallback}</p>
 }
 
 /**
- * Cuerpo de texto + bloque de medios de una diapositiva `continue`/
- * `decision`, en el orden que indique `node.contentOrder` ('text-first', el
- * de siempre, o 'image-first'). Reutilizado por ambas vistas para no
- * duplicar la lógica de orden.
+ * Pinta `node.content` EN ORDEN, bloque a bloque — sustituye al antiguo par
+ * "cuerpo de texto único" + "bloque de medios apilado" (`SlideBody`/
+ * `NodeMedia`, milestone "Bloques de contenido"): ahora los bloques son
+ * heterogéneos y se intercalan libremente, así que basta con recorrer el
+ * array tal cual, sin ninguna noción de "orden" aparte del propio índice
+ * (ver comentario de `ContentBlockSchema` en `src/domain/schemas.ts`).
+ *
+ * `emptyFallback` (mismo contrato que antes): si la diapositiva no tiene
+ * NINGÚN bloque, se pinta como párrafo de repuesto salvo que sea `null`
+ * (vista `decision`, que no muestra nada en ese caso).
  */
-function SlideBodyAndMedia({
+function SlideContent({
   node,
   filePath,
   assetRepository,
-  emptyBodyFallback,
+  emptyFallback,
 }: {
   node: SlideNode
   filePath: string
   assetRepository: AssetRepository
-  emptyBodyFallback: string | null
+  emptyFallback: string | null
 }) {
-  const body = <SlideBody node={node} emptyFallback={emptyBodyFallback} />
-  const media = <NodeMedia node={node} filePath={filePath} assetRepository={assetRepository} />
-
-  if (node.contentOrder === 'image-first') {
-    return (
-      <>
-        {media}
-        {body}
-      </>
-    )
+  if (node.content.length === 0) {
+    if (emptyFallback === null) return null
+    return <p className={styles.body}>{emptyFallback}</p>
   }
   return (
     <>
-      {body}
-      {media}
+      {node.content.map((block) => (
+        <ContentBlockView
+          key={block.id}
+          block={block}
+          filePath={filePath}
+          assetRepository={assetRepository}
+        />
+      ))}
     </>
   )
 }
@@ -333,11 +306,11 @@ export function PlayerScreen({ filePath }: PlayerScreenProps) {
             {view.node.title.trim() && (
               <h1 className={styles.nodeReferenceTitle}>{view.node.title}</h1>
             )}
-            <SlideBodyAndMedia
+            <SlideContent
               node={view.node}
               filePath={filePath}
               assetRepository={assetRepository}
-              emptyBodyFallback="Esta diapositiva todavía no tiene contenido."
+              emptyFallback="Esta diapositiva todavía no tiene contenido."
             />
             {/* Texto personalizable del botón de continuar; "Continuar" si la
                 diapositiva no define uno propio (ver `continueLabel`). */}
@@ -357,11 +330,11 @@ export function PlayerScreen({ filePath }: PlayerScreenProps) {
             {view.node.title.trim() && (
               <h1 className={styles.nodeReferenceTitle}>{view.node.title}</h1>
             )}
-            <SlideBodyAndMedia
+            <SlideContent
               node={view.node}
               filePath={filePath}
               assetRepository={assetRepository}
-              emptyBodyFallback={null}
+              emptyFallback={null}
             />
             <div className={styles.options}>
               {sortByLetter(view.visibleResponses).map((response, index) => (

@@ -1,9 +1,7 @@
 import { produce } from 'immer'
 import { createId, nextNodeNumber } from './id'
 import { connect } from './graph'
-import { DEFAULT_CONTENT_ORDER } from './schemas'
 import type {
-  ContentOrder,
   FinalNode,
   Node,
   NodePosition,
@@ -15,30 +13,46 @@ import type {
   VariableType,
 } from './schemas'
 
-/** Campos editables al crear un nodo (aparte de tipo y posición). */
+/**
+ * Campos editables al crear un nodo (aparte de tipo y posición).
+ *
+ * `body` tiene un significado distinto según `type` (decidido por
+ * `createNode`, no por quien llama): en un `final` es directamente su
+ * `body`; en un `slide` siembra el cuerpo del ÚNICO bloque de texto con el
+ * que nace la diapositiva (ver `newSlideNode`) — nunca un `body` propio del
+ * nodo, que ya no existe para `slide` desde el milestone "Bloques de
+ * contenido".
+ */
 export interface CreateNodeExtra {
   title?: string
   body?: string
 }
 
 /**
- * Campos editables mediante `updateNode` (título/body y afines básicos).
+ * Campos editables mediante `updateNode` (título y afines básicos). La
+ * edición de los BLOQUES de contenido de una diapositiva (`SlideNode.content`
+ * — añadir/quitar/reordenar un bloque, o editar el texto de uno concreto) NO
+ * pasa por aquí: tiene sus propias funciones dedicadas en
+ * `src/domain/content.ts`, mismo criterio que las respuestas de decisión
+ * (`src/domain/responses.ts`) — un array estructural con identidad propia
+ * por elemento no encaja bien como "un campo más" de un patch que se
+ * reemplaza entero.
  *
- * Semántica de "patch" para `audioAssetId`/`continueLabel`/`internalNote`:
- * `undefined` no toca el campo, `null` lo borra (lo deja `undefined` en el
- * nodo — para `continueLabel` eso significa "vuelve al texto por defecto",
- * ver `DEFAULT_CONTINUE_LABEL`) y un string lo fija a ese valor.
+ * Semántica de "patch" para `continueLabel`/`internalNote`: `undefined` no
+ * toca el campo, `null` lo borra (lo deja `undefined` en el nodo — para
+ * `continueLabel` eso significa "vuelve al texto por defecto", ver
+ * `DEFAULT_CONTINUE_LABEL`) y un string lo fija a ese valor.
  *
- * `imageAssetIds`, si se indica, REEMPLAZA la lista completa (no es un patch
- * incremental): quien llama es responsable de construir el array final
- * (añadir/quitar/reordenar una imagen concreta se hace leyendo la lista
- * actual del nodo y llamando con la lista ya modificada).
+ * `body` es ahora EXCLUSIVO de un nodo `final` (su único cuerpo de texto,
+ * ver `FinalNodeSchema`): si el patch lo incluye y el nodo es `slide`,
+ * `updateNode` lanza — usa `updateTextBlockBody` de `src/domain/content.ts`
+ * para editar el texto de un bloque concreto de una diapositiva.
  *
- * `imageAssetIds`/`audioAssetId`/`continueLabel`/`contentOrder`/`condition`/
- * `elseTargetNodeId` solo aplican a nodos `slide`: un `final` con alguno de
- * estos campos presente en el patch (aunque sea `null`) hace que
- * `updateNode` lance, ver más abajo. `internalNote` es válido en cualquier
- * tipo de nodo (incluidos los `final`), así que no participa de esa guarda.
+ * `continueLabel`/`condition`/`elseTargetNodeId` solo aplican a nodos
+ * `slide`: un `final` con alguno de estos campos presente en el patch
+ * (aunque sea `null`) hace que `updateNode` lance, ver más abajo.
+ * `internalNote` es válido en cualquier tipo de nodo (incluidos los
+ * `final`), así que no participa de esa guarda.
  *
  * `condition`/`elseTargetNodeId` (enrutado condicional de una diapositiva
  * "de continuar", ver `SlideNodeSchema` en `src/domain/schemas.ts`): mismo
@@ -52,27 +66,30 @@ export interface CreateNodeExtra {
 export interface UpdateNodePatch {
   title?: string
   body?: string
-  imageAssetIds?: string[]
-  audioAssetId?: string | null
   continueLabel?: string | null
-  contentOrder?: ContentOrder
   internalNote?: string | null
   condition?: VariableCondition | null
   elseTargetNodeId?: string | null
 }
 
+/**
+ * Construye una diapositiva nueva con un único bloque de texto (cuyo cuerpo
+ * es `body`, normalmente vacío) y sin ningún otro bloque — ni imagen ni
+ * audio. Es la única función que crea el bloque inicial de una diapositiva
+ * nueva, usada tanto por `createProject` como por `createNode`, para que
+ * ambos caminos nazcan con exactamente el mismo `content` de partida.
+ */
 function newSlideNode(
   common: { id: string; number: number; position: NodePosition; title: string; body: string },
 ): SlideNode {
+  const { body, ...rest } = common
   return {
-    ...common,
+    ...rest,
     type: 'slide',
     targetNodeId: undefined,
     continueLabel: undefined,
     responses: [],
-    imageAssetIds: [],
-    audioAssetId: undefined,
-    contentOrder: DEFAULT_CONTENT_ORDER,
+    content: [{ id: createId(), type: 'text', body }],
   }
 }
 
@@ -142,16 +159,16 @@ export function createNode(
   const number = nextNodeNumber(project.graph.nodes.map((node) => node.number))
   const title = extra.title ?? ''
   const body = extra.body ?? ''
-  const common = { id: createId(), number, position, title, body }
+  const common = { id: createId(), number, position, title }
 
   let newNode: Node
   switch (type) {
     case 'slide': {
-      newNode = newSlideNode(common)
+      newNode = newSlideNode({ ...common, body })
       break
     }
     case 'final': {
-      const node: FinalNode = { ...common, type: 'final' }
+      const node: FinalNode = { ...common, type: 'final', body }
       newNode = node
       break
     }
@@ -260,17 +277,22 @@ export function moveNodes(project: ProjectDocument, moves: NodeMove[]): ProjectD
 }
 
 /**
- * Actualiza campos editables básicos de un nodo (título/body/adjuntos de
- * media/texto del botón de continuar). No permite cambiar `type`, `id`,
- * `number` ni campos estructurales (responses, targetNodeId) — para eso
- * existen funciones dedicadas.
+ * Actualiza campos editables básicos de un nodo (título/texto de botón de
+ * continuar/nota interna/enrutado condicional, y el `body` — solo para un
+ * `final`). No permite cambiar `type`, `id`, `number` ni campos
+ * estructurales (responses, targetNodeId, bloques de contenido) — para eso
+ * existen funciones dedicadas (`src/domain/responses.ts`,
+ * `src/domain/content.ts`, `connect`/`disconnect` en `src/domain/graph.ts`).
  *
- * `imageAssetIds`/`audioAssetId`/`continueLabel`/`contentOrder` solo son
- * válidos en nodos `slide`: si el patch los incluye (aunque sea con valor
- * `null` para los que admiten borrado) y el nodo es `final`, lanza `Error`
- * — un Final no admite media adjunta, botón de continuar ni orden de
- * contenido. `internalNote` es válido en cualquier tipo de nodo y no
- * participa de esta guarda.
+ * `body` solo es válido en un `final`: si el patch lo incluye y el nodo es
+ * `slide`, lanza `Error` — una diapositiva ya no tiene un `body` único, ver
+ * `updateTextBlockBody` en `src/domain/content.ts`.
+ *
+ * `continueLabel`/`condition`/`elseTargetNodeId` solo son válidos en nodos
+ * `slide`: si el patch los incluye (aunque sea con valor `null` para los que
+ * admiten borrado) y el nodo es `final`, lanza `Error` — un Final no admite
+ * botón de continuar ni enrutado condicional. `internalNote` es válido en
+ * cualquier tipo de nodo y no participa de esta guarda.
  */
 export function updateNode(
   project: ProjectDocument,
@@ -284,15 +306,17 @@ export function updateNode(
 
   const node = project.graph.nodes[index]
   const setsSlideOnlyField =
-    patch.imageAssetIds !== undefined ||
-    patch.audioAssetId !== undefined ||
     patch.continueLabel !== undefined ||
-    patch.contentOrder !== undefined ||
     patch.condition !== undefined ||
     patch.elseTargetNodeId !== undefined
   if (setsSlideOnlyField && node && node.type !== 'slide') {
     throw new Error(
-      `El nodo "${nodeId}" es de tipo "${node.type}" y no admite imagen/audio adjuntos, texto de continuar, orden de contenido ni enrutado condicional.`,
+      `El nodo "${nodeId}" es de tipo "${node.type}" y no admite texto de continuar ni enrutado condicional.`,
+    )
+  }
+  if (patch.body !== undefined && node && node.type !== 'final') {
+    throw new Error(
+      `El nodo "${nodeId}" es de tipo "${node.type}" y no tiene un único "body": usa las funciones de src/domain/content.ts para editar sus bloques de contenido.`,
     )
   }
 
@@ -300,22 +324,15 @@ export function updateNode(
     const draftNode = draft.graph.nodes[index]
     if (!draftNode) return
     if (patch.title !== undefined) draftNode.title = patch.title
-    if (patch.body !== undefined) draftNode.body = patch.body
     if (patch.internalNote !== undefined) {
       draftNode.internalNote = patch.internalNote === null ? undefined : patch.internalNote
     }
+    if (draftNode.type === 'final') {
+      if (patch.body !== undefined) draftNode.body = patch.body
+    }
     if (draftNode.type === 'slide') {
-      if (patch.imageAssetIds !== undefined) {
-        draftNode.imageAssetIds = patch.imageAssetIds
-      }
-      if (patch.audioAssetId !== undefined) {
-        draftNode.audioAssetId = patch.audioAssetId === null ? undefined : patch.audioAssetId
-      }
       if (patch.continueLabel !== undefined) {
         draftNode.continueLabel = patch.continueLabel === null ? undefined : patch.continueLabel
-      }
-      if (patch.contentOrder !== undefined) {
-        draftNode.contentOrder = patch.contentOrder
       }
       if (patch.condition !== undefined) {
         draftNode.condition = patch.condition === null ? undefined : patch.condition
@@ -393,11 +410,18 @@ export interface DuplicateNodeResult {
 
 /**
  * Duplica un nodo existente: crea una copia con id y `number` propios, en
- * `position`, con el mismo contenido que el original (título, body, nota
- * interna y — para una diapositiva — sus adjuntos de imagen/audio, orden de
- * contenido, texto de "Continuar" y respuestas, cada una con su propio texto/
- * puntos/efectos/condición de visibilidad). Lanza `Error` si el nodo no
- * existe, mismo criterio que el resto de esta familia de funciones.
+ * `position`, con el mismo contenido que el original (título, nota interna,
+ * y — según el tipo — el `body` de un `final`, o para una diapositiva sus
+ * bloques de contenido, texto de "Continuar" y respuestas, cada una con su
+ * propio texto/puntos/efectos/condición de visibilidad). Lanza `Error` si el
+ * nodo no existe, mismo criterio que el resto de esta familia de funciones.
+ *
+ * Los bloques de `content` de una diapositiva se clonan con un `id` NUEVO
+ * cada uno (nunca reutilizan el id del bloque original): son entidades con
+ * identidad propia dentro del documento, mismo criterio que las respuestas
+ * clonadas más abajo — dos bloques con el mismo id en diapositivas distintas
+ * del proyecto no tendría ningún significado y podría confundir a quien
+ * edite uno esperando que el otro no cambie.
  *
  * DECISIÓN DE DISEÑO DELIBERADA — la copia NO conserva ninguna conexión
  * SALIENTE del original:
@@ -445,7 +469,6 @@ export function duplicateNode(
     number,
     position,
     title: source.title,
-    body: source.body,
     internalNote: source.internalNote,
   }
 
@@ -466,15 +489,13 @@ export function duplicateNode(
           id: createId(),
           targetNodeId: undefined,
         })),
-        imageAssetIds: [...source.imageAssetIds],
-        audioAssetId: source.audioAssetId,
-        contentOrder: source.contentOrder,
+        content: source.content.map((block) => ({ ...block, id: createId() })),
       }
       duplicate = node
       break
     }
     case 'final': {
-      const node: FinalNode = { ...common, type: 'final' }
+      const node: FinalNode = { ...common, type: 'final', body: source.body }
       duplicate = node
       break
     }

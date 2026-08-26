@@ -12,6 +12,15 @@ function bodyText(body: string): string {
     .join('\n\n')
 }
 
+/** El importador de `.twee` construye siempre un único bloque de texto por
+ *  diapositiva (los `.twee` no traen imágenes/audio, ver `tweeConverter.ts`)
+ *  — este atajo lo extrae para no repetir `content.find(...)` en cada test. */
+function slideBody(node: SlideNode): string {
+  const block = node.content.find((candidate) => candidate.type === 'text')
+  if (!block) throw new Error('slideBody: la diapositiva no tiene ningún bloque de texto')
+  return block.body
+}
+
 describe('convertTweeToProject', () => {
   it('lanza un error claro si el archivo no tiene ningún pasaje reconocible (vacío)', () => {
     expect(() => convertTweeToProject('', 'Historia')).toThrow()
@@ -41,7 +50,7 @@ describe('convertTweeToProject', () => {
     expect(inicio.responses).toHaveLength(0)
     expect(inicio.targetNodeId).toBe(siguiente?.id)
     expect(inicio.continueLabel).toBeUndefined()
-    expect(bodyText(inicio.body)).toBe('Texto.')
+    expect(bodyText(slideBody(inicio))).toBe('Texto.')
   })
 
   it('un enlace con texto personalizado distinto del destino fija continueLabel', () => {
@@ -170,7 +179,8 @@ describe('convertTweeToProject', () => {
     const { document, warnings } = convertTweeToProject(source, 'Historia')
     const nodo = document.graph.nodes.find((n) => n.title === 'ConVariable')
     expect(warnings.some((w) => w.includes('ConVariable'))).toBe(true)
-    expect(bodyText(nodo?.body ?? '')).toContain('(set: $vida to 10)')
+    if (nodo?.type !== 'slide') throw new Error('esperaba una diapositiva')
+    expect(bodyText(slideBody(nodo))).toContain('(set: $vida to 10)')
   })
 
   it('detecta una macro SugarCube en otro pasaje y avisa por separado', () => {
@@ -202,7 +212,8 @@ describe('convertTweeToProject', () => {
         ':: Siguiente\nFin.'
       const { document } = convertTweeToProject(source, 'Historia')
       const inicio = document.graph.nodes.find((n) => n.title === 'Inicio') as SlideNode
-      const doc = parseRichBody(inicio.body)
+      const body = slideBody(inicio)
+      const doc = parseRichBody(body)
       const raw = JSON.stringify(doc)
 
       // Ninguna etiqueta ni atributo crudo debe sobrevivir como texto.
@@ -215,8 +226,8 @@ describe('convertTweeToProject', () => {
       expect(raw).not.toContain('cpi-progress')
 
       // El texto real se conserva íntegro y legible.
-      expect(bodyText(inicio.body)).toContain('Nivel de digitalización del proceso · 0 %')
-      expect(bodyText(inicio.body)).toContain('Lunes, 10:20. Recepción de un ticket urgente.')
+      expect(bodyText(body)).toContain('Nivel de digitalización del proceso · 0 %')
+      expect(bodyText(body)).toContain('Lunes, 10:20. Recepción de un ticket urgente.')
     })
 
     it('convierte <strong> en negrita real, no en texto con etiquetas', () => {
@@ -256,7 +267,8 @@ describe('convertTweeToProject', () => {
       const { document, warnings } = convertTweeToProject(source, 'Historia')
       const nodo = document.graph.nodes.find((n) => n.title === 'ConMacro')
       expect(warnings.some((w) => w.includes('ConMacro'))).toBe(true)
-      expect(bodyText(nodo?.body ?? '')).toContain('<<set $vida = 10>>')
+      if (nodo?.type !== 'slide') throw new Error('esperaba una diapositiva')
+      expect(bodyText(slideBody(nodo))).toContain('<<set $vida = 10>>')
     })
   })
 })

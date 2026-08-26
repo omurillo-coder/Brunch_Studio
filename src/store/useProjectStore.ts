@@ -1,7 +1,10 @@
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import {
+  addAudioBlock as domainAddAudioBlock,
+  addImageBlock as domainAddImageBlock,
   addResponse as domainAddResponse,
+  addTextBlock as domainAddTextBlock,
   addVariable as domainAddVariable,
   connect as domainConnect,
   createConnectedNode as domainCreateConnectedNode,
@@ -11,11 +14,14 @@ import {
   deleteVariable as domainDeleteVariable,
   disconnect as domainDisconnect,
   duplicateNode as domainDuplicateNode,
+  moveContentBlock as domainMoveContentBlock,
   moveNode as domainMoveNode,
   moveNodes as domainMoveNodes,
+  removeContentBlock as domainRemoveContentBlock,
   removeResponse as domainRemoveResponse,
   updateNode as domainUpdateNode,
   updateResponse as domainUpdateResponse,
+  updateTextBlockBody as domainUpdateTextBlockBody,
   updateVariable as domainUpdateVariable,
 } from '../domain'
 import type {
@@ -194,6 +200,17 @@ export interface ProjectStoreActions {
   updateResponse: (slideNodeId: string, responseId: string, patch: UpdateResponsePatch) => void
   connect: (sourceNodeId: string, targetNodeId: string, responseId?: string) => void
   disconnect: (sourceNodeId: string, responseId?: string) => void
+
+  // -- Bloques de contenido de una diapositiva (milestone "Bloques de
+  // -- contenido", fase 2 - editor): envuelven las funciones puras de
+  // -- `src/domain/content.ts`, mismo patrón de historial (una entrada por
+  // -- acción) que el resto de acciones de dominio de arriba --
+  addTextBlock: (slideNodeId: string, index?: number) => void
+  addImageBlock: (slideNodeId: string, assetId: string, index?: number) => void
+  addAudioBlock: (slideNodeId: string, assetId: string, index?: number) => void
+  updateTextBlockBody: (slideNodeId: string, blockId: string, body: string) => void
+  removeContentBlock: (slideNodeId: string, blockId: string) => void
+  moveContentBlock: (slideNodeId: string, blockId: string, toIndex: number) => void
 
   // -- Duplicar una diapositiva/final (Tarea 1 de "Duplicar diapositivas"):
   // -- una única entrada de historial, misma familia que el resto de
@@ -384,6 +401,60 @@ export const useProjectStore = create<ProjectStoreState>()(
 
     disconnect: (sourceNodeId, responseId) => {
       const next = domainDisconnect(get().project, sourceNodeId, responseId)
+      set((state) => {
+        state.history.past.push(state.project as ProjectDocument)
+        state.history.future = []
+        state.project = next
+      })
+    },
+
+    addTextBlock: (slideNodeId, index) => {
+      const next = domainAddTextBlock(get().project, slideNodeId, index)
+      set((state) => {
+        state.history.past.push(state.project as ProjectDocument)
+        state.history.future = []
+        state.project = next
+      })
+    },
+
+    addImageBlock: (slideNodeId, assetId, index) => {
+      const next = domainAddImageBlock(get().project, slideNodeId, assetId, index)
+      set((state) => {
+        state.history.past.push(state.project as ProjectDocument)
+        state.history.future = []
+        state.project = next
+      })
+    },
+
+    addAudioBlock: (slideNodeId, assetId, index) => {
+      const next = domainAddAudioBlock(get().project, slideNodeId, assetId, index)
+      set((state) => {
+        state.history.past.push(state.project as ProjectDocument)
+        state.history.future = []
+        state.project = next
+      })
+    },
+
+    updateTextBlockBody: (slideNodeId, blockId, body) => {
+      const next = domainUpdateTextBlockBody(get().project, slideNodeId, blockId, body)
+      set((state) => {
+        state.history.past.push(state.project as ProjectDocument)
+        state.history.future = []
+        state.project = next
+      })
+    },
+
+    removeContentBlock: (slideNodeId, blockId) => {
+      const next = domainRemoveContentBlock(get().project, slideNodeId, blockId)
+      set((state) => {
+        state.history.past.push(state.project as ProjectDocument)
+        state.history.future = []
+        state.project = next
+      })
+    },
+
+    moveContentBlock: (slideNodeId, blockId, toIndex) => {
+      const next = domainMoveContentBlock(get().project, slideNodeId, blockId, toIndex)
       set((state) => {
         state.history.past.push(state.project as ProjectDocument)
         state.history.future = []

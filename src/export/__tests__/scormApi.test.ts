@@ -33,13 +33,10 @@ function sampleProject(): ProjectDocument {
     type: 'slide',
     position: { x: 0, y: 0 },
     title: 'Inicio',
-    body: richBody('Bienvenido.'),
     targetNodeId: FINAL_ID,
     continueLabel: 'Continuar',
     responses: [],
-    imageAssetIds: [],
-    audioAssetId: undefined,
-    contentOrder: 'text-first',
+    content: [{ id: 'block-slide-1', type: 'text', body: richBody('Bienvenido.') }],
   }
 
   const final: FinalNode = {
@@ -81,7 +78,6 @@ function sampleProjectWithPoints(): ProjectDocument {
     type: 'slide',
     position: { x: 150, y: 0 },
     title: '¿Qué haces?',
-    body: richBody('Elige.'),
     targetNodeId: undefined,
     continueLabel: undefined,
     responses: [
@@ -93,9 +89,7 @@ function sampleProjectWithPoints(): ProjectDocument {
         targetNodeId: FINAL_ID,
       },
     ],
-    imageAssetIds: [],
-    audioAssetId: undefined,
-    contentOrder: 'text-first',
+    content: [{ id: 'block-decision-1', type: 'text', body: richBody('Elige.') }],
   }
 
   return {

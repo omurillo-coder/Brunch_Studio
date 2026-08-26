@@ -84,7 +84,14 @@ describe('plantilla "En blanco"', () => {
     expect(node?.type).toBe(referenceNode?.type)
     expect(node?.number).toBe(referenceNode?.number)
     expect(node?.title).toBe(referenceNode?.title)
-    expect(node?.body).toBe(referenceNode?.body)
+    // Ambos nacen con el mismo único bloque de texto vacío (mismo criterio
+    // que `body` antes de "Bloques de contenido"): se compara por tipo/body,
+    // ignorando el `id` de bloque, que es aleatorio en cada llamada.
+    expect(node?.type === 'slide' ? node.content.map((b) => (b.type === 'text' ? b.body : b)) : undefined).toEqual(
+      referenceNode?.type === 'slide'
+        ? referenceNode.content.map((b) => (b.type === 'text' ? b.body : b))
+        : undefined,
+    )
     expect(node?.position).toEqual(referenceNode?.position)
     expect(fromTemplate.graph.startNodeId).toBe(node?.id)
   })

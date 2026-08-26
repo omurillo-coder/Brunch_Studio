@@ -100,13 +100,16 @@ describe('Canvas — pin de nota interna (tarea 6) y fragmento de contenido (tar
     expect(screen.queryByText(/./, { selector: '[class*="bodyPreview"]' })).not.toBeInTheDocument()
   })
 
-  it('con contenido, la tarjeta muestra un fragmento de texto plano del body', async () => {
+  it('con contenido, la tarjeta muestra un fragmento de texto plano del bloque de texto', async () => {
     const startId = useProjectStore.getState().project.graph.startNodeId
+    const startNode = useProjectStore.getState().project.graph.nodes.find((n) => n.id === startId)
+    const blockId = startNode?.type === 'slide' ? startNode.content[0]?.id : undefined
+    if (!blockId) throw new Error('setup inválido')
     const body = serializeRichBody({
       type: 'doc',
       content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Bienvenido al escenario' }] }],
     })
-    useProjectStore.getState().updateNode(startId, { body })
+    useProjectStore.getState().updateTextBlockBody(startId, blockId, body)
 
     render(<Canvas />)
 

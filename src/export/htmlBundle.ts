@@ -137,16 +137,29 @@ function stripEditorOnlyFields(project: ProjectDocument): ProjectDocument {
 }
 
 /**
- * Convierte el `body` (documento Tiptap serializado) de cada nodo con
- * contenido a HTML estático. Se omiten los nodos con `body` vacío o solo
- * espacios: el runtime exportado ya pinta su texto de respaldo en ese caso,
- * igual que el Player.
+ * Convierte a HTML estático cada cuerpo de texto Tiptap serializado del
+ * documento: el `body` de un `final` (clave = `node.id`, igual que antes de
+ * "Bloques de contenido") y el `body` de cada bloque `text` de
+ * `SlideNode.content` (clave = `block.id` — una diapositiva puede tener
+ * VARIOS bloques de texto, así que ya no basta con la clave por nodo). Se
+ * omiten los cuerpos vacíos o solo espacios: el runtime exportado ya pinta
+ * su texto de respaldo en ese caso (solo para `continue`/`final`; un bloque
+ * de texto vacío en medio de `content` simplemente no pinta nada, igual que
+ * `PlayerScreen.tsx`).
  */
 function renderNodeBodies(project: ProjectDocument): Record<string, string> {
   const bodyHtml: Record<string, string> = {}
   for (const node of project.graph.nodes) {
-    if (!node.body.trim()) continue
-    bodyHtml[node.id] = generateHTML(parseRichBody(node.body), RICH_TEXT_EXTENSIONS)
+    if (node.type === 'final') {
+      if (!node.body.trim()) continue
+      bodyHtml[node.id] = generateHTML(parseRichBody(node.body), RICH_TEXT_EXTENSIONS)
+      continue
+    }
+    for (const block of node.content) {
+      if (block.type !== 'text') continue
+      if (!block.body.trim()) continue
+      bodyHtml[block.id] = generateHTML(parseRichBody(block.body), RICH_TEXT_EXTENSIONS)
+    }
   }
   return bodyHtml
 }

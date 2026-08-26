@@ -197,7 +197,11 @@ describe('LeftPanel — buscador del proyecto (fase 8)', () => {
       ],
     })
     act(() => {
-      useProjectStore.getState().updateNode(start, { title: 'Diapositiva con cuerpo', body: richBody })
+      useProjectStore.getState().updateNode(start, { title: 'Diapositiva con cuerpo' })
+      const startNode = useProjectStore.getState().project.graph.nodes.find((n) => n.id === start)
+      const firstBlockId = startNode?.type === 'slide' ? startNode.content[0]?.id : undefined
+      if (!firstBlockId) throw new Error('setup inválido')
+      useProjectStore.getState().updateTextBlockBody(start, firstBlockId, richBody)
       useProjectStore.getState().createNode('slide', { x: 0, y: 0 }, { title: 'Sin relación' })
     })
 

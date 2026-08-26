@@ -322,13 +322,14 @@ describe('Topbar — Exportar SCORM', () => {
 
   it('un asset que falla no rompe la exportación (mensaje honesto, pero éxito)', async () => {
     const scormPackageWriter = new MemoryScormPackageWriter()
-    // El proyecto de partida referencia una imagen (`imageAssetIds`) que el
+    // El proyecto de partida referencia una imagen (un bloque de imagen de
+    // `SlideNode.content`, milestone "Bloques de contenido") que el
     // repositorio de assets NO tiene: `resolveExportAssets` lo cuenta como
     // fallido (ver `exportAssets.test.ts`) en vez de abortar toda la
     // exportación.
     act(() => {
       const startNodeId = useProjectStore.getState().project.graph.startNodeId
-      useProjectStore.getState().updateNode(startNodeId, { imageAssetIds: ['asset-inexistente'] })
+      useProjectStore.getState().addImageBlock(startNodeId, 'asset-inexistente')
     })
     renderTopbar({
       pickExportScormPath: async () => '/tmp/experiencia.zip',

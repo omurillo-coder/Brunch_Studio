@@ -123,11 +123,9 @@ describe('resolveSlideTarget', () => {
     number: 1,
     position: { x: 0, y: 0 },
     title: '',
-    body: '',
     type: 'slide',
     responses: [],
-    imageAssetIds: [],
-    contentOrder: 'text-first',
+    content: [],
     targetNodeId: 'target-si',
     elseTargetNodeId: 'target-no',
   }

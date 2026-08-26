@@ -197,8 +197,8 @@ describe('useAutosave — debounce y guardado', () => {
   })
 })
 
-describe('useAutosave — recolección de basura de imágenes (tarea 5: array imageAssetIds)', () => {
-  it('una imagen quitada del array se recolecta; la que sigue en el array sobrevive', async () => {
+describe('useAutosave — recolección de basura de imágenes (milestone "Bloques de contenido": bloques de imagen en SlideNode.content)', () => {
+  it('una imagen quitada de content se recolecta; la que sigue en content sobrevive', async () => {
     const repository = createStubRepository()
     const assetRepository = new MemoryAssetRepository()
     assetRepository.registerSourceFile('/tmp/a.png', new Uint8Array([1]), 'image/png')
@@ -214,7 +214,8 @@ describe('useAutosave — recolección de basura de imágenes (tarea 5: array im
 
     const startId = useProjectStore.getState().project.graph.startNodeId
     act(() => {
-      useProjectStore.getState().updateNode(startId, { imageAssetIds: [keepId, removedId] })
+      useProjectStore.getState().addImageBlock(startId, keepId)
+      useProjectStore.getState().addImageBlock(startId, removedId)
     })
     await act(async () => {
       await vi.advanceTimersByTimeAsync(AUTOSAVE_DEBOUNCE_MS)
@@ -224,15 +225,22 @@ describe('useAutosave — recolección de basura de imágenes (tarea 5: array im
     await expect(assetRepository.getAsset('/tmp/p.brunch', keepId)).resolves.toBeDefined()
     await expect(assetRepository.getAsset('/tmp/p.brunch', removedId)).resolves.toBeDefined()
 
-    // Se quita `removedId` del array (queda solo `keepId`) y se guarda de nuevo.
+    // Se quita el bloque que referencia `removedId` (queda solo el de
+    // `keepId`) y se guarda de nuevo.
     act(() => {
-      useProjectStore.getState().updateNode(startId, { imageAssetIds: [keepId] })
+      const node = useProjectStore.getState().project.graph.nodes.find((n) => n.id === startId)
+      const blockId =
+        node?.type === 'slide'
+          ? node.content.find((block) => block.type === 'image' && block.assetId === removedId)?.id
+          : undefined
+      if (!blockId) throw new Error('setup inválido')
+      useProjectStore.getState().removeContentBlock(startId, blockId)
     })
     await act(async () => {
       await vi.advanceTimersByTimeAsync(AUTOSAVE_DEBOUNCE_MS)
     })
 
-    // La que sigue en el array sobrevive; la quitada se recolecta.
+    // La que sigue en `content` sobrevive; la quitada se recolecta.
     await expect(assetRepository.getAsset('/tmp/p.brunch', keepId)).resolves.toBeDefined()
     await expect(assetRepository.getAsset('/tmp/p.brunch', removedId)).rejects.toThrow()
   })
@@ -329,7 +337,14 @@ describe('useAutosave — fidelidad de reapertura (criterio de aceptación del m
 
     expect(reopenedContent?.type).toBe('slide')
     expect(reopenedContent?.title).toBe('Diapositiva 1')
-    expect(reopenedContent?.body).toBe('Cuerpo de la diapositiva')
+    // `createNode('slide', ..., { body: '...' })` siembra el cuerpo del
+    // ÚNICO bloque de texto inicial de la diapositiva (ver `CreateNodeExtra`
+    // en `src/domain/project.ts`) — una diapositiva ya no tiene un `body`
+    // propio.
+    expect(reopenedContent?.type === 'slide' ? reopenedContent.content[0] : undefined).toMatchObject({
+      type: 'text',
+      body: 'Cuerpo de la diapositiva',
+    })
     expect(reopenedContent?.position).toEqual({ x: 111, y: 222 })
     expect(reopenedContent).toMatchObject({ targetNodeId: decisionId })
 

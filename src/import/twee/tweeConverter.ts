@@ -1,6 +1,6 @@
 import { generateJSON } from '@tiptap/core'
 import type { JSONContent } from '@tiptap/core'
-import { createId, DEFAULT_CONTENT_ORDER, MAX_RESPONSES, RESPONSE_LETTERS } from '../../domain'
+import { createId, MAX_RESPONSES, RESPONSE_LETTERS } from '../../domain'
 import type { DecisionResponse, FinalNode, Node, ProjectDocument, SlideNode } from '../../domain'
 import { RICH_TEXT_EXTENSIONS, serializeRichBody } from '../../editor/richText/richTextContent'
 import { parseTweeSource } from './tweeParser'
@@ -333,10 +333,13 @@ export function convertTweeToProject(source: string, fallbackName: string): Conv
       x: (index % NODES_PER_ROW) * NODE_COLUMN_SPACING,
       y: Math.floor(index / NODES_PER_ROW) * NODE_ROW_SPACING,
     }
-    const common = { id, number: index + 1, position, title: passage.name, body }
+    const common = { id, number: index + 1, position, title: passage.name }
 
     if (links.length === 0) {
-      const final: FinalNode = { ...common, type: 'final' }
+      // Un pasaje sin enlaces se convierte en un nodo `final`, que sigue
+      // teniendo un único `body` (a diferencia de `slide`, ver
+      // `src/domain/schemas.ts`) — el texto del pasaje va directo ahí.
+      const final: FinalNode = { ...common, type: 'final', body }
       return final
     }
 
@@ -345,15 +348,17 @@ export function convertTweeToProject(source: string, fallbackName: string): Conv
       if (!link) {
         throw new Error('Fallo interno al importar: enlace ausente pese a longitud 1.')
       }
+      // `.twee` no trae imágenes ni audio (no existen en el formato Twee3),
+      // así que el `content` de la diapositiva importada es siempre un
+      // único bloque de texto con el cuerpo del pasaje — nunca bloques de
+      // imagen/audio.
       const slide: SlideNode = {
         ...common,
         type: 'slide',
         targetNodeId: resolveTarget(link.target, passage.name),
         continueLabel: resolveContinueLabel(link.display, link.target),
         responses: [],
-        imageAssetIds: [],
-        audioAssetId: undefined,
-        contentOrder: DEFAULT_CONTENT_ORDER,
+        content: [{ id: createId(), type: 'text', body }],
       }
       return slide
     }
@@ -391,9 +396,7 @@ export function convertTweeToProject(source: string, fallbackName: string): Conv
       targetNodeId: undefined,
       continueLabel: undefined,
       responses,
-      imageAssetIds: [],
-      audioAssetId: undefined,
-      contentOrder: DEFAULT_CONTENT_ORDER,
+      content: [{ id: createId(), type: 'text', body }],
     }
     return slide
   })

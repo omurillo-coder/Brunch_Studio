@@ -214,14 +214,6 @@
   color: var(--bs-color-text);
 }
 
-.nodeMediaSection {
-  display: flex;
-  flex-direction: column;
-  gap: var(--bs-space-3);
-  padding-top: var(--bs-space-3);
-  border-top: 1px solid var(--bs-color-border);
-}
-
 .responseMediaRow {
   display: flex;
   flex-direction: column;
@@ -291,52 +283,51 @@
   color: var(--bs-color-danger);
 }
 
-/* Lista de imágenes de una diapositiva (tarea 5: varias imágenes
-   ordenables). */
-.nodeImagesSection {
+/* Bloques de contenido de una diapositiva (milestone "Bloques de
+   contenido", fase 2 — editor): lista ordenable de texto/imagen/audio.
+   Sustituye a la antigua lista de imágenes + orden de contenido + audio
+   único (ver historial de este fichero). */
+.contentBlocksSection {
   display: flex;
   flex-direction: column;
   gap: var(--bs-space-2);
 }
 
-.nodeImagesHeader {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--bs-space-2);
-}
-
-.imageList {
-  list-style: none;
-  margin: 0;
-  padding: 0;
+.contentBlocksList {
   display: flex;
   flex-direction: column;
-  gap: var(--bs-space-2);
+  gap: var(--bs-space-3);
 }
 
-.imageListItem {
+.contentBlockRow {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: var(--bs-space-2);
   padding: var(--bs-space-2);
   border: 1px solid var(--bs-color-border);
   border-radius: var(--bs-radius-sm);
 }
 
-.imageListPosition {
-  flex: 0 0 auto;
+.contentBlockHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--bs-space-2);
+}
+
+.contentBlockLabel {
   font-size: var(--bs-font-size-xs);
   color: var(--bs-color-text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
-.imageListControls {
+.contentBlockControls {
   display: flex;
   gap: var(--bs-space-1);
-  margin-left: auto;
 }
 
-.imageMoveButton {
+.contentBlockMoveButton {
   padding: var(--bs-space-1) var(--bs-space-2);
   border: 1px solid var(--bs-color-border);
   border-radius: var(--bs-radius-sm);
@@ -347,13 +338,21 @@
   cursor: pointer;
 }
 
-.imageMoveButton:hover:not(:disabled) {
+.contentBlockMoveButton:hover:not(:disabled) {
   border-color: var(--bs-color-accent);
 }
 
-.imageMoveButton:disabled {
+.contentBlockMoveButton:disabled {
   cursor: default;
   opacity: 0.4;
+}
+
+/* Fila de botones "+ Texto"/"+ Imagen"/"+ Audio": mismo estilo que
+   `.addResponseButton`, reutilizado tal cual (ver `ContentBlocksSection` en
+   `Inspector.tsx`), agrupados en fila en vez de en columna. */
+.contentBlocksAddRow {
+  display: flex;
+  gap: var(--bs-space-2);
 }
 
 /* Navegación rápida entre diapositivas conectadas (tarea 7). */
@@ -498,8 +497,7 @@
 
 /* Condición/efectos de variables por respuesta (fase 2 "Variables/
    condiciones") y enrutado condicional de una diapositiva "de continuar".
-   Mismo criterio de bloque con separador superior que `.nodeMediaSection`/
-   `.continueSection`. */
+   Mismo criterio de bloque con separador superior que `.continueSection`. */
 .conditionSection,
 .effectsSection,
 .conditionalRoutingSection {

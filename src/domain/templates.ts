@@ -1,6 +1,7 @@
 import { createProject, createConnectedNode, updateNode } from './project'
 import { connect } from './graph'
 import { addResponse, updateResponse } from './responses'
+import { updateTextBlockBody } from './content'
 import type { ProjectDocument } from './schemas'
 
 /**
@@ -8,9 +9,19 @@ import type { ProjectDocument } from './schemas'
  *
  * Cada plantilla es una función pura `build(projectName)` que compone las
  * funciones de dominio ya existentes (`createProject`, `createConnectedNode`,
- * `updateNode`, `addResponse`, `updateResponse`, `connect`...) para producir
- * un `ProjectDocument` de partida distinto de "en blanco". No se duplica
- * ninguna regla de dominio aquí: esta capa solo encadena llamadas reales.
+ * `updateNode`, `addResponse`, `updateResponse`, `connect`, `updateTextBlockBody`...)
+ * para producir un `ProjectDocument` de partida distinto de "en blanco". No
+ * se duplica ninguna regla de dominio aquí: esta capa solo encadena llamadas
+ * reales.
+ *
+ * Nota sobre el texto de una diapositiva (milestone "Bloques de
+ * contenido"): `updateNode` ya no acepta `body` para un nodo `slide` (solo
+ * para `final`, que conserva un único `body`) — el texto de una diapositiva
+ * nueva vive en el único bloque de texto con el que nace (`createNode`/
+ * `createConnectedNode` siembran exactamente uno, ver
+ * `src/domain/project.ts`), así que estas plantillas usan
+ * `firstTextBlockId` + `updateTextBlockBody` para rellenarlo en vez de pasar
+ * `body` a `updateNode`.
  *
  * Añadir una plantilla nueva en el futuro no requiere tocar la UI (el
  * selector de `HomeScreen` recorre `PROJECT_TEMPLATES`): basta con escribir
@@ -46,6 +57,42 @@ function lastResponseId(project: ProjectDocument, slideNodeId: string): string {
 }
 
 /**
+ * Devuelve el id del primer bloque de texto de una diapositiva. Todas las
+ * diapositivas creadas por `createNode`/`createConnectedNode` nacen con
+ * exactamente un bloque de texto (ver `newSlideNode` en
+ * `src/domain/project.ts`), así que en el contexto controlado de estas
+ * plantillas (que nunca añaden/quitan bloques antes de llamar a esto) "el
+ * primero" es también "el único" — atajo de lectura análogo a
+ * `lastResponseId`, para poder llamar a `updateTextBlockBody` sin que
+ * `createNode` tenga que devolver el id del bloque que sembró.
+ */
+function firstTextBlockId(project: ProjectDocument, slideNodeId: string): string {
+  const node = project.graph.nodes.find((candidate) => candidate.id === slideNodeId)
+  if (!node || node.type !== 'slide') {
+    throw new Error(`firstTextBlockId: "${slideNodeId}" no es una diapositiva.`)
+  }
+  const block = node.content.find((candidate) => candidate.type === 'text')
+  if (!block) {
+    throw new Error(`firstTextBlockId: la diapositiva "${slideNodeId}" no tiene ningún bloque de texto.`)
+  }
+  return block.id
+}
+
+/** Fija el texto del primer bloque de texto de una diapositiva, además de
+ *  su título — atajo que combina `updateNode` (título) con
+ *  `updateTextBlockBody` (cuerpo del bloque), usado por todas las plantillas
+ *  para no repetir `firstTextBlockId` + las dos llamadas en cada punto. */
+function updateSlideTitleAndBody(
+  project: ProjectDocument,
+  slideNodeId: string,
+  title: string,
+  body: string,
+): ProjectDocument {
+  const withTitle = updateNode(project, slideNodeId, { title })
+  return updateTextBlockBody(withTitle, slideNodeId, firstTextBlockId(withTitle, slideNodeId), body)
+}
+
+/**
  * "En blanco": el comportamiento actual exacto de `createProject`, sin
  * ningún paso adicional. Debe ser indistinguible (salvo ids/fechas) de lo
  * que ya existía antes de las plantillas.
@@ -62,18 +109,22 @@ function buildSimpleDecisionTemplate(projectName: string): ProjectDocument {
   let project = createProject(projectName)
   const startId = project.graph.startNodeId
 
-  project = updateNode(project, startId, {
-    title: 'Introducción',
-    body: 'Bienvenido a este escenario de ejemplo. Pulsa continuar para llegar a la primera decisión.',
-  })
+  project = updateSlideTitleAndBody(
+    project,
+    startId,
+    'Introducción',
+    'Bienvenido a este escenario de ejemplo. Pulsa continuar para llegar a la primera decisión.',
+  )
 
   const decision = createConnectedNode(project, 'slide', { x: 320, y: 0 }, startId)
   project = decision.project
   const decisionId = decision.nodeId
-  project = updateNode(project, decisionId, {
-    title: '¿Qué opción elige el usuario?',
-    body: 'Elige una de las dos opciones disponibles para continuar.',
-  })
+  project = updateSlideTitleAndBody(
+    project,
+    decisionId,
+    '¿Qué opción elige el usuario?',
+    'Elige una de las dos opciones disponibles para continuar.',
+  )
 
   project = addResponse(project, decisionId)
   const responseAId = lastResponseId(project, decisionId)
@@ -109,18 +160,22 @@ function buildBranchWithReunionTemplate(projectName: string): ProjectDocument {
   let project = createProject(projectName)
   const startId = project.graph.startNodeId
 
-  project = updateNode(project, startId, {
-    title: 'Introducción',
-    body: 'Bienvenido a este escenario de ejemplo. Pulsa continuar para llegar a la primera decisión.',
-  })
+  project = updateSlideTitleAndBody(
+    project,
+    startId,
+    'Introducción',
+    'Bienvenido a este escenario de ejemplo. Pulsa continuar para llegar a la primera decisión.',
+  )
 
   const decision = createConnectedNode(project, 'slide', { x: 320, y: 0 }, startId)
   project = decision.project
   const decisionId = decision.nodeId
-  project = updateNode(project, decisionId, {
-    title: '¿Qué camino toma el usuario?',
-    body: 'Elige una de las dos opciones disponibles; ambas conducen al mismo punto del recorrido.',
-  })
+  project = updateSlideTitleAndBody(
+    project,
+    decisionId,
+    '¿Qué camino toma el usuario?',
+    'Elige una de las dos opciones disponibles; ambas conducen al mismo punto del recorrido.',
+  )
 
   project = addResponse(project, decisionId)
   const responseAId = lastResponseId(project, decisionId)
@@ -135,10 +190,12 @@ function buildBranchWithReunionTemplate(projectName: string): ProjectDocument {
   const meeting = createConnectedNode(project, 'slide', { x: 640, y: 0 }, decisionId, responseAId)
   project = meeting.project
   const meetingId = meeting.nodeId
-  project = updateNode(project, meetingId, {
-    title: 'Punto de encuentro',
-    body: 'Ambos caminos confluyen aquí antes de llegar al final del escenario.',
-  })
+  project = updateSlideTitleAndBody(
+    project,
+    meetingId,
+    'Punto de encuentro',
+    'Ambos caminos confluyen aquí antes de llegar al final del escenario.',
+  )
   project = connect(project, decisionId, meetingId, responseBId)
 
   const final = createConnectedNode(project, 'final', { x: 960, y: 0 }, meetingId)

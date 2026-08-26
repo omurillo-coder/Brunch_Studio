@@ -36,6 +36,31 @@ function slideNode(id: string): SlideNode {
   return node
 }
 
+/** Id del primer bloque de `content` de una diapositiva — normalmente el
+ *  bloque de texto inicial que `createNode`/`createProject` siembran (ver
+ *  `src/domain/project.ts`), salvo que el test ya lo haya modificado. */
+function firstBlockId(nodeId: string): string {
+  const id = slideNode(nodeId).content[0]?.id
+  if (!id) throw new Error('La diapositiva no tiene ningún bloque de contenido')
+  return id
+}
+
+/** Espera al `requestAnimationFrame` que `editor.chain().focus()` programa
+ *  internamente antes de mover el foco real al DOM (ver
+ *  `RichTextEditor.test.tsx` para el detalle). Compartida por los tests del
+ *  editor de texto enriquecido de un bloque, tanto con un único bloque de
+ *  texto como con varios a la vez. */
+function waitOneFrame() {
+  return new Promise<void>((resolve) => requestAnimationFrame(() => setTimeout(resolve, 0)))
+}
+
+async function blurByMovingFocusAway() {
+  const elsewhere = document.createElement('button')
+  document.body.appendChild(elsewhere)
+  elsewhere.focus()
+  await waitOneFrame()
+}
+
 /**
  * Crea una diapositiva nueva y le añade 2 respuestas (el equivalente al
  * antiguo nodo "Decisión", que nacía con A y B). Ya no existe un tipo de nodo
@@ -81,18 +106,23 @@ describe('Inspector', () => {
 
   it('con un nodo seleccionado muestra su título y contenido actuales', async () => {
     act(() => {
-      useProjectStore.getState().updateNode(startNodeId(), { title: 'Bienvenida', body: 'Hola' })
+      useProjectStore.getState().updateNode(startNodeId(), { title: 'Bienvenida' })
+      useProjectStore
+        .getState()
+        .updateTextBlockBody(startNodeId(), firstBlockId(startNodeId()), 'Hola')
       useProjectStore.getState().selectNode(startNodeId())
     })
 
     render(<Inspector filePath={TEST_FILE_PATH} />)
 
     expect(screen.getByLabelText('Referencia')).toHaveValue('Bienvenida')
-    // El campo "Contenido" es ahora el editor de texto enriquecido
-    // (`RichTextEditor`, fase 4 Milestone 2): un `<div contenteditable>`, no
-    // un `<textarea>` con `.value` — se comprueba el texto renderizado.
+    // El bloque de texto se edita con el mismo editor de texto enriquecido
+    // de siempre (`RichTextEditor`, fase 4 Milestone 2): un `<div
+    // contenteditable>`, no un `<textarea>` con `.value` — se comprueba el
+    // texto renderizado. Con un único bloque de texto (el caso sembrado por
+    // `createProject`), se etiqueta "Texto 1".
     await waitFor(() => {
-      expect(screen.getByLabelText('Contenido')).toHaveTextContent('Hola')
+      expect(screen.getByLabelText('Texto 1')).toHaveTextContent('Hola')
     })
   })
 
@@ -151,7 +181,7 @@ describe('Inspector', () => {
 
   it('cambiar de nodo seleccionado actualiza los campos mostrados', () => {
     act(() => {
-      useProjectStore.getState().updateNode(startNodeId(), { title: 'Inicio', body: 'Cuerpo inicio' })
+      useProjectStore.getState().updateNode(startNodeId(), { title: 'Inicio' })
       useProjectStore.getState().createNode('slide', { x: 0, y: 0 }, { title: 'Diapositiva 2' })
       useProjectStore.getState().selectNode(startNodeId())
     })
@@ -596,7 +626,7 @@ describe('Inspector — respuestas de una diapositiva', () => {
   })
 })
 
-describe('Inspector — lista de imágenes y audio a nivel de nodo (tarea 5: varias imágenes ordenables)', () => {
+describe('Inspector — editor de bloques de contenido de una diapositiva (milestone "Bloques de contenido", fase 2)', () => {
   function setupAssetRepository() {
     const assetRepository = new MemoryAssetRepository()
     assetRepository.registerSourceFile('/tmp/foto.png', new Uint8Array([1, 2, 3]), 'image/png')
@@ -605,22 +635,53 @@ describe('Inspector — lista de imágenes y audio a nivel de nodo (tarea 5: var
     return assetRepository
   }
 
-  it('añadir una imagen actualiza imageAssetIds y muestra la vista previa', async () => {
+  /** Diapositiva nueva SIN el bloque de texto inicial que siembra
+   *  `createNode` (se quita justo después de crearla): simplifica las
+   *  aserciones de posición de los tests centrados en imagen/audio, que así
+   *  parten de una lista de bloques vacía en vez de "bloque de texto en la
+   *  posición 1, imagen en la 2". El propio dominio permite `content: []`
+   *  (ver comentario de `removeContentBlock` en `src/domain/content.ts`). */
+  function createEmptySlide(): string {
     act(() => {
       useProjectStore.getState().createNode('slide', { x: 0, y: 0 })
-      useProjectStore.getState().selectNode(slideNodeId())
+    })
+    const id = slideNodeId()
+    act(() => {
+      useProjectStore.getState().removeContentBlock(id, firstBlockId(id))
+    })
+    return id
+  }
+
+  it('"+ Texto" añade un bloque de texto vacío al final de content', () => {
+    const id = createEmptySlide()
+    act(() => {
+      useProjectStore.getState().selectNode(id)
+    })
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    fireEvent.click(screen.getByRole('button', { name: '+ Texto' }))
+
+    expect(slideNode(id).content).toMatchObject([{ type: 'text', body: '' }])
+    expect(screen.getByLabelText('Texto 1')).toBeInTheDocument()
+  })
+
+  it('"+ Imagen" añade un bloque de imagen a content y muestra su vista previa', async () => {
+    const id = createEmptySlide()
+    act(() => {
+      useProjectStore.getState().selectNode(id)
     })
     const assetRepository = setupAssetRepository()
     const pickImportAssetPath = vi.fn().mockResolvedValue('/tmp/foto.png')
 
     renderInspectorWithServices({ assetRepository, pickImportAssetPath })
 
-    fireEvent.click(screen.getByRole('button', { name: '+ Añadir imagen' }))
+    fireEvent.click(screen.getByRole('button', { name: '+ Imagen' }))
 
     await waitFor(() => {
-      expect(slideNode(slideNodeId()).imageAssetIds).toHaveLength(1)
+      expect(slideNode(id).content).toHaveLength(1)
     })
     expect(pickImportAssetPath).toHaveBeenCalledWith('image')
+    expect(slideNode(id).content[0]).toMatchObject({ type: 'image' })
 
     const preview = (await screen.findByAltText(
       'Vista previa de la imagen adjunta 1',
@@ -628,102 +689,20 @@ describe('Inspector — lista de imágenes y audio a nivel de nodo (tarea 5: var
     expect(preview.getAttribute('src')).toContain('data:image/png;base64,')
   })
 
-  it('añadir una segunda imagen la agrega al final de la lista (orden de aparición)', async () => {
+  it('"+ Audio" añade un bloque de audio a content y muestra el reproductor', async () => {
+    const id = createEmptySlide()
     act(() => {
-      useProjectStore.getState().createNode('slide', { x: 0, y: 0 })
-      useProjectStore.getState().selectNode(slideNodeId())
-    })
-    const assetRepository = setupAssetRepository()
-    const pickImportAssetPath = vi.fn().mockResolvedValueOnce('/tmp/foto.png').mockResolvedValueOnce('/tmp/foto2.png')
-
-    renderInspectorWithServices({ assetRepository, pickImportAssetPath })
-
-    fireEvent.click(screen.getByRole('button', { name: '+ Añadir imagen' }))
-    await waitFor(() => expect(slideNode(slideNodeId()).imageAssetIds).toHaveLength(1))
-
-    fireEvent.click(screen.getByRole('button', { name: '+ Añadir imagen' }))
-    await waitFor(() => expect(slideNode(slideNodeId()).imageAssetIds).toHaveLength(2))
-
-    expect(await screen.findByAltText('Vista previa de la imagen adjunta 1')).toBeInTheDocument()
-    expect(await screen.findByAltText('Vista previa de la imagen adjunta 2')).toBeInTheDocument()
-  })
-
-  it('quitar una imagen la elimina de imageAssetIds; el botón de añadir sigue disponible', async () => {
-    act(() => {
-      useProjectStore.getState().createNode('slide', { x: 0, y: 0 })
-      useProjectStore.getState().selectNode(slideNodeId())
-    })
-    const assetRepository = setupAssetRepository()
-    const pickImportAssetPath = vi.fn().mockResolvedValue('/tmp/foto.png')
-
-    renderInspectorWithServices({ assetRepository, pickImportAssetPath })
-
-    fireEvent.click(screen.getByRole('button', { name: '+ Añadir imagen' }))
-    await waitFor(() => expect(slideNode(slideNodeId()).imageAssetIds).toHaveLength(1))
-
-    fireEvent.click(await screen.findByRole('button', { name: 'Quitar imagen 1' }))
-
-    expect(slideNode(slideNodeId()).imageAssetIds).toEqual([])
-    expect(screen.getByRole('button', { name: '+ Añadir imagen' })).toBeInTheDocument()
-  })
-
-  it('los botones ↑/↓ reordenan las imágenes; en los extremos quedan deshabilitados', async () => {
-    act(() => {
-      useProjectStore.getState().createNode('slide', { x: 0, y: 0 })
-      useProjectStore.getState().selectNode(slideNodeId())
-    })
-    const assetRepository = setupAssetRepository()
-    const pickImportAssetPath = vi.fn().mockResolvedValueOnce('/tmp/foto.png').mockResolvedValueOnce('/tmp/foto2.png')
-
-    renderInspectorWithServices({ assetRepository, pickImportAssetPath })
-
-    fireEvent.click(screen.getByRole('button', { name: '+ Añadir imagen' }))
-    await waitFor(() => expect(slideNode(slideNodeId()).imageAssetIds).toHaveLength(1))
-    fireEvent.click(screen.getByRole('button', { name: '+ Añadir imagen' }))
-    await waitFor(() => expect(slideNode(slideNodeId()).imageAssetIds).toHaveLength(2))
-
-    const [firstId, secondId] = slideNode(slideNodeId()).imageAssetIds
-
-    // La primera imagen no se puede subir más (ya está arriba); la segunda
-    // no se puede bajar más (ya está abajo).
-    expect(screen.getByRole('button', { name: 'Subir imagen 1' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Bajar imagen 2' })).toBeDisabled()
-
-    fireEvent.click(screen.getByRole('button', { name: 'Bajar imagen 1' }))
-    expect(slideNode(slideNodeId()).imageAssetIds).toEqual([secondId, firstId])
-
-    fireEvent.click(screen.getByRole('button', { name: 'Subir imagen 2' }))
-    expect(slideNode(slideNodeId()).imageAssetIds).toEqual([firstId, secondId])
-  })
-
-  it('el control de orden de contenido cambia contentOrder, por defecto "text-first"', () => {
-    act(() => {
-      useProjectStore.getState().createNode('slide', { x: 0, y: 0 })
-      useProjectStore.getState().selectNode(slideNodeId())
-    })
-    render(<Inspector filePath={TEST_FILE_PATH} />)
-
-    const select = screen.getByLabelText('Orden del contenido') as HTMLSelectElement
-    expect(select.value).toBe('text-first')
-
-    fireEvent.change(select, { target: { value: 'image-first' } })
-    expect(slideNode(slideNodeId()).contentOrder).toBe('image-first')
-  })
-
-  it('adjuntar un audio a una diapositiva con respuestas actualiza audioAssetId y muestra el reproductor', async () => {
-    const decisionId = createSlideWithTwoResponses()
-    act(() => {
-      useProjectStore.getState().selectNode(decisionId)
+      useProjectStore.getState().selectNode(id)
     })
     const assetRepository = setupAssetRepository()
     const pickImportAssetPath = vi.fn().mockResolvedValue('/tmp/audio.mp3')
 
     const { container } = renderInspectorWithServices({ assetRepository, pickImportAssetPath })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Adjuntar audio' }))
+    fireEvent.click(screen.getByRole('button', { name: '+ Audio' }))
 
     await waitFor(() => {
-      expect(slideNode(decisionId).audioAssetId).toBeDefined()
+      expect(slideNode(id).content).toMatchObject([{ type: 'audio' }])
     })
     expect(pickImportAssetPath).toHaveBeenCalledWith('audio')
 
@@ -734,29 +713,131 @@ describe('Inspector — lista de imágenes y audio a nivel de nodo (tarea 5: var
     })
   })
 
-  it('cancelar el diálogo de importar no cambia nada ni muestra error', async () => {
+  it('añadir un segundo bloque de imagen lo agrega al final (orden de aparición)', async () => {
+    const id = createEmptySlide()
+    act(() => {
+      useProjectStore.getState().selectNode(id)
+    })
+    const assetRepository = setupAssetRepository()
+    const pickImportAssetPath = vi.fn().mockResolvedValueOnce('/tmp/foto.png').mockResolvedValueOnce('/tmp/foto2.png')
+
+    renderInspectorWithServices({ assetRepository, pickImportAssetPath })
+
+    fireEvent.click(screen.getByRole('button', { name: '+ Imagen' }))
+    await waitFor(() => expect(slideNode(id).content).toHaveLength(1))
+
+    fireEvent.click(screen.getByRole('button', { name: '+ Imagen' }))
+    await waitFor(() => expect(slideNode(id).content).toHaveLength(2))
+
+    expect(await screen.findByAltText('Vista previa de la imagen adjunta 1')).toBeInTheDocument()
+    expect(await screen.findByAltText('Vista previa de la imagen adjunta 2')).toBeInTheDocument()
+  })
+
+  it('"Quitar" en un bloque lo elimina de content sin pedir confirmación; los botones de añadir siguen disponibles', async () => {
+    const id = createEmptySlide()
+    act(() => {
+      useProjectStore.getState().selectNode(id)
+    })
+    const assetRepository = setupAssetRepository()
+    const pickImportAssetPath = vi.fn().mockResolvedValue('/tmp/foto.png')
+
+    renderInspectorWithServices({ assetRepository, pickImportAssetPath })
+
+    fireEvent.click(screen.getByRole('button', { name: '+ Imagen' }))
+    await waitFor(() => expect(slideNode(id).content).toHaveLength(1))
+
+    // Un único clic ya quita el bloque: sin confirmación, a diferencia de
+    // "Eliminar diapositiva".
+    fireEvent.click(await screen.findByRole('button', { name: 'Quitar bloque 1' }))
+
+    expect(slideNode(id).content).toEqual([])
+    expect(screen.getByRole('button', { name: '+ Texto' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '+ Imagen' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '+ Audio' })).toBeInTheDocument()
+  })
+
+  it('los botones ↑/↓ reordenan los bloques; en los extremos quedan deshabilitados', async () => {
+    const id = createEmptySlide()
+    act(() => {
+      useProjectStore.getState().selectNode(id)
+    })
+    const assetRepository = setupAssetRepository()
+    const pickImportAssetPath = vi.fn().mockResolvedValueOnce('/tmp/foto.png').mockResolvedValueOnce('/tmp/foto2.png')
+
+    renderInspectorWithServices({ assetRepository, pickImportAssetPath })
+
+    fireEvent.click(screen.getByRole('button', { name: '+ Imagen' }))
+    await waitFor(() => expect(slideNode(id).content).toHaveLength(1))
+    fireEvent.click(screen.getByRole('button', { name: '+ Imagen' }))
+    await waitFor(() => expect(slideNode(id).content).toHaveLength(2))
+
+    const [firstId, secondId] = slideNode(id).content.map((b) => b.id)
+
+    // El primer bloque no se puede subir más (ya está arriba); el segundo
+    // no se puede bajar más (ya está abajo).
+    expect(screen.getByRole('button', { name: 'Subir bloque 1' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Bajar bloque 2' })).toBeDisabled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Bajar bloque 1' }))
+    expect(slideNode(id).content.map((b) => b.id)).toEqual([secondId, firstId])
+
+    fireEvent.click(screen.getByRole('button', { name: 'Subir bloque 2' }))
+    expect(slideNode(id).content.map((b) => b.id)).toEqual([firstId, secondId])
+  })
+
+  it('ya no queda ningún resto de UI para el antiguo "orden del contenido" (contentOrder)', () => {
     act(() => {
       useProjectStore.getState().createNode('slide', { x: 0, y: 0 })
       useProjectStore.getState().selectNode(slideNodeId())
+    })
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    expect(screen.queryByLabelText('Orden del contenido')).not.toBeInTheDocument()
+    expect(screen.queryByText('Texto primero')).not.toBeInTheDocument()
+    expect(screen.queryByText('Imagen primero')).not.toBeInTheDocument()
+  })
+
+  it('el editor de bloques está disponible también en una diapositiva con respuestas', async () => {
+    const decisionId = createSlideWithTwoResponses()
+    act(() => {
+      useProjectStore.getState().selectNode(decisionId)
+    })
+    const assetRepository = setupAssetRepository()
+    const pickImportAssetPath = vi.fn().mockResolvedValue('/tmp/audio.mp3')
+
+    const { container } = renderInspectorWithServices({ assetRepository, pickImportAssetPath })
+
+    fireEvent.click(screen.getByRole('button', { name: '+ Audio' }))
+
+    await waitFor(() => {
+      const audioEl = container.querySelector('audio')
+      expect(audioEl).toBeTruthy()
+    })
+  })
+
+  it('cancelar el diálogo de importar no cambia nada ni muestra error', async () => {
+    const id = createEmptySlide()
+    act(() => {
+      useProjectStore.getState().selectNode(id)
     })
     const assetRepository = setupAssetRepository()
     const pickImportAssetPath = vi.fn().mockResolvedValue(null)
 
     renderInspectorWithServices({ assetRepository, pickImportAssetPath })
 
-    fireEvent.click(screen.getByRole('button', { name: '+ Añadir imagen' }))
+    fireEvent.click(screen.getByRole('button', { name: '+ Imagen' }))
 
     await waitFor(() => expect(pickImportAssetPath).toHaveBeenCalled())
 
-    expect(slideNode(slideNodeId()).imageAssetIds).toEqual([])
+    expect(slideNode(id).content).toEqual([])
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '+ Añadir imagen' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '+ Imagen' })).toBeInTheDocument()
   })
 
   it('un fallo de importAsset muestra un mensaje de error breve sin romper el resto del Inspector', async () => {
+    const id = createEmptySlide()
     act(() => {
-      useProjectStore.getState().createNode('slide', { x: 0, y: 0 })
-      useProjectStore.getState().selectNode(slideNodeId())
+      useProjectStore.getState().selectNode(id)
     })
     const pickImportAssetPath = vi.fn().mockResolvedValue('/tmp/foto.png')
     const assetRepository = {
@@ -767,20 +848,20 @@ describe('Inspector — lista de imágenes y audio a nivel de nodo (tarea 5: var
 
     renderInspectorWithServices({ assetRepository, pickImportAssetPath })
 
-    fireEvent.click(screen.getByRole('button', { name: '+ Añadir imagen' }))
+    fireEvent.click(screen.getByRole('button', { name: '+ Imagen' }))
 
     const alert = await screen.findByRole('alert')
     expect(alert.textContent).not.toMatch(/error|stack|undefined|NaN|\[object/i)
     // El resto del Inspector sigue funcionando (el título se puede seguir editando).
     expect(screen.getByLabelText('Referencia')).toBeInTheDocument()
-    expect(slideNode(slideNodeId()).imageAssetIds).toEqual([])
+    expect(slideNode(id).content).toEqual([])
   })
 
   it('un fallo de getAsset al cargar la vista previa muestra un mensaje de error sin romper los controles', async () => {
+    const id = createEmptySlide()
     act(() => {
-      useProjectStore.getState().createNode('slide', { x: 0, y: 0 })
-      useProjectStore.getState().updateNode(slideNodeId(), { imageAssetIds: ['asset-ya-adjunto'] })
-      useProjectStore.getState().selectNode(slideNodeId())
+      useProjectStore.getState().addImageBlock(id, 'asset-ya-adjunto')
+      useProjectStore.getState().selectNode(id)
     })
     const assetRepository = {
       importAsset: vi.fn(),
@@ -793,7 +874,7 @@ describe('Inspector — lista de imágenes y audio a nivel de nodo (tarea 5: var
     const alert = await screen.findByRole('alert')
     expect(alert.textContent).not.toMatch(/error|stack|undefined|NaN|\[object/i)
     // El control de quitar sigue disponible a pesar del fallo de vista previa.
-    expect(screen.getByRole('button', { name: 'Quitar imagen 1' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Quitar bloque 1' })).toBeInTheDocument()
   })
 })
 
@@ -866,7 +947,10 @@ describe('Inspector — adjuntos de imagen/audio por respuesta (fase 3, Mileston
     const node = slideNode(decisionId)
     const responseB = node.responses.find((r) => r.letter === 'B')
     expect(responseB?.imageAssetId).toBeUndefined()
-    expect(node.imageAssetIds).toEqual([])
+    // El adjunto de imagen de una respuesta es independiente de los bloques
+    // de contenido de la diapositiva (`SlideNode.content`): no crea ningún
+    // bloque de imagen.
+    expect(node.content.some((block) => block.type === 'image')).toBe(false)
 
     fireEvent.click(
       await screen.findByRole('button', { name: 'Quitar imagen de la respuesta 1' }),
@@ -881,36 +965,24 @@ describe('Inspector — adjuntos de imagen/audio por respuesta (fase 3, Mileston
   })
 })
 
-describe('Inspector — editor de texto enriquecido del campo "Contenido" (fase 4, Milestone 2)', () => {
-  /** Espera al `requestAnimationFrame` que `editor.chain().focus()` programa
-   *  internamente antes de mover el foco real al DOM (ver
-   *  `RichTextEditor.test.tsx` para el detalle). */
-  function waitOneFrame() {
-    return new Promise<void>((resolve) => requestAnimationFrame(() => setTimeout(resolve, 0)))
-  }
-
-  async function blurByMovingFocusAway() {
-    const elsewhere = document.createElement('button')
-    document.body.appendChild(elsewhere)
-    elsewhere.focus()
-    await waitOneFrame()
-  }
-
+describe('Inspector — editor de texto enriquecido de un bloque de texto (fase 4 Milestone 2; generalizado en el milestone "Bloques de contenido")', () => {
   it(
-    'compatibilidad hacia atrás: un nodo con body en texto plano histórico (Milestone 1) se ' +
+    'compatibilidad hacia atrás: un bloque de texto con body en texto plano histórico (Milestone 1) se ' +
       'muestra como párrafo normal, no como JSON en crudo',
     async () => {
       act(() => {
-        // Simula un proyecto creado antes de esta fase: `body` es
-        // literalmente el texto del usuario, nunca un documento Tiptap
-        // serializado.
-        useProjectStore.getState().updateNode(startNodeId(), { body: 'Texto plano histórico' })
+        // Simula un proyecto creado antes de esta fase: el body del bloque
+        // de texto es literalmente el texto del usuario, nunca un documento
+        // Tiptap serializado.
+        useProjectStore
+          .getState()
+          .updateTextBlockBody(startNodeId(), firstBlockId(startNodeId()), 'Texto plano histórico')
         useProjectStore.getState().selectNode(startNodeId())
       })
 
       render(<Inspector filePath={TEST_FILE_PATH} />)
 
-      const contentField = await screen.findByLabelText('Contenido')
+      const contentField = await screen.findByLabelText('Texto 1')
       await waitFor(() => {
         expect(contentField).toHaveTextContent('Texto plano histórico')
       })
@@ -921,7 +993,7 @@ describe('Inspector — editor de texto enriquecido del campo "Contenido" (fase 
 
   it('escribir en el editor enriquecido y perder el foco confirma exactamente una vez en el store', async () => {
     act(() => {
-      useProjectStore.getState().updateNode(startNodeId(), { body: 'Hola' })
+      useProjectStore.getState().updateTextBlockBody(startNodeId(), firstBlockId(startNodeId()), 'Hola')
       useProjectStore.getState().selectNode(startNodeId())
     })
     render(<Inspector filePath={TEST_FILE_PATH} />)
@@ -950,8 +1022,8 @@ describe('Inspector — editor de texto enriquecido del campo "Contenido" (fase 
     await blurByMovingFocusAway()
 
     expect(useProjectStore.getState().history.past.length).toBe(historyBefore + 1)
-    const node = useProjectStore.getState().project.graph.nodes.find((n) => n.id === startNodeId())
-    const bodyDoc = JSON.parse(node?.body ?? '{}')
+    const block = slideNode(startNodeId()).content.find((b) => b.id === firstBlockId(startNodeId()))
+    const bodyDoc = JSON.parse(block?.type === 'text' ? block.body : '{}')
     expect(bodyDoc.content[0].type).toBe('bulletList')
 
     // Un segundo blur sin más cambios no debe generar otra entrada.
@@ -962,7 +1034,7 @@ describe('Inspector — editor de texto enriquecido del campo "Contenido" (fase 
   it('cambiar de nodo seleccionado sin hacer blur en el editor enriquecido confirma la edición pendiente', async () => {
     act(() => {
       useProjectStore.getState().createNode('slide', { x: 0, y: 0 })
-      useProjectStore.getState().updateNode(startNodeId(), { body: 'Hola' })
+      useProjectStore.getState().updateTextBlockBody(startNodeId(), firstBlockId(startNodeId()), 'Hola')
       useProjectStore.getState().selectNode(startNodeId())
     })
     render(<Inspector filePath={TEST_FILE_PATH} />)
@@ -983,16 +1055,67 @@ describe('Inspector — editor de texto enriquecido del campo "Contenido" (fase 
     })
 
     // Cambia de selección sin haber perdido el foco del editor antes —
-    // `NodeFields` remonta con `key={node.id}`, así que `RichTextEditor` se
-    // desmonta sin blur previo.
+    // `ContentBlockRow` monta `RichTextEditor` con `key={block.id}` y
+    // `NodeFields` monta con `key={node.id}`, así que al cambiar de nodo
+    // seleccionado se desmonta sin blur previo.
+    const startId = startNodeId()
     act(() => {
       useProjectStore.getState().selectNode(slideNodeId())
     })
 
     expect(useProjectStore.getState().history.past.length).toBe(historyBefore + 1)
-    const startNode = useProjectStore.getState().project.graph.nodes.find((n) => n.id === startNodeId())
-    const bodyDoc = JSON.parse(startNode?.body ?? '{}')
+    const startBlock = slideNode(startId).content.find((b) => b.id === firstBlockId(startId))
+    const bodyDoc = JSON.parse(startBlock?.type === 'text' ? startBlock.body : '{}')
     expect(bodyDoc.content[0].type).toBe('bulletList')
+  })
+
+  it('con varios bloques de texto a la vez, editar uno concreto solo modifica ese bloque', async () => {
+    act(() => {
+      useProjectStore.getState().selectNode(startNodeId())
+    })
+    const nodeId = startNodeId()
+    const firstId = firstBlockId(nodeId)
+    act(() => {
+      useProjectStore.getState().addTextBlock(nodeId)
+    })
+    const secondId = slideNode(nodeId).content[1]?.id
+    if (!secondId) throw new Error('setup inválido')
+
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    // Dos bloques de texto, cada uno con su propio editor y su propia barra
+    // de herramientas — se distinguen por etiqueta ("Texto 1"/"Texto 2").
+    expect(screen.getByLabelText('Texto 1')).toBeInTheDocument()
+    expect(screen.getByLabelText('Texto 2')).toBeInTheDocument()
+
+    const editors = document.querySelectorAll('[contenteditable="true"]')
+    expect(editors).toHaveLength(2)
+    const secondEditable = editors[1] as HTMLElement
+    secondEditable.focus()
+    await waitOneFrame()
+
+    // Hay una barra "Lista con viñetas" por bloque de texto: se actúa sobre
+    // la SEGUNDA (la que corresponde al editor que tiene el foco).
+    const bulletButtons = screen.getAllByRole('button', { name: 'Lista con viñetas' })
+    expect(bulletButtons).toHaveLength(2)
+    const secondBulletButton = bulletButtons[1]!
+    fireEvent.mouseDown(secondBulletButton)
+    fireEvent.click(secondBulletButton)
+
+    await waitFor(() => {
+      expect(secondBulletButton).toHaveAttribute('aria-pressed', 'true')
+    })
+
+    await blurByMovingFocusAway()
+
+    const updatedNode = slideNode(nodeId)
+    const updatedFirst = updatedNode.content.find((b) => b.id === firstId)
+    const updatedSecond = updatedNode.content.find((b) => b.id === secondId)
+    // El primer bloque no se ha tocado.
+    expect(updatedFirst?.type === 'text' ? updatedFirst.body : undefined).toBe('')
+    // El segundo bloque, y solo él, recibió el cambio.
+    const secondBody = updatedSecond?.type === 'text' ? updatedSecond.body : undefined
+    expect(JSON.parse(secondBody ?? '{}').content[0].type).toBe('bulletList')
   })
 })
 

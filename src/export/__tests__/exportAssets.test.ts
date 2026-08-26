@@ -1,11 +1,23 @@
 import { describe, expect, it, vi } from 'vitest'
 import { collectReferencedAssetIds, resolveExportAssets } from '../exportAssets'
 import type { AssetData, AssetRepository } from '../../persistence'
-import type { DecisionResponse, FinalNode, ProjectDocument, SlideNode } from '../../domain'
+import type { ContentBlock, DecisionResponse, FinalNode, ProjectDocument, SlideNode } from '../../domain'
 
 const SLIDE_A = '11111111-1111-4111-8111-11111111111a'
 const SLIDE_B = '11111111-1111-4111-8111-11111111111b'
 const FINAL = '11111111-1111-4111-8111-11111111111f'
+
+let blockCounter = 0
+/** Bloque de imagen/texto/audio de prueba con un id único por llamada
+ *  (irrelevante para estos tests, solo tiene que ser distinto por bloque). */
+function imageBlock(assetId: string): ContentBlock {
+  blockCounter += 1
+  return { id: `block-${blockCounter}`, type: 'image', assetId }
+}
+function audioBlock(assetId: string): ContentBlock {
+  blockCounter += 1
+  return { id: `block-${blockCounter}`, type: 'audio', assetId }
+}
 
 function slide(id: string, overrides: Partial<SlideNode> = {}): SlideNode {
   return {
@@ -14,13 +26,10 @@ function slide(id: string, overrides: Partial<SlideNode> = {}): SlideNode {
     type: 'slide',
     position: { x: 0, y: 0 },
     title: '',
-    body: '',
     targetNodeId: undefined,
     continueLabel: undefined,
     responses: [],
-    imageAssetIds: [],
-    audioAssetId: undefined,
-    contentOrder: 'text-first',
+    content: [],
     ...overrides,
   }
 }
@@ -66,11 +75,11 @@ function fakeRepository(available: Record<string, AssetData>): AssetRepository {
 }
 
 describe('collectReferencedAssetIds', () => {
-  it('reúne imagen y audio de nodos y de respuestas, sin duplicados', () => {
+  it('reúne imagen y audio de bloques de contenido y de respuestas, sin duplicados', () => {
     const doc = project([
-      slide(SLIDE_A, { imageAssetIds: ['img-1'], audioAssetId: 'aud-1' }),
+      slide(SLIDE_A, { content: [imageBlock('img-1'), audioBlock('aud-1')] }),
       slide(SLIDE_B, {
-        imageAssetIds: ['img-1'], // repetido: no debe duplicarse
+        content: [imageBlock('img-1')], // repetido: no debe duplicarse
         responses: [
           response({ id: 'r1', imageAssetId: 'img-2' }),
           response({ id: 'r2', letter: 'B', audioAssetId: 'aud-2' }),
@@ -82,9 +91,11 @@ describe('collectReferencedAssetIds', () => {
     expect(collectReferencedAssetIds(doc)).toEqual(['img-1', 'aud-1', 'img-2', 'aud-2'])
   })
 
-  it('reúne TODAS las imágenes de la lista de un nodo, en orden, sin duplicados', () => {
+  it('reúne TODOS los bloques de imagen de un nodo, en el orden de content, sin duplicados', () => {
     const doc = project([
-      slide(SLIDE_A, { imageAssetIds: ['img-1', 'img-2', 'img-1', 'img-3'] }),
+      slide(SLIDE_A, {
+        content: [imageBlock('img-1'), imageBlock('img-2'), imageBlock('img-1'), imageBlock('img-3')],
+      }),
     ])
 
     expect(collectReferencedAssetIds(doc)).toEqual(['img-1', 'img-2', 'img-3'])
@@ -97,7 +108,7 @@ describe('collectReferencedAssetIds', () => {
 
 describe('resolveExportAssets', () => {
   it('resuelve todos los assets legibles', async () => {
-    const doc = project([slide(SLIDE_A, { imageAssetIds: ['img-1'], audioAssetId: 'aud-1' })])
+    const doc = project([slide(SLIDE_A, { content: [imageBlock('img-1'), audioBlock('aud-1')] })])
     const repository = fakeRepository({
       'img-1': { mimeType: 'image/png', filename: 'a.png', dataBase64: 'AAA=' },
       'aud-1': { mimeType: 'audio/mpeg', filename: 'a.mp3', dataBase64: 'BBB=' },
@@ -114,7 +125,7 @@ describe('resolveExportAssets', () => {
 
   it('un asset que falla no rompe la resolución de los demás', async () => {
     const doc = project([
-      slide(SLIDE_A, { imageAssetIds: ['roto'], audioAssetId: 'aud-1' }),
+      slide(SLIDE_A, { content: [imageBlock('roto'), audioBlock('aud-1')] }),
       slide(SLIDE_B, { responses: [response({ id: 'r1', imageAssetId: 'img-2' })] }),
     ])
     const repository = fakeRepository({
@@ -129,7 +140,7 @@ describe('resolveExportAssets', () => {
   })
 
   it('no rechaza aunque fallen todos los assets', async () => {
-    const doc = project([slide(SLIDE_A, { imageAssetIds: ['roto-1'], audioAssetId: 'roto-2' })])
+    const doc = project([slide(SLIDE_A, { content: [imageBlock('roto-1'), audioBlock('roto-2')] })])
     const result = await resolveExportAssets('/tmp/p.brunch', doc, fakeRepository({}))
 
     expect(result.assets).toEqual({})

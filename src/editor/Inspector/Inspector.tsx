@@ -15,7 +15,7 @@ import {
 } from '../../domain'
 import type {
   ComparisonOperator,
-  ContentOrder,
+  ContentBlock,
   DecisionResponse,
   Node,
   NodeType,
@@ -275,176 +275,220 @@ function MediaAttachment({
 }
 
 /**
- * Lista de imágenes de una diapositiva: botón "Añadir imagen" (reutiliza el
- * mismo flujo de importación que el resto de adjuntos — límite de 15 MB y
- * deduplicación por contenido los gestiona `assetRepository.importAsset`,
- * igual que para la imagen única de antes), una miniatura por imagen con su
- * posición, y controles para quitarla o moverla en el orden (↑/↓ — el orden
- * del array es el orden de aparición en el Player/export, apiladas en
- * columna a ancho completo).
+ * ---------------------------------------------------------------------------
+ * Bloques de contenido de una diapositiva (milestone "Bloques de contenido",
+ * fase 2 — editor)
+ * ---------------------------------------------------------------------------
  *
- * `updateNode(node.id, { imageAssetIds: [...] })` siempre reemplaza la lista
- * completa (ver `UpdateNodePatch` en `src/domain/project.ts`): añadir/quitar/
- * mover una imagen se hace leyendo `node.imageAssetIds` y escribiendo la
- * lista ya modificada.
+ * Sustituye el antiguo editor de "un único body + lista de imágenes
+ * apiladas + un audio + orden texto/imagen" por una lista ORDENABLE de
+ * bloques heterogéneos (`SlideNode.content`, ver `src/domain/content.ts`),
+ * pintados en el mismo orden en que aparecerán en el Player/export — el
+ * índice del array ES el orden, sin ningún concepto de "orden del
+ * contenido" aparte que mantener sincronizado.
+ *
+ * Cada bloque se renderiza según su `type`:
+ * - `text`: reutiliza el editor de texto enriquecido ya existente
+ *   (`RichTextEditor`), montado con `key={block.id}` a través de
+ *   `ContentBlockRow` — igual que antes se remontaba con `key={node.id}` al
+ *   cambiar de nodo, aquí se remonta al cambiar de bloque, así que su estado
+ *   interno nunca se mezcla entre dos bloques de texto distintos de la misma
+ *   diapositiva.
+ * - `image`/`audio`: reutiliza `AssetPreview` (miniatura o `<audio
+ *   controls>`) sobre el asset ya importado. A diferencia del antiguo
+ *   `MediaAttachment` (adjuntar/reemplazar/quitar un único adjunto), un
+ *   bloque de imagen/audio no ofrece "Reemplazar": para cambiar el archivo
+ *   se quita el bloque y se añade uno nuevo — un bloque, una vez creado, no
+ *   cambia de asset ni de tipo, mismo criterio de identidad estable que
+ *   documenta `ContentBlockSchema`.
+ *
+ * Quitar un bloque (decisión de diseño deliberada): SIN confirmación, a
+ * diferencia de "Eliminar <diapositiva/final>". Quitar un bloque es una
+ * operación de grano fino con undo disponible de inmediato (mismo criterio
+ * que "Duplicar" o "Eliminar respuesta", que tampoco piden confirmación) —
+ * incluso quitar el ÚNICO bloque de texto restante es una operación válida
+ * que el propio dominio permite (`removeContentBlock` no impone ningún
+ * mínimo, ver su comentario en `src/domain/content.ts`): la diapositiva
+ * queda sin contenido de texto, y "+ Texto" la recupera en cualquier
+ * momento. Pedir una confirmación solo para ese caso concreto introduciría
+ * una excepción difícil de justificar frente al resto de bloques sin aportar
+ * protección real (el undo ya cubre el arrepentimiento).
  */
-function NodeImagesSection({ node, filePath }: { node: SlideNode; filePath: string }) {
-  const updateNode = useProjectStore((state) => state.updateNode)
-  const { pickImportAssetPath, assetRepository } = useAppServices()
 
-  const [busy, setBusy] = useState(false)
-  const [pickError, setPickError] = useState<string | null>(null)
+/** Añade un bloque nuevo al FINAL de `content` — criterio elegido (frente a
+ *  "en la posición del bloque enfocado"): más predecible y sin necesidad de
+ *  rastrear qué bloque tiene el foco en cada momento; el usuario siempre
+ *  puede reordenar el bloque recién creado con ↑ si lo quiere en otro sitio. */
+function ContentBlockRow({
+  slideNodeId,
+  block,
+  index,
+  lastIndex,
+  filePath,
+}: {
+  slideNodeId: string
+  block: ContentBlock
+  index: number
+  lastIndex: number
+  filePath: string
+}) {
+  const moveContentBlock = useProjectStore((state) => state.moveContentBlock)
+  const removeContentBlock = useProjectStore((state) => state.removeContentBlock)
+  const updateTextBlockBody = useProjectStore((state) => state.updateTextBlockBody)
 
-  async function handleAdd() {
-    setPickError(null)
-    setBusy(true)
-    try {
-      const sourcePath = await pickImportAssetPath('image')
-      if (!sourcePath) {
-        // Cancelado por el usuario: sin error visible, sin cambios.
-        return
-      }
-      const meta = await assetRepository.importAsset(filePath, sourcePath)
-      updateNode(node.id, { imageAssetIds: [...node.imageAssetIds, meta.id] })
-    } catch (error) {
-      if (error instanceof PersistenceCommandError && error.kind === 'AssetTooLarge') {
-        setPickError('El archivo es demasiado grande (máximo 15 MB). Prueba con uno más ligero.')
-      } else {
-        setPickError('No se ha podido adjuntar la imagen. Inténtalo de nuevo.')
-      }
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  function handleRemove(assetId: string) {
-    updateNode(node.id, { imageAssetIds: node.imageAssetIds.filter((id) => id !== assetId) })
-  }
-
-  function handleMove(index: number, direction: -1 | 1) {
-    const target = index + direction
-    if (target < 0 || target >= node.imageAssetIds.length) return
-    const next = [...node.imageAssetIds]
-    const [moved] = next.splice(index, 1)
-    if (moved === undefined) return
-    next.splice(target, 0, moved)
-    updateNode(node.id, { imageAssetIds: next })
-  }
+  const position = index + 1
+  const labelId = `inspector-content-block-${block.id}-label`
+  const typeLabel = block.type === 'text' ? 'Texto' : block.type === 'image' ? 'Imagen' : 'Audio'
 
   return (
-    <div className={styles.nodeImagesSection}>
-      <div className={styles.nodeImagesHeader}>
-        <span className={styles.label}>Imágenes</span>
-        <button
-          type="button"
-          className={styles.attachButton}
-          onClick={handleAdd}
-          disabled={busy}
-        >
-          + Añadir imagen
-        </button>
+    <div className={styles.contentBlockRow}>
+      <div className={styles.contentBlockHeader}>
+        <span id={labelId} className={styles.contentBlockLabel}>
+          {typeLabel} {position}
+        </span>
+        <div className={styles.contentBlockControls}>
+          <button
+            type="button"
+            className={styles.contentBlockMoveButton}
+            onClick={() => moveContentBlock(slideNodeId, block.id, index - 1)}
+            disabled={index === 0}
+            aria-label={`Subir bloque ${position}`}
+          >
+            ↑
+          </button>
+          <button
+            type="button"
+            className={styles.contentBlockMoveButton}
+            onClick={() => moveContentBlock(slideNodeId, block.id, index + 1)}
+            disabled={index === lastIndex}
+            aria-label={`Bajar bloque ${position}`}
+          >
+            ↓
+          </button>
+          <button
+            type="button"
+            className={styles.removeButton}
+            onClick={() => removeContentBlock(slideNodeId, block.id)}
+            aria-label={`Quitar bloque ${position}`}
+          >
+            Quitar
+          </button>
+        </div>
       </div>
-      {pickError && (
-        <p role="alert" className={styles.mediaError}>
-          {pickError}
-        </p>
+      {block.type === 'text' && (
+        <RichTextEditor
+          body={block.body}
+          onCommit={(nextBody) => updateTextBlockBody(slideNodeId, block.id, nextBody)}
+          ariaLabelledBy={labelId}
+        />
       )}
-      {node.imageAssetIds.length > 0 && (
-        <ul className={styles.imageList}>
-          {node.imageAssetIds.map((assetId, index) => (
-            <li key={assetId} className={styles.imageListItem}>
-              <AssetPreview
-                key={assetId}
-                kind="image"
-                assetId={assetId}
-                filePath={filePath}
-                suffix={` ${index + 1}`}
-              />
-              <span className={styles.imageListPosition}>{index + 1}</span>
-              <div className={styles.imageListControls}>
-                <button
-                  type="button"
-                  className={styles.imageMoveButton}
-                  onClick={() => handleMove(index, -1)}
-                  disabled={index === 0}
-                  aria-label={`Subir imagen ${index + 1}`}
-                >
-                  ↑
-                </button>
-                <button
-                  type="button"
-                  className={styles.imageMoveButton}
-                  onClick={() => handleMove(index, 1)}
-                  disabled={index === node.imageAssetIds.length - 1}
-                  aria-label={`Bajar imagen ${index + 1}`}
-                >
-                  ↓
-                </button>
-                <button
-                  type="button"
-                  className={styles.removeButton}
-                  onClick={() => handleRemove(assetId)}
-                  aria-label={`Quitar imagen ${index + 1}`}
-                >
-                  Quitar
-                </button>
-              </div>
-            </li>
-          ))}
-        </ul>
+      {block.type !== 'text' && (
+        <AssetPreview
+          key={block.assetId}
+          kind={block.type}
+          assetId={block.assetId}
+          filePath={filePath}
+          suffix={` ${position}`}
+        />
       )}
-    </div>
-  )
-}
-
-/** Elige si el bloque de imágenes va antes o después del cuerpo de texto en
- *  el Player/export (`SlideNode.contentOrder`). Por defecto "Texto primero",
- *  que es como se comportaba la app antes de admitir varias imágenes. */
-function ContentOrderControl({ node }: { node: SlideNode }) {
-  const updateNode = useProjectStore((state) => state.updateNode)
-  const fieldId = 'inspector-content-order'
-
-  return (
-    <div>
-      <label className={styles.label} htmlFor={fieldId}>
-        Orden del contenido
-      </label>
-      <select
-        id={fieldId}
-        className={styles.select}
-        value={node.contentOrder}
-        onChange={(event) =>
-          updateNode(node.id, { contentOrder: event.target.value as ContentOrder })
-        }
-      >
-        <option value="text-first">Texto primero</option>
-        <option value="image-first">Imagen primero</option>
-      </select>
     </div>
   )
 }
 
 /**
- * Adjuntos de nivel de nodo (solo Diapositiva): imágenes (varias,
- * ordenables), su orden respecto al texto, y el audio (uno solo). Se
- * muestra justo debajo de título/contenido.
+ * Sección de contenido de una diapositiva: la lista de bloques (vacía en
+ * teoría posible, aunque `createNode`/`duplicateNode` siempre siembran al
+ * menos uno) más los tres controles de añadir. Mismo criterio de "+ Añadir
+ * X" que otros botones "+" ya usados en la app (`.addResponseButton`): +
+ * Texto añade un bloque vacío al instante (sin diálogo); + Imagen/+ Audio
+ * reutilizan el mismo flujo de importación de asset ya existente (diálogo
+ * nativo -> `assetRepository.importAsset`, con el mismo límite de 15 MB y la
+ * misma deduplicación por contenido que el resto de adjuntos de la app) y
+ * solo añaden el bloque si el usuario no cancela.
  */
-function NodeMediaSection({ node, filePath }: { node: SlideNode; filePath: string }) {
-  const updateNode = useProjectStore((state) => state.updateNode)
+function ContentBlocksSection({ node, filePath }: { node: SlideNode; filePath: string }) {
+  const addTextBlock = useProjectStore((state) => state.addTextBlock)
+  const addImageBlock = useProjectStore((state) => state.addImageBlock)
+  const addAudioBlock = useProjectStore((state) => state.addAudioBlock)
+  const { pickImportAssetPath, assetRepository } = useAppServices()
+
+  const [busyKind, setBusyKind] = useState<AssetKind | null>(null)
+  const [pickError, setPickError] = useState<string | null>(null)
+
+  async function handleAddAsset(kind: AssetKind) {
+    setPickError(null)
+    setBusyKind(kind)
+    try {
+      const sourcePath = await pickImportAssetPath(kind)
+      if (!sourcePath) {
+        // Cancelado por el usuario: sin error visible, sin cambios.
+        return
+      }
+      const meta = await assetRepository.importAsset(filePath, sourcePath)
+      if (kind === 'image') {
+        addImageBlock(node.id, meta.id)
+      } else {
+        addAudioBlock(node.id, meta.id)
+      }
+    } catch (error) {
+      if (error instanceof PersistenceCommandError && error.kind === 'AssetTooLarge') {
+        setPickError('El archivo es demasiado grande (máximo 15 MB). Prueba con uno más ligero.')
+      } else {
+        setPickError(`No se ha podido adjuntar el ${ASSET_KIND_LABEL[kind]}. Inténtalo de nuevo.`)
+      }
+    } finally {
+      setBusyKind(null)
+    }
+  }
+
+  const lastIndex = node.content.length - 1
 
   return (
-    <div className={styles.nodeMediaSection}>
-      <NodeImagesSection node={node} filePath={filePath} />
-      <ContentOrderControl node={node} />
-      <div>
-        <span className={styles.label}>Audio</span>
-        <MediaAttachment
-          kind="audio"
-          assetId={node.audioAssetId}
-          filePath={filePath}
-          onAttach={(assetId) => updateNode(node.id, { audioAssetId: assetId })}
-          onRemove={() => updateNode(node.id, { audioAssetId: null })}
-        />
+    <div className={styles.contentBlocksSection}>
+      <span className={styles.label}>Contenido</span>
+      {node.content.length > 0 && (
+        <div className={styles.contentBlocksList}>
+          {node.content.map((block, index) => (
+            <ContentBlockRow
+              key={block.id}
+              slideNodeId={node.id}
+              block={block}
+              index={index}
+              lastIndex={lastIndex}
+              filePath={filePath}
+            />
+          ))}
+        </div>
+      )}
+      {pickError && (
+        <p role="alert" className={styles.mediaError}>
+          {pickError}
+        </p>
+      )}
+      <div className={styles.contentBlocksAddRow}>
+        <button
+          type="button"
+          className={styles.addResponseButton}
+          onClick={() => addTextBlock(node.id)}
+        >
+          + Texto
+        </button>
+        <button
+          type="button"
+          className={styles.addResponseButton}
+          onClick={() => handleAddAsset('image')}
+          disabled={busyKind === 'image'}
+        >
+          + Imagen
+        </button>
+        <button
+          type="button"
+          className={styles.addResponseButton}
+          onClick={() => handleAddAsset('audio')}
+          disabled={busyKind === 'audio'}
+        >
+          + Audio
+        </button>
       </div>
     </div>
   )
@@ -1787,20 +1831,22 @@ function NodeFields({
           onKeyDown={handleTitleKeyDown}
         />
       </div>
-      <div>
-        <span id="inspector-node-body-label" className={styles.label}>
-          Contenido
-        </span>
-        <RichTextEditor
-          body={node.body}
-          onCommit={(nextBody) => updateNode(node.id, { body: nextBody })}
-          ariaLabelledBy="inspector-node-body-label"
-        />
-      </div>
+      {node.type === 'final' && (
+        <div>
+          <span id="inspector-node-body-label" className={styles.label}>
+            Contenido
+          </span>
+          <RichTextEditor
+            body={node.body}
+            onCommit={(nextBody) => updateNode(node.id, { body: nextBody })}
+            ariaLabelledBy="inspector-node-body-label"
+          />
+        </div>
+      )}
+      {node.type === 'slide' && <ContentBlocksSection node={node} filePath={filePath} />}
       <InternalNoteField node={node} />
       {node.type === 'slide' && (
         <>
-          <NodeMediaSection node={node} filePath={filePath} />
           {node.responses.length === 0 && (
             <ContinueSection node={node} allNodes={allNodes} variables={project.variables} />
           )}
@@ -1832,7 +1878,7 @@ function NodeFields({
 export interface InspectorProps {
   /**
    * Ruta absoluta del `.brunch` abierto. La necesitan los controles de
-   * imagen/audio (`NodeMediaSection`/`ResponseRow` vía `MediaAttachment`)
+   * imagen/audio (`ContentBlocksSection`/`ResponseRow` vía `MediaAttachment`)
    * para importar/leer assets del documento actual
    * (`assetRepository.importAsset`/`getAsset`). Prop-drilling explícito
    * desde `EditorScreen`, mismo criterio que ya se usa para `filePath` en

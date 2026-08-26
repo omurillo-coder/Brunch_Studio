@@ -140,31 +140,54 @@ export type CanvasFlowEdge = XyEdge<CanvasEdgeData>
  *  (además la propia tarjeta lo trunca visualmente con CSS si no cupiera). */
 const BODY_PREVIEW_MAX_LENGTH = 90
 
-/** Caché de fragmentos de contenido ya calculados, indexada por el propio
- *  `body` (string) del nodo. `toFlowNodes` se recalcula en cada render de
+/** Caché de fragmentos de contenido ya calculados, indexada por la propia
+ *  cadena de entrada (el `body` de un Final, o los `body` de todos los
+ *  bloques de texto de una diapositiva ya concatenados con un espacio — ver
+ *  `textPreviewSourceFor`). `toFlowNodes` se recalcula en cada render de
  *  `Canvas` a partir de `project` (ver comentario de cabecera del módulo);
- *  extraer texto plano de un documento Tiptap es barato pero no gratis, así
- *  que se evita repetirlo para nodos cuyo `body` no ha cambiado entre
- *  renders — el body de un nodo concreto solo cambia cuando se edita de
- *  verdad, así que esta caché no crece de forma descontrolada en una sesión
- *  de edición normal. */
+ *  extraer texto plano de uno o varios documentos Tiptap es barato pero no
+ *  gratis, así que se evita repetirlo para nodos cuyo contenido de texto no
+ *  ha cambiado entre renders — solo cambia cuando se edita de verdad, así
+ *  que esta caché no crece de forma descontrolada en una sesión de edición
+ *  normal. */
 const bodyPreviewCache = new Map<string, string | undefined>()
 
-function computeBodyPreview(body: string): string | undefined {
-  const plain = extractPlainText(parseRichBody(body)).trim()
+function computeBodyPreview(source: string): string | undefined {
+  const plain = source.trim()
   if (!plain) return undefined
   if (plain.length <= BODY_PREVIEW_MAX_LENGTH) return plain
   return `${plain.slice(0, BODY_PREVIEW_MAX_LENGTH).trimEnd()}…`
 }
 
-function bodyPreviewFor(body: string): string | undefined {
-  const cached = bodyPreviewCache.get(body)
-  if (cached !== undefined || bodyPreviewCache.has(body)) {
+function bodyPreviewFor(source: string): string | undefined {
+  const cached = bodyPreviewCache.get(source)
+  if (cached !== undefined || bodyPreviewCache.has(source)) {
     return cached
   }
-  const preview = computeBodyPreview(body)
-  bodyPreviewCache.set(body, preview)
+  const preview = computeBodyPreview(source)
+  bodyPreviewCache.set(source, preview)
   return preview
+}
+
+/**
+ * Fuente de texto plano de la vista previa de contenido de un nodo (tarea 8,
+ * generalizada en el milestone "Bloques de contenido", fase 2):
+ * - Un Final sigue teniendo un único `body` -> su texto plano tal cual.
+ * - Una diapositiva ya no tiene un `body` único: se concatena, EN ORDEN, el
+ *   texto plano de TODOS sus bloques `type: 'text'` de `content` (los
+ *   bloques de imagen/audio no aportan texto), unidos por un espacio. Con un
+ *   único bloque de texto (el caso más común) el resultado es idéntico al
+ *   `body` único de antes.
+ */
+function textPreviewSourceFor(node: DomainNode): string {
+  if (node.type === 'final') {
+    return extractPlainText(parseRichBody(node.body))
+  }
+  return node.content
+    .filter((block) => block.type === 'text')
+    .map((block) => extractPlainText(parseRichBody(block.body)))
+    .filter((text) => text !== '')
+    .join(' ')
 }
 
 function toNodeData(node: DomainNode, startNodeId: string): BaseCanvasNodeData {
@@ -175,7 +198,7 @@ function toNodeData(node: DomainNode, startNodeId: string): BaseCanvasNodeData {
     title: node.title,
     isStart: node.id === startNodeId,
     internalNote: trimmedNote ? trimmedNote : undefined,
-    bodyPreview: bodyPreviewFor(node.body),
+    bodyPreview: bodyPreviewFor(textPreviewSourceFor(node)),
   }
   if (node.type === 'slide') {
     base.responses = sortByLetter(node.responses).map((response) => ({

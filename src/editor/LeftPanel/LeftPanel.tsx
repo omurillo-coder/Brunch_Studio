@@ -32,30 +32,45 @@ function nextCascadePosition(existingNodeCount: number): NodePosition {
 }
 
 /**
- * Buscador del proyecto (fase 8): `query` ya normalizado (recortado, en
- * minúsculas). Un nodo aparece en la lista filtrada si el término buscado
- * aparece, sin distinguir mayúsculas/minúsculas, en su título, en el texto
- * plano real de su cuerpo, o en el texto de alguna de sus respuestas de
+ * Buscador del proyecto (fase 8; generalizado en el milestone "Bloques de
+ * contenido", fase 2): `query` ya normalizado (recortado, en minúsculas). Un
+ * nodo aparece en la lista filtrada si el término buscado aparece, sin
+ * distinguir mayúsculas/minúsculas, en su título, en el texto plano real de
+ * CUALQUIERA de sus bloques de texto (`SlideNode.content`, tipo `text`) o del
+ * único `body` de un Final, o en el texto de alguna de sus respuestas de
  * decisión.
  *
- * El cuerpo (`node.body`) es JSON de Tiptap serializado, NUNCA se compara
- * como substring directo: eso encontraría falsos positivos en la propia
- * sintaxis JSON (p.ej. buscar "type" "encontraría" cualquier nodo, por la
- * clave `"type":"doc"`). Se parsea con `parseRichBody` (la misma función que
- * usa `RichTextEditor`/la exportación) y se extrae su texto real con
+ * Un cuerpo de texto (`body` de un bloque de texto, o el `body` único de un
+ * Final) es JSON de Tiptap serializado, NUNCA se compara como substring
+ * directo: eso encontraría falsos positivos en la propia sintaxis JSON
+ * (p.ej. buscar "type" "encontraría" cualquier nodo, por la clave
+ * `"type":"doc"`). Se parsea con `parseRichBody` (la misma función que usa
+ * `RichTextEditor`/la exportación) y se extrae su texto real con
  * `extractPlainText`, compartida con `src/editor/richText/richTextContent.ts`.
+ *
+ * Antes de esta fase una diapositiva tenía un único `body`; ahora puede tener
+ * varios bloques de texto intercalados con imagen/audio (`SlideNode.content`)
+ * — se comprueba cada uno de los bloques `type: 'text'`, en cualquier orden,
+ * no solo el primero.
  */
 function nodeMatchesQuery(node: Node, query: string): boolean {
   if (node.title.toLowerCase().includes(query)) {
     return true
   }
-  if (extractPlainText(parseRichBody(node.body)).toLowerCase().includes(query)) {
+  if (node.type === 'final') {
+    if (extractPlainText(parseRichBody(node.body)).toLowerCase().includes(query)) {
+      return true
+    }
+    return false
+  }
+  const matchesTextBlock = node.content.some(
+    (block) =>
+      block.type === 'text' && extractPlainText(parseRichBody(block.body)).toLowerCase().includes(query),
+  )
+  if (matchesTextBlock) {
     return true
   }
-  if (node.type === 'slide') {
-    return node.responses.some((response) => response.text.toLowerCase().includes(query))
-  }
-  return false
+  return node.responses.some((response) => response.text.toLowerCase().includes(query))
 }
 
 /** Panel izquierdo: buscar/filtrar, crear nodos y navegar la lista de nodos

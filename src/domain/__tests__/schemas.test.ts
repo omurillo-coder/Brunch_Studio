@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  ContentBlockSchema,
   DecisionResponseSchema,
   ProjectDocumentSchema,
   SlideNodeSchema,
@@ -178,17 +179,59 @@ describe('DecisionResponseSchema — effects/condition opcionales', () => {
   })
 })
 
+describe('ContentBlockSchema', () => {
+  const BLOCK_ID = '66666666-6666-4666-8666-666666666666'
+  const ASSET_ID = '77777777-7777-4777-8777-777777777777'
+
+  it('acepta un bloque de texto, imagen y audio válidos', () => {
+    expect(ContentBlockSchema.safeParse({ id: BLOCK_ID, type: 'text', body: '' }).success).toBe(true)
+    expect(
+      ContentBlockSchema.safeParse({ id: BLOCK_ID, type: 'image', assetId: ASSET_ID }).success,
+    ).toBe(true)
+    expect(
+      ContentBlockSchema.safeParse({ id: BLOCK_ID, type: 'audio', assetId: ASSET_ID }).success,
+    ).toBe(true)
+  })
+
+  it('rechaza un type desconocido', () => {
+    expect(
+      ContentBlockSchema.safeParse({ id: BLOCK_ID, type: 'video', assetId: ASSET_ID }).success,
+    ).toBe(false)
+  })
+
+  it('rechaza un bloque de texto sin body', () => {
+    expect(ContentBlockSchema.safeParse({ id: BLOCK_ID, type: 'text' }).success).toBe(false)
+  })
+
+  it('rechaza un bloque de imagen/audio sin assetId, o con un assetId que no es uuid', () => {
+    expect(ContentBlockSchema.safeParse({ id: BLOCK_ID, type: 'image' }).success).toBe(false)
+    expect(
+      ContentBlockSchema.safeParse({ id: BLOCK_ID, type: 'audio', assetId: 'no-es-uuid' }).success,
+    ).toBe(false)
+  })
+
+  it('rechaza un bloque de imagen con `body` en vez de `assetId` (campos de otro tipo del discriminador)', () => {
+    expect(
+      ContentBlockSchema.safeParse({ id: BLOCK_ID, type: 'image', body: 'texto' }).success,
+    ).toBe(false)
+  })
+
+  it('rechaza un id que no es uuid', () => {
+    expect(
+      ContentBlockSchema.safeParse({ id: 'no-es-uuid', type: 'text', body: '' }).success,
+    ).toBe(false)
+  })
+})
+
 describe('SlideNodeSchema — condition/elseTargetNodeId opcionales', () => {
   const base = {
     id: NODE_ID,
     number: 1,
     position: { x: 0, y: 0 },
     title: '',
-    body: '',
     type: 'slide' as const,
     responses: [],
-    imageAssetIds: [],
-    contentOrder: 'text-first' as const,
+    content: [],
   }
 
   it('acepta una diapositiva sin condition/elseTargetNodeId (comportamiento actual intacto)', () => {

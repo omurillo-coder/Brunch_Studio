@@ -186,8 +186,6 @@ const baseNodeFields = {
   number: z.number().int().positive(),
   position: NodePositionSchema,
   title: z.string(),
-  /** Contenido enriquecido serializado (ver `src/editor/richText`). */
-  body: z.string(),
   /**
    * Nota interna del diseñador instruccional (p.ej. "pedir gráfico a
    * diseño"). Puramente de uso interno del equipo: NUNCA viaja al HTML/SCORM
@@ -197,6 +195,82 @@ const baseNodeFields = {
    */
   internalNote: z.string().optional(),
 }
+
+/**
+ * Nota deliberada sobre `body`: NO vive en `baseNodeFields`. Antes del
+ * milestone "Bloques de contenido" era común a `slide`/`final` (un único
+ * cuerpo de texto Tiptap serializado por nodo). Con la llegada de
+ * `SlideNodeSchema.content` (más abajo, varios bloques de texto/imagen/audio
+ * ordenables) una diapositiva ya no tiene un `body` único que editar — su
+ * texto vive repartido en los bloques `type: 'text'` de `content` — así que
+ * `body` se queda ÚNICAMENTE en `FinalNodeSchema`, que sigue siendo un nodo
+ * de un solo cuerpo de texto (una pantalla final no admite bloques todavía;
+ * ampliarla es una decisión de producto explícitamente fuera de esta fase).
+ * Documentos `.brunch` guardados con la forma anterior (`body` de diapositiva
+ * + `imageAssetIds` + `audioAssetId` + `contentOrder`) se migran a `content`
+ * al abrirlos, ver `src/domain/migration.ts`.
+ */
+
+// ---------------------------------------------------------------------------
+// Bloques de contenido de una diapositiva
+// ---------------------------------------------------------------------------
+//
+// Milestone "Bloques de contenido", fase 1 (dominio): sustituye el modelo
+// anterior de una diapositiva —un único `body` de texto, una lista
+// `imageAssetIds` (siempre apiladas juntas) y un `audioAssetId` opcional,
+// colocados entre sí según `contentOrder` ('text-first'/'image-first')— por
+// una lista ORDENABLE de bloques heterogéneos: `SlideNode.content`. El
+// ÍNDICE del array ES el orden de aparición, sin ningún campo de orden
+// aparte que pueda desincronizarse del contenido real (a diferencia de
+// `contentOrder`, que solo codificaba dos posiciones relativas posibles para
+// un único bloque de imágenes agrupado, nunca "intercalar" texto e imágenes
+// libremente). Documentos `.brunch` guardados con la forma anterior se
+// migran a `content` al abrirlos, ver `src/domain/migration.ts`.
+//
+// Este es el CONTRATO que consumirán la fase de editor/UI (bloques
+// añadibles/reordenables en el Inspector/Canvas) y la fase de reproductor/
+// export (que debe pintar `content` en orden, bloque a bloque) — cualquier
+// cambio de forma aquí las afecta a ambas.
+
+/**
+ * Un bloque de contenido de diapositiva. Unión discriminada por `type`:
+ * - `text`: un cuerpo de texto Tiptap serializado, MISMO formato que tenía
+ *   el antiguo `SlideNode.body` (ver `parseRichBody`/`serializeRichBody` en
+ *   `src/editor/richText/richTextContent.ts`, sin cambios) — solo cambia
+ *   DÓNDE vive ese string, no su contenido ni cómo se interpreta.
+ * - `image`: referencia (`assetId`) a una imagen ya importada a la
+ *   biblioteca de assets del proyecto. Análogo a un elemento suelto de lo
+ *   que antes era `SlideNode.imageAssetIds`.
+ * - `audio`: referencia (`assetId`) a un audio ya importado. Análogo al
+ *   antiguo `SlideNode.audioAssetId`, salvo que ahora pueden coexistir
+ *   VARIOS bloques de audio en una misma diapositiva (el modelo anterior
+ *   admitía como mucho uno).
+ *
+ * `id` identifica el bloque de forma estable dentro de `content` (generado
+ * una vez al crearlo, nunca reasignado) — necesario para poder editar/
+ * mover/eliminar un bloque concreto sin depender de su posición actual en el
+ * array, igual que `DecisionResponse.id` para las respuestas de una
+ * diapositiva. Es único dentro de la diapositiva que lo contiene; no hay
+ * ninguna garantía (ni falta que hace) de unicidad entre diapositivas
+ * distintas del mismo proyecto.
+ */
+export const ContentBlockSchema = z.discriminatedUnion('type', [
+  z.object({
+    id: z.string().uuid(),
+    type: z.literal('text'),
+    body: z.string(),
+  }),
+  z.object({
+    id: z.string().uuid(),
+    type: z.literal('image'),
+    assetId: z.string().uuid(),
+  }),
+  z.object({
+    id: z.string().uuid(),
+    type: z.literal('audio'),
+    assetId: z.string().uuid(),
+  }),
+])
 
 /**
  * Diapositiva: el único tipo de nodo "con salida" del modelo. Una misma
@@ -211,16 +285,6 @@ const baseNodeFields = {
  *   ni se borran) y vuelven a tener efecto si se eliminan todas las
  *   respuestas.
  */
-/**
- * Orden relativo entre el bloque de imágenes y el cuerpo de texto de una
- * diapositiva. `'text-first'` es el valor por defecto (y el único
- * comportamiento que existía antes de admitir varias imágenes): así los
- * proyectos migrados desde la forma anterior (una sola `imageAssetId`) se ven
- * exactamente igual que antes, ver `src/domain/migration.ts`.
- */
-export const CONTENT_ORDERS = ['text-first', 'image-first'] as const
-export const ContentOrderSchema = z.enum(CONTENT_ORDERS)
-
 export const SlideNodeSchema = z.object({
   ...baseNodeFields,
   type: z.literal('slide'),
@@ -263,20 +327,31 @@ export const SlideNodeSchema = z.object({
   elseTargetNodeId: z.string().uuid().optional(),
   responses: z.array(DecisionResponseSchema).max(4),
   /**
-   * Imágenes adjuntas a la diapositiva, en el orden en que se apilan (una
-   * debajo de otra, a ancho completo) en el Player/export. Puede estar
-   * vacío. Sustituye al antiguo `imageAssetId` singular (ver migración).
+   * Contenido de la diapositiva: bloques de texto/imagen/audio en el orden
+   * exacto en que se pintan en el Player/export (ver comentario de
+   * `ContentBlockSchema` arriba). Puede estar vacío (una diapositiva sin
+   * ningún bloque no tiene nada que mostrar salvo su título) aunque
+   * `createNode`/`addTextBlock` normalmente evitan ese estado sembrando un
+   * bloque de texto — ver `src/domain/project.ts`/`src/domain/content.ts`.
+   * Ningún límite de longitud ni de bloques por tipo: a diferencia de
+   * `responses` (máx. 4, restringido por las letras fijas A-D), aquí no hay
+   * ninguna razón de dominio para poner un tope.
    */
-  imageAssetIds: z.array(z.string().uuid()),
-  audioAssetId: z.string().uuid().optional(),
-  /** Orden entre el bloque de imágenes y el cuerpo de texto. */
-  contentOrder: ContentOrderSchema,
+  content: z.array(ContentBlockSchema),
 })
 
-/** Nodo terminal del recorrido: no tiene ninguna salida. */
+/**
+ * Nodo terminal del recorrido: no tiene ninguna salida. A diferencia de
+ * `SlideNode`, sigue teniendo un único `body` (cuerpo de texto Tiptap
+ * serializado, ver `src/editor/richText/richTextContent.ts`) en vez de
+ * `content`: un Final no admite bloques de imagen/audio ni varios bloques de
+ * texto en esta fase — ver el comentario de "por qué `body` no vive en
+ * `baseNodeFields`" más arriba.
+ */
 export const FinalNodeSchema = z.object({
   ...baseNodeFields,
   type: z.literal('final'),
+  body: z.string(),
 })
 
 export const NodeSchema = z.discriminatedUnion('type', [SlideNodeSchema, FinalNodeSchema])
@@ -360,10 +435,7 @@ export type ComparisonOperator = z.infer<typeof ComparisonOperatorSchema>
 export type VariableCondition = z.infer<typeof VariableConditionSchema>
 export type VariableEffect = z.infer<typeof VariableEffectSchema>
 export type DecisionResponse = z.infer<typeof DecisionResponseSchema>
-export type ContentOrder = z.infer<typeof ContentOrderSchema>
-
-/** Valor por defecto de `SlideNode.contentOrder` (ver comentario del schema). */
-export const DEFAULT_CONTENT_ORDER: ContentOrder = 'text-first'
+export type ContentBlock = z.infer<typeof ContentBlockSchema>
 
 export type SlideNode = z.infer<typeof SlideNodeSchema>
 export type FinalNode = z.infer<typeof FinalNodeSchema>

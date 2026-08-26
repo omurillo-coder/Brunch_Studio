@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { ProjectMigrationError, parseOrMigrateProjectDocument } from '../migration'
 import { createProject } from '../project'
+import type { ContentBlock } from '../schemas'
 
 /**
  * Fixtures con la forma ANTIGUA del documento (`start`/`content`/`decision`/
@@ -16,6 +17,7 @@ const FINAL_ID = '44444444-4444-4444-8444-444444444444'
 const RESPONSE_A_ID = '55555555-5555-4555-8555-555555555555'
 const RESPONSE_B_ID = '66666666-6666-4666-8666-666666666666'
 const IMAGE_ID = '77777777-7777-4777-8777-777777777777'
+const IMAGE_ID_2 = '77777777-7777-4777-8777-777777777779'
 const AUDIO_ID = '88888888-8888-4888-8888-888888888888'
 const PROJECT_ID = '99999999-9999-4999-8999-999999999999'
 
@@ -31,6 +33,17 @@ function legacyBase() {
     settings: {},
     editor: { viewport: { x: 10, y: 20, zoom: 1.5 } },
   }
+}
+
+/** Ordena por tipo/assetId una lista de bloques para comparar solo su
+ *  "forma" (tipo + body/assetId), ignorando el `id` generado de nuevo en
+ *  cada migración (aleatorio, no determinista) — igual que se comparan
+ *  respuestas/variables en otros tests de este archivo por sus campos de
+ *  negocio, no por el id técnico que genera `createId()`. */
+function blockShapes(blocks: ContentBlock[]): unknown[] {
+  return blocks.map((block) =>
+    block.type === 'text' ? { type: 'text', body: block.body } : { type: block.type, assetId: block.assetId },
+  )
 }
 
 /** start -> content -> decision (A/B) -> final, el caso completo. */
@@ -114,7 +127,7 @@ describe('parseOrMigrateProjectDocument — documento con forma antigua', () => 
     expect(migrated.editor.viewport).toEqual({ x: 10, y: 20, zoom: 1.5 })
   })
 
-  it('un content se convierte en diapositiva "de continuar" conservando destino y adjuntos', () => {
+  it('un content se convierte en diapositiva "de continuar" conservando destino y adjuntos, ahora como bloques de content', () => {
     const migrated = parseOrMigrateProjectDocument(legacyFullDocument())
     const slide = migrated.graph.nodes.find((node) => node.id === CONTENT_ID)
 
@@ -122,12 +135,17 @@ describe('parseOrMigrateProjectDocument — documento con forma antigua', () => 
     if (slide?.type !== 'slide') throw new Error('esperaba una diapositiva')
     expect(slide.responses).toEqual([])
     expect(slide.targetNodeId).toBe(DECISION_ID)
-    expect(slide.imageAssetIds).toEqual([IMAGE_ID])
-    expect(slide.audioAssetId).toBe(AUDIO_ID)
     expect(slide.title).toBe('Bienvenida')
-    expect(slide.body).toBe('<p>Hola</p>')
     expect(slide.continueLabel).toBeUndefined()
-    expect(slide.contentOrder).toBe('text-first')
+
+    // El antiguo `body` + `imageAssetId` + `audioAssetId` (sin `contentOrder`
+    // explícito, migrado con el valor por defecto 'text-first') se
+    // convierten en tres bloques en ese orden: texto, imagen, audio.
+    expect(blockShapes(slide.content)).toEqual([
+      { type: 'text', body: '<p>Hola</p>' },
+      { type: 'image', assetId: IMAGE_ID },
+      { type: 'audio', assetId: AUDIO_ID },
+    ])
   })
 
   it('un decision se convierte en diapositiva con sus respuestas intactas', () => {
@@ -144,14 +162,18 @@ describe('parseOrMigrateProjectDocument — documento con forma antigua', () => 
     expect(slide.responses[1]?.imageAssetId).toBe(IMAGE_ID)
     // Una decisión antigua no tenía destino propio de "continuar".
     expect(slide.targetNodeId).toBeUndefined()
+    // Su `body` (vacío) migra igualmente a un único bloque de texto: el
+    // bloque de texto SIEMPRE se crea, incluso vacío.
+    expect(blockShapes(slide.content)).toEqual([{ type: 'text', body: '' }])
   })
 
-  it('un final se conserva tal cual', () => {
+  it('un final se conserva tal cual (sigue teniendo un único body, no content)', () => {
     const migrated = parseOrMigrateProjectDocument(legacyFullDocument())
     const final = migrated.graph.nodes.find((node) => node.id === FINAL_ID)
     expect(final?.type).toBe('final')
-    expect(final?.title).toBe('Fin')
-    expect(final?.body).toBe('<p>Has terminado</p>')
+    if (final?.type !== 'final') throw new Error('esperaba un nodo final')
+    expect(final.title).toBe('Fin')
+    expect(final.body).toBe('<p>Has terminado</p>')
   })
 
   it('si el start no tenía destino, el inicio pasa a ser el nodo de menor number', () => {
@@ -243,10 +265,120 @@ describe('parseOrMigrateProjectDocument — documento ya en forma nueva', () => 
 })
 
 /**
- * Documento en la forma "actual hasta hoy": `SlideNode.imageAssetId`
- * singular, sin `contentOrder` ni `internalNote` — la forma que tenía la app
- * justo antes de admitir varias imágenes por diapositiva. Debe migrarse a
- * `imageAssetIds`/`contentOrder`, ver `migrateSingularImageDocument`.
+ * Documento en la forma "pre-bloques-de-contenido": justo la forma que tenía
+ * `SlideNode` antes de este milestone — un único `body`, una lista
+ * `imageAssetIds`, un `audioAssetId` opcional y `contentOrder`
+ * ('text-first'/'image-first'). Debe migrarse directamente a `content`, ver
+ * `migrateContentBlocksDocument`.
+ */
+function preContentBlocksDocument(contentOrder: 'text-first' | 'image-first'): unknown {
+  return {
+    ...legacyBase(),
+    variables: [],
+    graph: {
+      startNodeId: CONTENT_ID,
+      nodes: [
+        {
+          id: CONTENT_ID,
+          number: 1,
+          type: 'slide',
+          position: { x: 0, y: 0 },
+          title: 'Bienvenida',
+          body: '<p>Hola</p>',
+          targetNodeId: DECISION_ID,
+          continueLabel: 'Siguiente',
+          responses: [],
+          imageAssetIds: [IMAGE_ID, IMAGE_ID_2],
+          audioAssetId: AUDIO_ID,
+          contentOrder,
+        },
+        {
+          id: DECISION_ID,
+          number: 2,
+          type: 'final',
+          position: { x: 200, y: 0 },
+          title: 'Fin',
+          body: '',
+        },
+      ],
+    },
+  }
+}
+
+describe('parseOrMigrateProjectDocument — documento en la forma "pre-bloques-de-contenido"', () => {
+  it("contentOrder 'text-first': content = [texto, ...imágenes en orden, audio]", () => {
+    const migrated = parseOrMigrateProjectDocument(preContentBlocksDocument('text-first'))
+    const slide = migrated.graph.nodes.find((node) => node.id === CONTENT_ID)
+
+    expect(slide?.type).toBe('slide')
+    if (slide?.type !== 'slide') throw new Error('esperaba una diapositiva')
+    expect(blockShapes(slide.content)).toEqual([
+      { type: 'text', body: '<p>Hola</p>' },
+      { type: 'image', assetId: IMAGE_ID },
+      { type: 'image', assetId: IMAGE_ID_2 },
+      { type: 'audio', assetId: AUDIO_ID },
+    ])
+    // El resto de campos (fuera de content) se conserva intacto.
+    expect(slide.targetNodeId).toBe(DECISION_ID)
+    expect(slide.continueLabel).toBe('Siguiente')
+    expect(slide.title).toBe('Bienvenida')
+
+    // Cada bloque tiene un id propio, nuevo y único (no reutiliza ninguno de
+    // la forma anterior, que no tenía id de bloque).
+    const ids = slide.content.map((block) => block.id)
+    expect(new Set(ids).size).toBe(ids.length)
+    for (const id of ids) expect(id.length).toBeGreaterThan(0)
+  })
+
+  it("contentOrder 'image-first': content = [...imágenes en orden, texto, audio]", () => {
+    const migrated = parseOrMigrateProjectDocument(preContentBlocksDocument('image-first'))
+    const slide = migrated.graph.nodes.find((node) => node.id === CONTENT_ID)
+
+    expect(slide?.type).toBe('slide')
+    if (slide?.type !== 'slide') throw new Error('esperaba una diapositiva')
+    expect(blockShapes(slide.content)).toEqual([
+      { type: 'image', assetId: IMAGE_ID },
+      { type: 'image', assetId: IMAGE_ID_2 },
+      { type: 'text', body: '<p>Hola</p>' },
+      { type: 'audio', assetId: AUDIO_ID },
+    ])
+  })
+
+  it('sin imágenes ni audio y con body vacío, content tiene igualmente un único bloque de texto vacío', () => {
+    const doc = preContentBlocksDocument('text-first') as {
+      graph: { nodes: { id: string; imageAssetIds?: string[]; audioAssetId?: string; body?: string }[] }
+    }
+    const node = doc.graph.nodes.find((candidate) => candidate.id === CONTENT_ID)
+    if (node) {
+      node.imageAssetIds = []
+      delete node.audioAssetId
+      node.body = ''
+    }
+
+    const migrated = parseOrMigrateProjectDocument(doc)
+    const slide = migrated.graph.nodes.find((candidate) => candidate.id === CONTENT_ID)
+
+    expect(slide?.type).toBe('slide')
+    if (slide?.type !== 'slide') throw new Error('esperaba una diapositiva')
+    expect(blockShapes(slide.content)).toEqual([{ type: 'text', body: '' }])
+  })
+
+  it('un final de esta forma conserva su body tal cual (sin content)', () => {
+    const migrated = parseOrMigrateProjectDocument(preContentBlocksDocument('text-first'))
+    const final = migrated.graph.nodes.find((node) => node.id === DECISION_ID)
+    expect(final?.type).toBe('final')
+    if (final?.type !== 'final') throw new Error('esperaba un nodo final')
+    expect(final.body).toBe('')
+  })
+})
+
+/**
+ * Documento en la forma "imagen única": `SlideNode.imageAssetId` singular,
+ * sin `contentOrder` ni `internalNote` — la forma que tenía la app justo
+ * antes de admitir varias imágenes por diapositiva. Debe migrar ENCADENADO a
+ * través de dos pasos (imagen única -> pre-bloques -> `content`) en una sola
+ * llamada a `parseOrMigrateProjectDocument`, ver `migrateSingularImageDocument`
+ * + `migrateContentBlocksDocument`.
  */
 function singularImageDocument(overrides?: { imageAssetId?: string }): unknown {
   return {
@@ -298,31 +430,34 @@ function singularImageDocument(overrides?: { imageAssetId?: string }): unknown {
   }
 }
 
-describe('parseOrMigrateProjectDocument — documento en la forma "actual hasta hoy" (imagen singular)', () => {
-  it('migra imageAssetId (con valor) a imageAssetIds: [ese id], y fija contentOrder a text-first', () => {
+describe('parseOrMigrateProjectDocument — documento en la forma "imagen única", encadenado hasta content', () => {
+  it('migra imageAssetId (con valor) a un bloque de imagen, tras el de texto (contentOrder por defecto text-first)', () => {
     const migrated = parseOrMigrateProjectDocument(singularImageDocument({ imageAssetId: IMAGE_ID }))
     const slide = migrated.graph.nodes.find((node) => node.id === CONTENT_ID)
 
     expect(slide?.type).toBe('slide')
     if (slide?.type !== 'slide') throw new Error('esperaba una diapositiva')
-    expect(slide.imageAssetIds).toEqual([IMAGE_ID])
-    expect(slide.contentOrder).toBe('text-first')
+    expect(blockShapes(slide.content)).toEqual([
+      { type: 'text', body: '<p>Hola</p>' },
+      { type: 'image', assetId: IMAGE_ID },
+      { type: 'audio', assetId: AUDIO_ID },
+    ])
     // El resto de campos se conserva intacto.
-    expect(slide.audioAssetId).toBe(AUDIO_ID)
     expect(slide.targetNodeId).toBe(DECISION_ID)
     expect(slide.continueLabel).toBe('Siguiente')
     expect(slide.title).toBe('Bienvenida')
-    expect(slide.body).toBe('<p>Hola</p>')
   })
 
-  it('sin imageAssetId (undefined), migra a imageAssetIds: []', () => {
+  it('sin imageAssetId (undefined), migra a content sin ningún bloque de imagen', () => {
     const migrated = parseOrMigrateProjectDocument(singularImageDocument())
     const slide = migrated.graph.nodes.find((node) => node.id === CONTENT_ID)
 
     expect(slide?.type).toBe('slide')
     if (slide?.type !== 'slide') throw new Error('esperaba una diapositiva')
-    expect(slide.imageAssetIds).toEqual([])
-    expect(slide.contentOrder).toBe('text-first')
+    expect(blockShapes(slide.content)).toEqual([
+      { type: 'text', body: '<p>Hola</p>' },
+      { type: 'audio', assetId: AUDIO_ID },
+    ])
   })
 
   it('el resto de nodos (respuestas, final) y el startNodeId se conservan intactos', () => {
@@ -332,9 +467,9 @@ describe('parseOrMigrateProjectDocument — documento en la forma "actual hasta 
     const decision = migrated.graph.nodes.find((node) => node.id === DECISION_ID)
     expect(decision?.type).toBe('slide')
     if (decision?.type !== 'slide') throw new Error('esperaba una diapositiva')
-    // Las respuestas (con su propio imageAssetId singular, sin cambios) se
-    // conservan tal cual: la migración solo afecta a la imagen de nivel de
-    // nodo.
+    // Las respuestas (con su propio imageAssetId singular, sin cambios: el
+    // modelo de respuesta no forma parte de esta migración) se conservan tal
+    // cual.
     expect(decision.responses).toEqual([
       {
         id: RESPONSE_A_ID,
@@ -350,9 +485,10 @@ describe('parseOrMigrateProjectDocument — documento en la forma "actual hasta 
     expect(final?.title).toBe('Fin')
   })
 
-  it('el resultado migrado vuelve a validar contra el schema nuevo (varias imágenes)', () => {
+  it('el resultado migrado vuelve a validar contra el schema nuevo (bloques de contenido)', () => {
     // No debe lanzar: `parseOrMigrateProjectDocument` ya revalida
-    // internamente contra `ProjectDocumentSchema` antes de devolver.
+    // internamente contra `ProjectDocumentSchema` antes de devolver, tras
+    // las dos migraciones encadenadas.
     expect(() => parseOrMigrateProjectDocument(singularImageDocument({ imageAssetId: IMAGE_ID }))).not.toThrow()
   })
 })
@@ -367,9 +503,10 @@ describe('parseOrMigrateProjectDocument — documento irreconocible', () => {
     )
   })
 
-  it('lanza también con un documento a medio camino entre las dos formas', () => {
-    // Tipos nuevos (`slide`) pero sin `graph.startNodeId`: no es válido como
-    // forma nueva ni reconocible como forma antigua.
+  it('lanza también con un documento a medio camino entre las formas', () => {
+    // Tipos nuevos (`slide`) pero sin `graph.startNodeId` ni `content`/
+    // `imageAssetIds`/`contentOrder`: no es válido como forma actual ni
+    // reconocible como ninguna de las formas antiguas.
     const halfway = {
       ...legacyBase(),
       graph: {
@@ -398,13 +535,13 @@ describe('parseOrMigrateProjectDocument — documento irreconocible', () => {
 
 describe('compatibilidad: documento sin `variables` (formato de hoy)', () => {
   it('parsea con variables: [] sin código de migración adicional', () => {
-    // La forma NUEVA de hoy (nodos `slide`/`final`, con `graph.startNodeId`)
-    // ya no lleva `variables` porque el campo no existía antes de esta fase.
-    // Es aditivo por diseño: `ProjectDocumentSchema.variables` tiene
-    // `.default([])`, así que no hace falta ningún esquema/transformación
-    // dedicados en `migration.ts` para reconocer esta forma — a diferencia
-    // de las migraciones legacy/singular-image de arriba, que sí necesitan
-    // su propio esquema de reconocimiento.
+    // La forma ACTUAL (nodos `slide`/`final`, con `graph.startNodeId` y
+    // `content`) ya no lleva `variables` porque el campo no existía antes de
+    // esta fase. Es aditivo por diseño: `ProjectDocumentSchema.variables`
+    // tiene `.default([])`, así que no hace falta ningún esquema/
+    // transformación dedicados en `migration.ts` para reconocer esta forma —
+    // a diferencia de las migraciones legacy/imagen-única/pre-bloques de
+    // arriba, que sí necesitan su propio esquema de reconocimiento.
     const current = createProject('Sin variables')
     const raw = JSON.parse(JSON.stringify(current)) as Record<string, unknown>
     delete raw.variables // simula un `.brunch` guardado antes de esta fase

@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import { addResponse, connect, createNode, createProject, disconnect, updateNode } from '../../../domain'
+import {
+  addImageBlock,
+  addResponse,
+  addTextBlock,
+  connect,
+  createNode,
+  createProject,
+  disconnect,
+  updateNode,
+  updateTextBlockBody,
+} from '../../../domain'
 import type { ProjectDocument } from '../../../domain'
 import { serializeRichBody } from '../../richText/richTextContent'
 import { resolveConnection, toFlowEdges, toFlowNodes } from '../adapter'
@@ -17,6 +27,20 @@ function otherNodeIdOf(project: ProjectDocument, type: 'slide' | 'final'): strin
 function firstResponseId(project: ProjectDocument, nodeId: string): string {
   const node = project.graph.nodes.find((n) => n.id === nodeId)
   const id = node?.type === 'slide' ? node.responses[0]?.id : undefined
+  if (!id) throw new Error('setup inválido')
+  return id
+}
+
+/** Ids, en orden, de todos los bloques de `content` de una diapositiva. */
+function blockIds(project: ProjectDocument, nodeId: string): string[] {
+  const node = project.graph.nodes.find((n) => n.id === nodeId)
+  return node?.type === 'slide' ? node.content.map((block) => block.id) : []
+}
+
+/** Id del primer bloque de `content` de una diapositiva — el bloque de
+ *  texto inicial que siembra `createNode`/`createProject`. */
+function firstBlockId(project: ProjectDocument, nodeId: string): string {
+  const id = blockIds(project, nodeId)[0]
   if (!id) throw new Error('setup inválido')
   return id
 }
@@ -247,18 +271,44 @@ describe('toFlowNodes — internalNote (tarea 6) y bodyPreview (tarea 8)', () =>
     expect(flowNodes[0]?.data.bodyPreview).toBeUndefined()
   })
 
-  it('bodyPreview extrae el texto plano del body (Tiptap), no el JSON en crudo', () => {
+  it('bodyPreview extrae el texto plano del body (Tiptap) de una diapositiva, no el JSON en crudo', () => {
     let project = createProject('P')
     const startId = project.graph.startNodeId
     const body = serializeRichBody({
       type: 'doc',
       content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Bienvenido al escenario' }] }],
     })
-    project = updateNode(project, startId, { body })
+    project = updateTextBlockBody(project, startId, firstBlockId(project, startId), body)
 
     const flowNodes = toFlowNodes(project, [])
     expect(flowNodes[0]?.data.bodyPreview).toBe('Bienvenido al escenario')
     expect(flowNodes[0]?.data.bodyPreview).not.toMatch(/[{}]/)
+  })
+
+  it('bodyPreview concatena, en orden, el texto plano de TODOS los bloques de texto de una diapositiva', () => {
+    let project = createProject('P')
+    const startId = project.graph.startNodeId
+    const firstBody = serializeRichBody({
+      type: 'doc',
+      content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Primer bloque' }] }],
+    })
+    project = updateTextBlockBody(project, startId, firstBlockId(project, startId), firstBody)
+    // Un bloque de imagen intermedio: no aporta texto, no debe romper la
+    // concatenación de los bloques de texto que lo rodean.
+    project = addImageBlock(project, startId, crypto.randomUUID())
+    project = addTextBlock(project, startId)
+    const secondTextBlockId = blockIds(project, startId).at(-1)
+    if (!secondTextBlockId) throw new Error('setup inválido')
+    const secondBody = serializeRichBody({
+      type: 'doc',
+      content: [{ type: 'paragraph', content: [{ type: 'text', text: 'segundo bloque' }] }],
+    })
+    project = updateTextBlockBody(project, startId, secondTextBlockId, secondBody)
+
+    const flowNodes = toFlowNodes(project, [])
+    // Los dos bloques de texto se concatenan con un espacio, en el orden
+    // del array `content` (el bloque de imagen intermedio se salta).
+    expect(flowNodes[0]?.data.bodyPreview).toBe('Primer bloque segundo bloque')
   })
 
   it('bodyPreview se trunca con "…" cuando el texto supera el máximo', () => {
@@ -269,12 +319,25 @@ describe('toFlowNodes — internalNote (tarea 6) y bodyPreview (tarea 8)', () =>
       type: 'doc',
       content: [{ type: 'paragraph', content: [{ type: 'text', text: longText }] }],
     })
-    project = updateNode(project, startId, { body })
+    project = updateTextBlockBody(project, startId, firstBlockId(project, startId), body)
 
     const flowNodes = toFlowNodes(project, [])
     const preview = flowNodes[0]?.data.bodyPreview
     expect(preview?.endsWith('…')).toBe(true)
     expect(preview?.length).toBeLessThan(longText.length)
+  })
+
+  it('bodyPreview de un Final sigue usando su único body (sin content)', () => {
+    let project = createNode(createProject('P'), 'final', { x: 0, y: 0 })
+    const finalId = otherNodeIdOf(project, 'final')
+    const body = serializeRichBody({
+      type: 'doc',
+      content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Fin del recorrido' }] }],
+    })
+    project = updateNode(project, finalId, { body })
+
+    const flowNodes = toFlowNodes(project, [])
+    expect(flowNodes.find((n) => n.id === finalId)?.data.bodyPreview).toBe('Fin del recorrido')
   })
 })
 

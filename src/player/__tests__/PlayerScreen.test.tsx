@@ -40,6 +40,15 @@ function addResponseTo(nodeId: string): string {
   return id
 }
 
+/** Id del bloque de `content` de una diapositiva en la posición `index`. */
+function contentBlockIdAt(nodeId: string, index: number): string {
+  const node = useProjectStore.getState().project.graph.nodes.find((n) => n.id === nodeId)
+  const content = node?.type === 'slide' ? node.content : []
+  const id = content[index]?.id
+  if (!id) throw new Error(`No hay ningún bloque de content en el índice ${index} de "${nodeId}"`)
+  return id
+}
+
 function renderPlayer(services?: Partial<AppServices>) {
   return render(
     <AppServicesProvider services={services}>
@@ -55,10 +64,12 @@ function renderPlayer(services?: Partial<AppServices>) {
  */
 function buildGraphInStore() {
   const startId = startNodeId()
+  const startBlockId = contentBlockIdAt(startId, 0)
   act(() => {
+    useProjectStore.getState().updateNode(startId, { title: 'Bienvenida' })
     useProjectStore
       .getState()
-      .updateNode(startId, { title: 'Bienvenida', body: 'Hola, esto es el inicio.' })
+      .updateTextBlockBody(startId, startBlockId, 'Hola, esto es el inicio.')
     useProjectStore.getState().createNode('slide', { x: 200, y: 0 }, { title: '¿Qué eliges?' })
   })
   const decisionId = otherNodeIdOf('slide')
@@ -222,10 +233,10 @@ describe('PlayerScreen', () => {
       useProjectStore.getState().loadProject(project)
     })
     const startId = startNodeId()
+    const startBlockId = contentBlockIdAt(startId, 0)
     act(() => {
-      useProjectStore
-        .getState()
-        .updateNode(startId, { title: 'Título exacto', body: 'Cuerpo exacto' })
+      useProjectStore.getState().updateNode(startId, { title: 'Título exacto' })
+      useProjectStore.getState().updateTextBlockBody(startId, startBlockId, 'Cuerpo exacto')
       useProjectStore.getState().createNode('final', { x: 150, y: 0 })
     })
     const finalId = otherNodeIdOf('final')
@@ -284,8 +295,10 @@ describe('PlayerScreen: texto enriquecido del body', () => {
    *  final, para que el Player la muestre como diapositiva "de continuar". */
   function withRichStartSlide(body: string, title: string) {
     const startId = startNodeId()
+    const startBlockId = contentBlockIdAt(startId, 0)
     act(() => {
-      useProjectStore.getState().updateNode(startId, { title, body })
+      useProjectStore.getState().updateNode(startId, { title })
+      useProjectStore.getState().updateTextBlockBody(startId, startBlockId, body)
       useProjectStore.getState().createNode('final', { x: 200, y: 0 })
     })
     const finalId = otherNodeIdOf('final')
@@ -350,11 +363,9 @@ describe('PlayerScreen: imagen/audio adjuntos', () => {
 
     const startId = startNodeId()
     act(() => {
-      useProjectStore.getState().updateNode(startId, {
-        title: 'Con media',
-        imageAssetIds: [imageId],
-        audioAssetId: audioId,
-      })
+      useProjectStore.getState().updateNode(startId, { title: 'Con media' })
+      useProjectStore.getState().addImageBlock(startId, imageId)
+      useProjectStore.getState().addAudioBlock(startId, audioId)
       useProjectStore.getState().createNode('final', { x: 200, y: 0 })
     })
     const finalId = otherNodeIdOf('final')
@@ -416,12 +427,12 @@ describe('PlayerScreen: imagen/audio adjuntos', () => {
     }
 
     const startId = startNodeId()
+    const seededBlockId = contentBlockIdAt(startId, 0)
+
     act(() => {
-      useProjectStore.getState().updateNode(startId, {
-        title: 'Diapositiva con media rota',
-        body: 'El texto sigue aquí.',
-        imageAssetIds: ['asset-inexistente'],
-      })
+      useProjectStore.getState().updateNode(startId, { title: 'Diapositiva con media rota' })
+      useProjectStore.getState().updateTextBlockBody(startId, seededBlockId, 'El texto sigue aquí.')
+      useProjectStore.getState().addImageBlock(startId, 'asset-inexistente')
       useProjectStore.getState().createNode('final', { x: 200, y: 0 })
     })
     const finalId = otherNodeIdOf('final')
@@ -442,7 +453,7 @@ describe('PlayerScreen: imagen/audio adjuntos', () => {
   })
 })
 
-describe('PlayerScreen: varias imágenes por diapositiva y orden de contenido (tarea 5)', () => {
+describe('PlayerScreen: bloques de contenido de una diapositiva (milestone "Bloques de contenido")', () => {
   it('pinta TODAS las imágenes de imageAssetIds, apiladas, en el orden del array', async () => {
     const assetRepository = new MemoryAssetRepository()
     const imageAId = await importFakeAsset(assetRepository, '/tmp/a.png', [1], 'image/png')
@@ -450,10 +461,9 @@ describe('PlayerScreen: varias imágenes por diapositiva y orden de contenido (t
 
     const startId = startNodeId()
     act(() => {
-      useProjectStore.getState().updateNode(startId, {
-        title: 'Con varias imágenes',
-        imageAssetIds: [imageAId, imageBId],
-      })
+      useProjectStore.getState().updateNode(startId, { title: 'Con varias imágenes' })
+      useProjectStore.getState().addImageBlock(startId, imageAId)
+      useProjectStore.getState().addImageBlock(startId, imageBId)
       useProjectStore.getState().createNode('final', { x: 200, y: 0 })
     })
     const finalId = otherNodeIdOf('final')
@@ -470,7 +480,7 @@ describe('PlayerScreen: varias imágenes por diapositiva y orden de contenido (t
     const images = [
       ...container.querySelectorAll<HTMLImageElement>('img[alt="Imagen de esta pantalla"]'),
     ]
-    // Ambas cargadas (assets distintos), en el mismo orden del array.
+    // Ambas cargadas (assets distintos), en el mismo orden en que se añadieron.
     await waitFor(() => {
       expect(images.every((img) => img.getAttribute('src')?.startsWith('data:image/png;base64,'))).toBe(
         true,
@@ -478,19 +488,32 @@ describe('PlayerScreen: varias imágenes por diapositiva y orden de contenido (t
     })
   })
 
-  it('contentOrder "text-first" (por defecto) pinta el cuerpo antes que las imágenes', async () => {
+  it('pinta bloques de texto/imagen/audio intercalados, en el orden exacto en que se añadieron', async () => {
     const assetRepository = new MemoryAssetRepository()
-    const imageId = await importFakeAsset(assetRepository, '/tmp/c.png', [3], 'image/png')
+    const imageId = await importFakeAsset(assetRepository, '/tmp/e.png', [5], 'image/png')
+    const audioId = await importFakeAsset(assetRepository, '/tmp/e.mp3', [6], 'audio/mpeg')
 
     const startId = startNodeId()
+    // La diapositiva nace con un único bloque de texto vacío (ver
+    // `newSlideNode` en `src/domain/project.ts`): se reutiliza como PRIMER
+    // bloque de texto en vez de añadir uno nuevo, así el orden final es
+    // texto -> imagen -> texto -> audio.
+    const seededBlockId = contentBlockIdAt(startId, 0)
+
     act(() => {
-      useProjectStore.getState().updateNode(startId, {
-        body: 'Cuerpo de la diapositiva',
-        imageAssetIds: [imageId],
-        contentOrder: 'text-first',
-      })
+      useProjectStore.getState().updateTextBlockBody(startId, seededBlockId, 'Primer texto')
+      useProjectStore.getState().addImageBlock(startId, imageId)
+      useProjectStore.getState().addTextBlock(startId)
       useProjectStore.getState().createNode('final', { x: 200, y: 0 })
     })
+
+    const secondTextBlockId = contentBlockIdAt(startId, 2)
+
+    act(() => {
+      useProjectStore.getState().updateTextBlockBody(startId, secondTextBlockId, 'Segundo texto')
+      useProjectStore.getState().addAudioBlock(startId, audioId)
+    })
+
     const finalId = otherNodeIdOf('final')
     act(() => {
       useProjectStore.getState().connect(startId, finalId)
@@ -499,49 +522,22 @@ describe('PlayerScreen: varias imágenes por diapositiva y orden de contenido (t
     const { container } = renderPlayer({ assetRepository })
 
     await waitFor(() => {
-      expect(container.querySelector('img[alt="Imagen de esta pantalla"]')).toBeInTheDocument()
+      expect(container.querySelector('audio')).toBeInTheDocument()
     })
-    const card = container.querySelector(`.${styles.card}`)
-    const body = card?.querySelector(`.${styles.body}`)
-    const media = card?.querySelector(`.${styles.mediaSection}`)
-    expect(body).toBeTruthy()
-    expect(media).toBeTruthy()
-    expect(
-      body!.compareDocumentPosition(media!) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy()
-  })
-
-  it('contentOrder "image-first" pinta las imágenes antes que el cuerpo', async () => {
-    const assetRepository = new MemoryAssetRepository()
-    const imageId = await importFakeAsset(assetRepository, '/tmp/d.png', [4], 'image/png')
-
-    const startId = startNodeId()
-    act(() => {
-      useProjectStore.getState().updateNode(startId, {
-        body: 'Cuerpo de la diapositiva',
-        imageAssetIds: [imageId],
-        contentOrder: 'image-first',
-      })
-      useProjectStore.getState().createNode('final', { x: 200, y: 0 })
-    })
-    const finalId = otherNodeIdOf('final')
-    act(() => {
-      useProjectStore.getState().connect(startId, finalId)
-    })
-
-    const { container } = renderPlayer({ assetRepository })
-
     await waitFor(() => {
-      expect(container.querySelector('img[alt="Imagen de esta pantalla"]')).toBeInTheDocument()
+      expect(container.querySelector('audio')?.getAttribute('src')).toContain(
+        'data:audio/mpeg;base64,',
+      )
     })
+
     const card = container.querySelector(`.${styles.card}`)
-    const body = card?.querySelector(`.${styles.body}`)
-    const media = card?.querySelector(`.${styles.mediaSection}`)
-    expect(body).toBeTruthy()
-    expect(media).toBeTruthy()
-    expect(
-      media!.compareDocumentPosition(body!) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy()
+    const elements = [
+      ...(card?.querySelectorAll<HTMLElement>(`.${styles.body}, img, audio`) ?? []),
+    ]
+    // Orden exacto de `SlideNode.content`: texto, imagen, texto, audio.
+    expect(elements.map((element) => element.tagName)).toEqual(['DIV', 'IMG', 'DIV', 'AUDIO'])
+    expect(elements[0]?.textContent).toContain('Primer texto')
+    expect(elements[2]?.textContent).toContain('Segundo texto')
   })
 })
 

@@ -98,22 +98,6 @@ describe('acciones de dominio: una entrada de historial por acción', () => {
     expect(redone?.title).toBe('Inicio')
   })
 
-  it('updateNode propaga imageAssetIds/audioAssetId de una diapositiva (fijar y vaciar)', () => {
-    useProjectStore.getState().createNode('slide', { x: 0, y: 0 })
-    const slideId = nodeIdOf('slide')
-
-    useProjectStore.getState().updateNode(slideId, {
-      imageAssetIds: ['asset-imagen-1'],
-      audioAssetId: 'asset-audio-1',
-    })
-    expect(slideNode(slideId).imageAssetIds).toEqual(['asset-imagen-1'])
-    expect(slideNode(slideId).audioAssetId).toBe('asset-audio-1')
-
-    useProjectStore.getState().updateNode(slideId, { imageAssetIds: [] })
-    expect(slideNode(slideId).imageAssetIds).toEqual([])
-    expect(slideNode(slideId).audioAssetId).toBe('asset-audio-1')
-  })
-
   it('updateNode propaga continueLabel (fijar y borrar con null)', () => {
     const startId = startNodeId()
 
@@ -281,6 +265,105 @@ describe('acciones de dominio: una entrada de historial por acción', () => {
     useProjectStore.getState().redo()
     expect(useProjectStore.getState().project.graph.nodes.length).toBe(before + 1)
     expect(useProjectStore.getState().project.graph.nodes.some((n) => n.id === copyId)).toBe(true)
+  })
+})
+
+describe('bloques de contenido de una diapositiva (milestone "Bloques de contenido", fase 2)', () => {
+  it('addTextBlock produce una entrada deshacible/rehacible', () => {
+    const startId = startNodeId()
+    const before = slideNode(startId).content.length
+    const historyBefore = useProjectStore.getState().history.past.length
+
+    useProjectStore.getState().addTextBlock(startId)
+
+    expect(slideNode(startId).content).toHaveLength(before + 1)
+    expect(useProjectStore.getState().history.past.length).toBe(historyBefore + 1)
+
+    useProjectStore.getState().undo()
+    expect(slideNode(startId).content).toHaveLength(before)
+
+    useProjectStore.getState().redo()
+    expect(slideNode(startId).content).toHaveLength(before + 1)
+  })
+
+  it('addImageBlock/addAudioBlock producen una entrada deshacible/rehacible cada una', () => {
+    const startId = startNodeId()
+    const before = slideNode(startId).content.length
+    const historyBefore = useProjectStore.getState().history.past.length
+
+    useProjectStore.getState().addImageBlock(startId, 'asset-imagen-1')
+    expect(slideNode(startId).content).toHaveLength(before + 1)
+    expect(slideNode(startId).content.at(-1)).toMatchObject({ type: 'image', assetId: 'asset-imagen-1' })
+    expect(useProjectStore.getState().history.past.length).toBe(historyBefore + 1)
+
+    useProjectStore.getState().addAudioBlock(startId, 'asset-audio-1')
+    expect(slideNode(startId).content).toHaveLength(before + 2)
+    expect(slideNode(startId).content.at(-1)).toMatchObject({ type: 'audio', assetId: 'asset-audio-1' })
+    expect(useProjectStore.getState().history.past.length).toBe(historyBefore + 2)
+
+    useProjectStore.getState().undo() // deshace addAudioBlock
+    expect(slideNode(startId).content).toHaveLength(before + 1)
+
+    useProjectStore.getState().undo() // deshace addImageBlock
+    expect(slideNode(startId).content).toHaveLength(before)
+  })
+
+  it('updateTextBlockBody produce una entrada deshacible/rehacible', () => {
+    const startId = startNodeId()
+    const blockId = slideNode(startId).content[0]?.id
+    if (!blockId) throw new Error('setup inválido')
+    const historyBefore = useProjectStore.getState().history.past.length
+
+    useProjectStore.getState().updateTextBlockBody(startId, blockId, 'Hola')
+    expect(useProjectStore.getState().history.past.length).toBe(historyBefore + 1)
+    const block = slideNode(startId).content.find((b) => b.id === blockId)
+    expect(block?.type === 'text' ? block.body : undefined).toBe('Hola')
+
+    useProjectStore.getState().undo()
+    const reverted = slideNode(startId).content.find((b) => b.id === blockId)
+    expect(reverted?.type === 'text' ? reverted.body : undefined).toBe('')
+
+    useProjectStore.getState().redo()
+    const redone = slideNode(startId).content.find((b) => b.id === blockId)
+    expect(redone?.type === 'text' ? redone.body : undefined).toBe('Hola')
+  })
+
+  it('removeContentBlock produce una entrada deshacible/rehacible', () => {
+    const startId = startNodeId()
+    useProjectStore.getState().addTextBlock(startId)
+    const blockId = slideNode(startId).content[1]?.id
+    if (!blockId) throw new Error('setup inválido')
+    const before = slideNode(startId).content.length
+    const historyBefore = useProjectStore.getState().history.past.length
+
+    useProjectStore.getState().removeContentBlock(startId, blockId)
+    expect(slideNode(startId).content).toHaveLength(before - 1)
+    expect(useProjectStore.getState().history.past.length).toBe(historyBefore + 1)
+
+    useProjectStore.getState().undo()
+    expect(slideNode(startId).content).toHaveLength(before)
+    expect(slideNode(startId).content.some((b) => b.id === blockId)).toBe(true)
+
+    useProjectStore.getState().redo()
+    expect(slideNode(startId).content).toHaveLength(before - 1)
+  })
+
+  it('moveContentBlock produce una entrada deshacible/rehacible', () => {
+    const startId = startNodeId()
+    useProjectStore.getState().addTextBlock(startId)
+    const [firstId, secondId] = slideNode(startId).content.map((b) => b.id)
+    if (!firstId || !secondId) throw new Error('setup inválido')
+    const historyBefore = useProjectStore.getState().history.past.length
+
+    useProjectStore.getState().moveContentBlock(startId, secondId, 0)
+    expect(slideNode(startId).content.map((b) => b.id)).toEqual([secondId, firstId])
+    expect(useProjectStore.getState().history.past.length).toBe(historyBefore + 1)
+
+    useProjectStore.getState().undo()
+    expect(slideNode(startId).content.map((b) => b.id)).toEqual([firstId, secondId])
+
+    useProjectStore.getState().redo()
+    expect(slideNode(startId).content.map((b) => b.id)).toEqual([secondId, firstId])
   })
 })
 

@@ -3,6 +3,7 @@ import { buildHtmlBundle } from '../htmlBundle'
 import { BUNDLE_ELEMENT_ID } from '../exportedPlayerScript'
 import type { ExportAssetMap } from '../exportAssets'
 import type {
+  ContentBlock,
   DecisionResponse,
   FinalNode,
   ProjectDocument,
@@ -52,6 +53,22 @@ function makeResponse(overrides: Partial<DecisionResponse> & { id: string }): De
   } as DecisionResponse
 }
 
+/** Bloques de `SlideNode.content` de prueba, con un id único por llamada
+ *  (milestone "Bloques de contenido"). */
+let blockCounter = 0
+function textBlock(body: string): ContentBlock {
+  blockCounter += 1
+  return { id: `block-text-${blockCounter}`, type: 'text', body }
+}
+function imageBlock(assetId: string): ContentBlock {
+  blockCounter += 1
+  return { id: `block-image-${blockCounter}`, type: 'image', assetId }
+}
+function audioBlock(assetId: string): ContentBlock {
+  blockCounter += 1
+  return { id: `block-audio-${blockCounter}`, type: 'audio', assetId }
+}
+
 function sampleProject(): ProjectDocument {
   const slide: SlideNode = {
     id: SLIDE_ID,
@@ -59,13 +76,14 @@ function sampleProject(): ProjectDocument {
     type: 'slide',
     position: { x: 0, y: 0 },
     title: 'Primer contacto',
-    body: richBody('Bienvenido al escenario. Presta atención al ', 'protocolo'),
     targetNodeId: DECISION_ID,
     continueLabel: 'Empezar el caso',
     responses: [],
-    imageAssetIds: [IMAGE_ASSET_ID],
-    audioAssetId: AUDIO_ASSET_ID,
-    contentOrder: 'text-first',
+    content: [
+      textBlock(richBody('Bienvenido al escenario. Presta atención al ', 'protocolo')),
+      imageBlock(IMAGE_ASSET_ID),
+      audioBlock(AUDIO_ASSET_ID),
+    ],
     internalNote: 'Recordatorio interno: pedir revisión al equipo de diseño',
   }
 
@@ -75,7 +93,6 @@ function sampleProject(): ProjectDocument {
     type: 'slide',
     position: { x: 300, y: 0 },
     title: '¿Qué haces?',
-    body: richBody('El paciente no responde.'),
     targetNodeId: undefined,
     continueLabel: undefined,
     responses: [
@@ -95,9 +112,7 @@ function sampleProject(): ProjectDocument {
         targetNodeId: FINAL_ID,
       }),
     ],
-    imageAssetIds: [],
-    audioAssetId: undefined,
-    contentOrder: 'text-first',
+    content: [textBlock(richBody('El paciente no responde.'))],
   }
 
   const final: FinalNode = {
@@ -142,27 +157,25 @@ const multiImageAssets: ExportAssetMap = {
   [SECOND_IMAGE_ASSET_ID]: { mimeType: 'image/png', dataBase64: 'U0VDT05EQQ==' },
 }
 
-/** Documento mínimo con una única diapositiva "de continuar" con dos
- *  imágenes (en `imageAssetIds`, orden IMAGE_ASSET_ID -> SECOND_IMAGE_ASSET_ID)
- *  y sin destino, para observar solo el bloque de medios en el DOM
- *  exportado sin el ruido del resto de `sampleProject()`. */
-function multiImageProject(contentOrder: 'text-first' | 'image-first'): ProjectDocument {
+/** Documento mínimo con una única diapositiva "de continuar" con el
+ *  `content` (bloques de texto/imagen/audio, milestone "Bloques de
+ *  contenido") indicado y sin destino más que el Final trivial de abajo,
+ *  para observar solo esos bloques en el DOM exportado sin el ruido del
+ *  resto de `sampleProject()`. */
+function blocksProject(content: ContentBlock[]): ProjectDocument {
   const slide: SlideNode = {
     id: MULTI_IMAGE_SLIDE_ID,
     number: 1,
     type: 'slide',
     position: { x: 0, y: 0 },
-    title: 'Varias imágenes',
-    body: richBody('Cuerpo de la diapositiva.'),
+    title: 'Varios bloques',
     // Destino de "continuar" a un Final trivial: solo hace falta que la
     // vista resuelva a `continue` (con target) en vez de `dead-end`, para
-    // poder observar el bloque de medios.
+    // poder observar los bloques.
     targetNodeId: MULTI_IMAGE_FINAL_ID,
     continueLabel: undefined,
     responses: [],
-    imageAssetIds: [IMAGE_ASSET_ID, SECOND_IMAGE_ASSET_ID],
-    audioAssetId: undefined,
-    contentOrder,
+    content,
   }
 
   const final: FinalNode = {
@@ -338,13 +351,10 @@ describe('buildHtmlBundle — contenido del archivo generado', () => {
             type: 'slide',
             position: { x: 0, y: 0 },
             title: 'Con destacado',
-            body,
             targetNodeId: undefined,
             continueLabel: undefined,
             responses: [],
-            imageAssetIds: [],
-            audioAssetId: undefined,
-            contentOrder: 'text-first',
+            content: [textBlock(body)],
           },
         ],
         startNodeId: slideId,
@@ -401,13 +411,10 @@ describe('buildHtmlBundle — contenido del archivo generado', () => {
             type: 'slide',
             position: { x: 0, y: 0 },
             title: 'Con tabla',
-            body,
             targetNodeId: undefined,
             continueLabel: undefined,
             responses: [],
-            imageAssetIds: [],
-            audioAssetId: undefined,
-            contentOrder: 'text-first',
+            content: [textBlock(body)],
           },
         ],
         startNodeId: slideId,
@@ -633,57 +640,75 @@ describe('buildHtmlBundle — comportamiento del HTML generado (jsdom)', () => {
   })
 })
 
-describe('buildHtmlBundle — varias imágenes por diapositiva y orden de contenido (tarea 5)', () => {
+describe('buildHtmlBundle — bloques de contenido de una diapositiva (milestone "Bloques de contenido")', () => {
   beforeEach(() => {
     document.body.innerHTML = ''
   })
 
-  it('pinta TODAS las imágenes de imageAssetIds, apiladas, en el orden del array', () => {
-    runExportedBundle(buildHtmlBundle(multiImageProject('text-first'), multiImageAssets))
+  it('pinta TODOS los bloques de imagen, en el orden de content', () => {
+    const content = [imageBlock(IMAGE_ASSET_ID), imageBlock(SECOND_IMAGE_ASSET_ID)]
+    runExportedBundle(buildHtmlBundle(blocksProject(content), multiImageAssets))
 
-    const images = [...currentCard().querySelectorAll<HTMLImageElement>('.mediaSection img')]
+    const images = [...currentCard().querySelectorAll<HTMLImageElement>('img')]
     expect(images.map((img) => img.getAttribute('src'))).toEqual([
       'data:image/png;base64,UE5HRkFLRQ==',
       'data:image/png;base64,U0VDT05EQQ==',
     ])
   })
 
-  it('contentOrder "text-first" (por defecto) pinta el cuerpo antes que las imágenes', () => {
-    runExportedBundle(buildHtmlBundle(multiImageProject('text-first'), multiImageAssets))
+  it('pinta bloques de texto/imagen/audio intercalados, en el orden exacto de content', () => {
+    const content = [
+      textBlock(richBody('Primer texto')),
+      imageBlock(IMAGE_ASSET_ID),
+      textBlock(richBody('Segundo texto')),
+      audioBlock(AUDIO_ASSET_ID),
+    ]
+    runExportedBundle(buildHtmlBundle(blocksProject(content), sampleAssets))
 
     const card = currentCard()
-    const body = card.querySelector('.body')
-    const mediaSection = card.querySelector('.mediaSection')
-    expect(body).not.toBeNull()
-    expect(mediaSection).not.toBeNull()
-    // `compareDocumentPosition` con el bit DOCUMENT_POSITION_FOLLOWING (4)
-    // confirma que `mediaSection` viene DESPUÉS de `body` en el DOM.
-    expect(body!.compareDocumentPosition(mediaSection!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-  })
-
-  it('contentOrder "image-first" pinta las imágenes antes que el cuerpo', () => {
-    runExportedBundle(buildHtmlBundle(multiImageProject('image-first'), multiImageAssets))
-
-    const card = currentCard()
-    const body = card.querySelector('.body')
-    const mediaSection = card.querySelector('.mediaSection')
-    expect(body).not.toBeNull()
-    expect(mediaSection).not.toBeNull()
-    expect(mediaSection!.compareDocumentPosition(body!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    const elements = [...card.querySelectorAll<HTMLElement>('.body, img, audio')]
+    expect(elements.map((element) => element.tagName)).toEqual(['DIV', 'IMG', 'DIV', 'AUDIO'])
+    expect(elements[0]?.textContent).toContain('Primer texto')
+    expect((elements[1] as HTMLImageElement).getAttribute('src')).toBe(
+      'data:image/png;base64,UE5HRkFLRQ==',
+    )
+    expect(elements[2]?.textContent).toContain('Segundo texto')
+    expect((elements[3] as HTMLAudioElement).getAttribute('src')).toBe(
+      'data:audio/mpeg;base64,TVAzRkFLRQ==',
+    )
   })
 
   it('una imagen no resuelta se omite sin romper el orden de las demás', () => {
     // Solo la segunda imagen está en el mapa de assets: la primera se omite.
+    const content = [imageBlock(IMAGE_ASSET_ID), imageBlock(SECOND_IMAGE_ASSET_ID)]
     runExportedBundle(
-      buildHtmlBundle(multiImageProject('text-first'), {
+      buildHtmlBundle(blocksProject(content), {
         [SECOND_IMAGE_ASSET_ID]: multiImageAssets[SECOND_IMAGE_ASSET_ID]!,
       }),
     )
 
-    const images = [...currentCard().querySelectorAll<HTMLImageElement>('.mediaSection img')]
+    const images = [...currentCard().querySelectorAll<HTMLImageElement>('img')]
     expect(images.map((img) => img.getAttribute('src'))).toEqual([
       'data:image/png;base64,U0VDT05EQQ==',
     ])
+  })
+
+  it('un bloque de texto vacío en medio de content no pinta nada, sin romper el resto', () => {
+    const content = [textBlock(richBody('Antes')), textBlock(''), imageBlock(IMAGE_ASSET_ID)]
+    runExportedBundle(buildHtmlBundle(blocksProject(content), sampleAssets))
+
+    const card = currentCard()
+    expect(card.querySelectorAll('.body')).toHaveLength(1)
+    expect(card.querySelector('.body')?.textContent).toContain('Antes')
+    expect(card.querySelector('img')).not.toBeNull()
+  })
+
+  it('una diapositiva sin ningún bloque pinta el texto de repuesto', () => {
+    runExportedBundle(buildHtmlBundle(blocksProject([]), {}))
+
+    expect(currentCard().querySelector('.body')?.textContent).toBe(
+      'Esta diapositiva todavía no tiene contenido.',
+    )
   })
 })
 
@@ -729,7 +754,6 @@ function variablesProject(): ProjectDocument {
     type: 'slide',
     position: { x: 0, y: 0 },
     title: 'Decisión con condiciones',
-    body: richBody('¿Qué haces?'),
     targetNodeId: undefined,
     continueLabel: undefined,
     responses: [
@@ -757,9 +781,7 @@ function variablesProject(): ProjectDocument {
         condition: { variableId: FLAG_VAR_ID, operator: '==', value: true },
       }),
     ],
-    imageAssetIds: [],
-    audioAssetId: undefined,
-    contentOrder: 'text-first',
+    content: [textBlock(richBody('¿Qué haces?'))],
   }
 
   const router: SlideNode = {
@@ -768,15 +790,12 @@ function variablesProject(): ProjectDocument {
     type: 'slide',
     position: { x: 300, y: 0 },
     title: 'Enrutador condicional',
-    body: richBody('Calculando destino…'),
     targetNodeId: VAR_FINAL_TRUE_ID,
     elseTargetNodeId: VAR_FINAL_FALSE_ID,
     condition: { variableId: FLAG_VAR_ID, operator: '==', value: true },
     continueLabel: 'Ver resultado',
     responses: [],
-    imageAssetIds: [],
-    audioAssetId: undefined,
-    contentOrder: 'text-first',
+    content: [textBlock(richBody('Calculando destino…'))],
   }
 
   const finalTrue: FinalNode = {

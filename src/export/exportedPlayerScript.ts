@@ -439,7 +439,9 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
   }
 
   /** Cuerpo enriquecido ya renderizado en tiempo de exportación (Tiptap ->
-   *  HTML estático). \`fallback\` se pinta como texto plano cuando el nodo no
+   *  HTML estático), de un nodo con un único \`body\` (solo \`final\`, ver
+   *  \`appendContent\` más abajo para los bloques de \`content\` de una
+   *  diapositiva). \`fallback\` se pinta como texto plano cuando el nodo no
    *  tiene cuerpo; \`null\` significa "no pintar nada". */
   function appendBody(card, node, fallback) {
     var html = bodyHtml[node.id];
@@ -453,6 +455,73 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
       var paragraph = el('p', 'body');
       paragraph.textContent = fallback;
       card.appendChild(paragraph);
+    }
+  }
+
+  /** Pinta un único bloque de \`SlideNode.content\` (milestone "Bloques de
+   *  contenido"), según su \`type\` — traducción literal de
+   *  \`ContentBlockView\` en \`src/player/PlayerScreen.tsx\`: texto (HTML ya
+   *  renderizado en tiempo de exportación, indexado por \`block.id\` en
+   *  \`bodyHtml\`, ver \`renderNodeBodies\` en \`htmlBundle.ts\`), imagen o
+   *  audio (\`data:\` URI ya resuelto, indexado por \`block.assetId\` en
+   *  \`assetUris\`). Un bloque de texto vacío, o un bloque de imagen/audio
+   *  cuyo asset no se pudo leer en tiempo de exportación, no pinta nada —
+   *  mismo criterio tolerante que el resto del runtime exportado. */
+  function appendContentBlock(card, block) {
+    if (block.type === 'text') {
+      var html = bodyHtml[block.id];
+      if (!trimmed(block.body) || !html) {
+        return;
+      }
+      var rich = el('div', 'body');
+      rich.innerHTML = html;
+      card.appendChild(rich);
+      return;
+    }
+    if (block.type === 'image') {
+      var imageUri = assetUris[block.assetId];
+      if (!imageUri) {
+        return;
+      }
+      var image = el('img', 'media');
+      image.src = imageUri;
+      image.alt = texts.nodeImageAlt;
+      card.appendChild(image);
+      return;
+    }
+    if (block.type === 'audio') {
+      var audioUri = assetUris[block.assetId];
+      if (!audioUri) {
+        return;
+      }
+      var audio = el('audio', 'audio');
+      audio.controls = true;
+      audio.src = audioUri;
+      card.appendChild(audio);
+    }
+  }
+
+  /** Pinta \`node.content\` EN ORDEN, bloque a bloque — traducción literal de
+   *  \`SlideContent\` en \`src/player/PlayerScreen.tsx\`. Sustituye al antiguo
+   *  \`appendBodyAndMedia\` (cuerpo único + bloque de medios apilado, ordenados
+   *  según \`node.contentOrder\`): con \`content\` los bloques son
+   *  heterogéneos y se intercalan libremente, así que basta con recorrer el
+   *  array tal cual, sin ninguna noción de "orden" aparte del propio índice.
+   *  \`fallback\` (mismo contrato que \`appendBody\`): se pinta como párrafo de
+   *  repuesto solo si la diapositiva no tiene NINGÚN bloque; \`null\` significa
+   *  "no pintar nada" (vista 'decision'). */
+  function appendContent(card, node, fallback) {
+    var content = node.content || [];
+    if (content.length === 0) {
+      if (fallback !== null) {
+        var paragraph = el('p', 'body');
+        paragraph.textContent = fallback;
+        card.appendChild(paragraph);
+      }
+      return;
+    }
+    for (var i = 0; i < content.length; i += 1) {
+      appendContentBlock(card, content[i]);
     }
   }
 
@@ -481,7 +550,9 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
 
   /** Resuelve una lista de assetId de imagen a sus \`data:\` URI ya
    *  embebidos, descartando (sin romper nada) los que no se pudieron leer
-   *  en tiempo de exportación. */
+   *  en tiempo de exportación. Solo la usa \`buildOption\` (imagen de una
+   *  respuesta, modelo sin cambios en este milestone): los bloques de imagen
+   *  de \`node.content\` se resuelven directamente en \`appendContentBlock\`. */
   function resolveImageUris(imageAssetIds) {
     var ids = imageAssetIds || [];
     var uris = [];
@@ -497,9 +568,10 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
   /** Pinta, si hay algo que pintar, un bloque con TODAS las imágenes
    *  (apiladas en columna, en el orden de \`imageUris\`, a ancho completo —
    *  ver \`.mediaSection\`/\`.media\` en exportedStyles.ts) seguido del audio,
-   *  si lo hay. \`imageUris\` ya viene resuelto (ver \`resolveImageUris\`), así
-   *  que sirve tanto para las varias imágenes de un nodo como para la única
-   *  imagen (0 o 1 elemento) de una respuesta. */
+   *  si lo hay. \`imageUris\` ya viene resuelto (ver \`resolveImageUris\`). Solo
+   *  la usa \`buildOption\` (la única imagen, 0 o 1 elemento, y el único audio
+   *  de una respuesta) — los bloques de \`node.content\` se pintan con
+   *  \`appendContentBlock\`, uno a uno, no agrupados. */
   function appendMedia(container, imageUris, audioUri, sectionClass, imageAlt) {
     if (imageUris.length === 0 && !audioUri) {
       return;
@@ -520,31 +592,12 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
     container.appendChild(section);
   }
 
-  /** \`data:\` URI del audio adjunto de \`owner\` (nodo o respuesta), o \`null\`
-   *  si no tiene o no se pudo leer. */
+  /** \`data:\` URI del audio adjunto de \`owner\` (una respuesta: mismo modelo
+   *  de siempre, \`audioAssetId\` único — ver cabecera del archivo, los
+   *  bloques de \`content\` solo aplican al NODO), o \`null\` si no tiene o no
+   *  se pudo leer. */
   function resolveAudioUri(owner) {
     return owner.audioAssetId ? assetUris[owner.audioAssetId] || null : null;
-  }
-
-  /** Pinta el cuerpo de texto y el bloque de medios de una diapositiva
-   *  ('continue'/'decision') en el orden que indique \`node.contentOrder\`
-   *  ('text-first', el de siempre, o 'image-first'). */
-  function appendBodyAndMedia(card, node, fallback) {
-    var imageUris = resolveImageUris(node.imageAssetIds);
-    var audioUri = resolveAudioUri(node);
-    var paintBody = function () {
-      appendBody(card, node, fallback);
-    };
-    var paintMedia = function () {
-      appendMedia(card, imageUris, audioUri, 'mediaSection', texts.nodeImageAlt);
-    };
-    if (node.contentOrder === 'image-first') {
-      paintMedia();
-      paintBody();
-    } else {
-      paintBody();
-      paintMedia();
-    }
   }
 
   function buildOption(response, index) {
@@ -587,9 +640,9 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
       // El título del nodo es solo referencia interna del diseñador
       // instruccional: nunca se pinta en el HTML/SCORM exportado (sí se ve,
       // en gris claro, dentro del Player de prueba de la app; ver
-      // PlayerScreen.tsx). El cuerpo y las imágenes se pintan en el orden de
-      // node.contentOrder.
-      appendBodyAndMedia(card, view.node, texts.emptySlideBody);
+      // PlayerScreen.tsx). Los bloques de node.content se pintan en su
+      // orden exacto (ver appendContent).
+      appendContent(card, view.node, texts.emptySlideBody);
       var continueButton = el('button', 'primaryButton');
       continueButton.type = 'button';
       continueButton.textContent =
@@ -605,7 +658,7 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
       // Mismo criterio que en 'continue': el título del nodo no se pinta.
       // Las opciones vienen de \`view.visibleResponses\` (ya filtradas por
       // \`condition\` en \`getView\`), nunca de \`view.node.responses\` a pelo.
-      appendBodyAndMedia(card, view.node, null);
+      appendContent(card, view.node, null);
       var options = el('div', 'options');
       var sorted = sortByLetter(view.visibleResponses || []);
       for (var i = 0; i < sorted.length; i += 1) {
