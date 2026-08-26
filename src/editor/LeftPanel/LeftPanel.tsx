@@ -156,7 +156,10 @@ export function LeftPanel() {
                 </span>
               )}
               <span className={styles.nodeNumber}>{node.number}</span>
-              <span className={styles.nodeTitle}>{node.title.trim() || 'Sin título'}</span>
+              {/* "Referencia" es la etiqueta de UI del campo `title` de
+                  dominio (ver el `<label>` del Inspector) — el nombre del
+                  campo no cambia, solo el texto que ve el usuario. */}
+              <span className={styles.nodeTitle}>{node.title.trim() || 'Sin referencia'}</span>
             </button>
           </li>
         ))}

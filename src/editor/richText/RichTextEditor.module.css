@@ -40,10 +40,31 @@
   border-color: var(--bs-color-border);
 }
 
+.toolbarButton:disabled {
+  color: var(--bs-color-text-faint);
+  cursor: default;
+}
+
+.toolbarButton:disabled:hover {
+  border-color: transparent;
+}
+
 .toolbarButtonActive {
   border-color: var(--bs-color-accent);
   background: color-mix(in srgb, var(--bs-color-accent) 16%, transparent);
   color: var(--bs-color-accent);
+}
+
+/* Barra contextual de tabla (fase 9): mismo aspecto que la barra principal,
+   pero como segunda fila separada por un borde propio — solo se monta
+   mientras el cursor está dentro de una tabla (ver `RichTextEditor.tsx`). */
+.tableToolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--bs-space-1);
+  padding: var(--bs-space-1);
+  border-bottom: 1px solid var(--bs-color-border);
+  background: var(--bs-color-surface);
 }
 
 .editorContent {
@@ -78,4 +99,40 @@
   color: inherit;
   border-radius: var(--bs-radius-sm);
   padding: 0 1px;
+}
+
+/* Tabla editable (fase 9): bordes finos en vez de la doble línea que deja
+   `border-collapse: collapse` sin más, cabecera distinguible por fondo (no
+   solo negrita) y celdas con padding cómodo para escribir dentro. Mismas
+   reglas (salvo `.selectedCell`, exclusiva del editor) que
+   `RichTextView.module.css`/`exportedStyles.ts` — deben verse idénticas en
+   los tres sitios. */
+.editorContent :global(.tiptap table) {
+  width: 100%;
+  margin: 0 0 var(--bs-space-2);
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.editorContent :global(.tiptap th),
+.editorContent :global(.tiptap td) {
+  position: relative;
+  min-width: 1em;
+  padding: var(--bs-space-2);
+  border: 1px solid var(--bs-color-border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.editorContent :global(.tiptap th) {
+  background: var(--bs-color-surface);
+  font-weight: 600;
+}
+
+/* Celda(s) seleccionadas (arrastre con el ratón sobre varias celdas): clase
+   `.selectedCell` añadida por la propia extensión de tabla de Tiptap, sin
+   necesitar nada hecho a mano — solo el estilo visual sutil, coherente con
+   el resto de la paleta (mismo tinte que `.toolbarButtonActive`). */
+.editorContent :global(.tiptap .selectedCell) {
+  background: color-mix(in srgb, var(--bs-color-accent) 16%, transparent);
 }

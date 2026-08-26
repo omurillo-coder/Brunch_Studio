@@ -382,6 +382,112 @@ export function createConnectedNode(
   return { project: connected, nodeId: newNode.id }
 }
 
+/** Resultado de `duplicateNode`: el documento resultante más el id de la
+ *  copia recién creada — mismo criterio que `CreateConnectedNodeResult`, así
+ *  quien llama (el store) no tiene que adivinarlo comparando ids antes/
+ *  después ni asumiendo que es "el de mayor `number`". */
+export interface DuplicateNodeResult {
+  project: ProjectDocument
+  nodeId: string
+}
+
+/**
+ * Duplica un nodo existente: crea una copia con id y `number` propios, en
+ * `position`, con el mismo contenido que el original (título, body, nota
+ * interna y — para una diapositiva — sus adjuntos de imagen/audio, orden de
+ * contenido, texto de "Continuar" y respuestas, cada una con su propio texto/
+ * puntos/efectos/condición de visibilidad). Lanza `Error` si el nodo no
+ * existe, mismo criterio que el resto de esta familia de funciones.
+ *
+ * DECISIÓN DE DISEÑO DELIBERADA — la copia NO conserva ninguna conexión
+ * SALIENTE del original:
+ * - El `targetNodeId` de "Continuar" de una diapositiva, y su
+ *   `condition`/`elseTargetNodeId` de enrutado condicional si los tuviera,
+ *   quedan `undefined` en la copia.
+ * - El `targetNodeId` de cada respuesta clonada también queda `undefined`
+ *   (la respuesta SÍ conserva su id nuevo — no reutiliza el de la original,
+ *   son entidades distintas — junto con su texto/puntos/efectos/condición de
+ *   visibilidad, que sí son contenido y se copian tal cual).
+ *
+ * Motivo: duplicar contenido para reutilizarlo como diapositiva nueva sirve
+ * para partir de un texto/estructura ya hecho y llevarlo a otro punto del
+ * recorrido — no debería crear silenciosamente una segunda ruta que apunta
+ * exactamente a los mismos destinos que la original sin que el diseñador lo
+ * pida de forma explícita (conectando la copia a mano, vía `connect`).
+ *
+ * Si el nodo duplicado es la diapositiva de inicio (`graph.startNodeId`), la
+ * copia NO hereda esa condición: el `startNodeId` del proyecto sigue
+ * apuntando al original, nunca a la copia.
+ *
+ * Implementación genérica por tipo de nodo, igual que `createNode`: los
+ * campos comunes (`title`/`body`/`internalNote`) se copian para cualquier
+ * tipo, y un único `switch (source.type)` exhaustivo añade los campos
+ * propios de cada tipo concreto (hoy solo `slide` tiene campos adicionales
+ * que copiar/limpiar). El tipado de `NodeType` obliga a que ese `switch`
+ * cubra cualquier tipo nuevo que se añada en el futuro — el compilador
+ * avisa si falta un `case`, así que esta función no puede "olvidarse" de un
+ * tipo nuevo en silencio, no hace falta ningún `if (type === 'slide' ||
+ * type === 'final')` explícito.
+ */
+export function duplicateNode(
+  project: ProjectDocument,
+  nodeId: string,
+  position: NodePosition,
+): DuplicateNodeResult {
+  const source = project.graph.nodes.find((node) => node.id === nodeId)
+  if (!source) {
+    throw new Error(`No existe un nodo con id "${nodeId}".`)
+  }
+
+  const number = nextNodeNumber(project.graph.nodes.map((node) => node.number))
+  const common = {
+    id: createId(),
+    number,
+    position,
+    title: source.title,
+    body: source.body,
+    internalNote: source.internalNote,
+  }
+
+  let duplicate: Node
+  switch (source.type) {
+    case 'slide': {
+      const node: SlideNode = {
+        ...common,
+        type: 'slide',
+        // Conexiones salientes deliberadamente limpias, ver comentario de
+        // la función.
+        targetNodeId: undefined,
+        condition: undefined,
+        elseTargetNodeId: undefined,
+        continueLabel: source.continueLabel,
+        responses: source.responses.map((response) => ({
+          ...response,
+          id: createId(),
+          targetNodeId: undefined,
+        })),
+        imageAssetIds: [...source.imageAssetIds],
+        audioAssetId: source.audioAssetId,
+        contentOrder: source.contentOrder,
+      }
+      duplicate = node
+      break
+    }
+    case 'final': {
+      const node: FinalNode = { ...common, type: 'final' }
+      duplicate = node
+      break
+    }
+  }
+
+  const next = produce(project, (draft) => {
+    draft.graph.nodes.push(duplicate)
+    touchUpdatedAt(draft)
+  })
+
+  return { project: next, nodeId: duplicate.id }
+}
+
 // ---------------------------------------------------------------------------
 // Variables del proyecto
 // ---------------------------------------------------------------------------

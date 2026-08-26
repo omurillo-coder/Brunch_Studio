@@ -157,6 +157,41 @@ describe('Canvas — cableado con @xyflow/react (ReactFlow stub)', () => {
     expect(useProjectStore.getState().selection.selectedNodeIds).toEqual([start.id])
   })
 
+  // Regresión de la selección múltiple (Mayús+arrastrar para la caja de
+  // selección, o Ctrl/Cmd+clic para ir añadiendo nodos uno a uno): ambos
+  // gestos los gestiona `@xyflow/react` internamente con su configuración
+  // por defecto (`Canvas.tsx` no sobreescribe `selectionKeyCode`,
+  // `multiSelectionKeyCode`, `selectionOnDrag`, `panOnDrag` ni
+  // `elementsSelectable`), y en ambos casos terminan disparando
+  // `onSelectionChange` con TODOS los nodos resultantes a la vez — igual que
+  // con uno solo, solo que aquí se comprueba explícitamente que el array
+  // completo (no solo el primero) llega íntegro a `selection.selectedNodeIds`,
+  // como base para que el arrastre conjunto (ya cubierto más abajo) tenga
+  // varios nodos que mover.
+  it('onSelectionChange con varios nodos sincroniza `selection.selectedNodeIds` con todos ellos', () => {
+    render(<Canvas />)
+    const start = startSlide()
+    act(() => {
+      useProjectStore.getState().createNode('slide', { x: 100, y: 0 })
+      useProjectStore.getState().createNode('final', { x: 200, y: 0 })
+    })
+    const other = otherNodeOfType('slide')
+    const final = otherNodeOfType('final')
+
+    act(() => {
+      capturedProps?.onSelectionChange?.({
+        nodes: [{ id: start.id } as never, { id: other.id } as never, { id: final.id } as never],
+        edges: [],
+      })
+    })
+
+    expect(useProjectStore.getState().selection.selectedNodeIds).toEqual([
+      start.id,
+      other.id,
+      final.id,
+    ])
+  })
+
   it('onPaneClick (clic fuera de cualquier diapositiva) quita la selección actual', () => {
     render(<Canvas />)
     const start = startSlide()

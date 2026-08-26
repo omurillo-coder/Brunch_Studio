@@ -30,6 +30,7 @@ import { computeAutoLayout } from './layout/autoLayout'
 import { nodeTypes } from './nodes/nodeTypes'
 import { edgeTypes } from './edges/edgeTypes'
 import { ConnectionMenu } from './ConnectionMenu'
+import { useCanvasClipboard } from './useCanvasClipboard'
 import styles from './Canvas.module.css'
 
 /** Etiqueta accesible del botón de auto-layout, reutilizada como `title`
@@ -124,6 +125,12 @@ export function Canvas() {
   const createConnectedNodeFromMenu = useProjectStore((state) => state.createConnectedNodeFromMenu)
   const applyLayout = useProjectStore((state) => state.applyLayout)
   const setViewportCenter = useProjectStore((state) => state.setViewportCenter)
+
+  // Ctrl/Cmd+C / Ctrl/Cmd+V para duplicar diapositivas (Tarea 1). Montado
+  // aquí porque este componente ya conoce la selección actual; ver
+  // `useCanvasClipboard` para el detalle de por qué no interfiere con el
+  // copiar/pegar de texto normal del navegador dentro de un campo editable.
+  useCanvasClipboard()
 
   const nodes = toFlowNodes(project, selectedNodeIds)
   const edges = toFlowEdges(project, selectedNodeIds)

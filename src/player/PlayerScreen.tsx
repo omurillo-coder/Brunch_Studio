@@ -279,6 +279,7 @@ export function PlayerScreen({ filePath }: PlayerScreenProps) {
   const setPreviewMode = useProjectStore((state) => state.setPreviewMode)
   const { assetRepository } = useAppServices()
   const [playerState, setPlayerState] = useState<PlayerState>(() => getInitialState(project))
+  const [exitMessageVisible, setExitMessageVisible] = useState(false)
 
   function handleExit() {
     setPreviewMode(false)
@@ -286,6 +287,24 @@ export function PlayerScreen({ filePath }: PlayerScreenProps) {
 
   function handleRestart() {
     setPlayerState(getInitialState(project))
+  }
+
+  /**
+   * Botón "Salir" de la vista Final (no confundir con `handleExit`, que es
+   * "Volver al editor" de la cabecera). `window.close()` solo cierra
+   * pestañas/ventanas abiertas por script — la mayoría de navegadores lo
+   * bloquean si no fue así (limitación conocida del navegador, no un bug de
+   * aquí). Como no hay forma fiable de detectar el éxito en todos los
+   * navegadores, siempre se muestra después el aviso de que ya se puede
+   * cerrar la pestaña a mano, para cubrir el caso — muy probable — de que el
+   * cierre automático no haya funcionado. Traducción literal en
+   * `exportedPlayerScript.ts`, salvo por la llamada a `scormFinish()` previa:
+   * aquí, dentro de la app, no hay ninguna integración SCORM de la que
+   * depender.
+   */
+  function handleExitAttempt() {
+    window.close()
+    setExitMessageVisible(true)
   }
 
   const view = getView(project, playerState)
@@ -375,14 +394,26 @@ export function PlayerScreen({ filePath }: PlayerScreenProps) {
             {playerState.totalPoints !== null && (
               <p className={styles.points}>Puntuación final: {playerState.totalPoints} puntos</p>
             )}
-            {/* Reintentar: mismo efecto que "↺ Reiniciar experiencia" de la
-                cabecera, pero dentro de la propia tarjeta de Final, que es
-                donde el usuario está mirando al terminar el recorrido. En
-                color de peligro porque descarta el recorrido en curso (y su
-                puntuación) para empezar de cero. */}
-            <button type="button" className={styles.dangerButton} onClick={handleRestart}>
-              Reintentar
-            </button>
+            <div className={styles.finalActions}>
+              {/* Reintentar: mismo efecto que "↺ Reiniciar experiencia" de la
+                  cabecera, pero dentro de la propia tarjeta de Final, que es
+                  donde el usuario está mirando al terminar el recorrido. En
+                  color de peligro porque descarta el recorrido en curso (y
+                  su puntuación) para empezar de cero. */}
+              <button type="button" className={styles.dangerButton} onClick={handleRestart}>
+                Reintentar
+              </button>
+              {/* Salir: estilo neutro (no es una acción destructiva como
+                  "Reintentar"). Ver `handleExitAttempt`. */}
+              <button type="button" className={styles.neutralButton} onClick={handleExitAttempt}>
+                Salir
+              </button>
+            </div>
+            {exitMessageVisible && (
+              <p className={styles.exitMessage} role="status">
+                Ya puedes cerrar esta pestaña.
+              </p>
+            )}
           </div>
         )}
 

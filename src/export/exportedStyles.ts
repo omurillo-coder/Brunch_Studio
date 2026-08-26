@@ -214,6 +214,32 @@ body {
   padding: 0 1px;
 }
 
+/* Tabla (fase 9): mismas reglas que .tiptap table/th/td en
+   RichTextEditor.module.css/RichTextView.module.css (salvo
+   .selectedCell, exclusiva del editor en vivo — no existe en un HTML ya
+   exportado), para que la experiencia publicada se vea igual que en el
+   editor y en el modo "Probar". */
+.body table {
+  width: 100%;
+  margin: 0 0 var(--bs-space-3);
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.body th,
+.body td {
+  min-width: 1em;
+  padding: var(--bs-space-2);
+  border: 1px solid var(--bs-color-border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.body th {
+  background: var(--bs-color-surface);
+  font-weight: 600;
+}
+
 .body hr {
   border: none;
   border-top: 1px solid var(--bs-color-border);

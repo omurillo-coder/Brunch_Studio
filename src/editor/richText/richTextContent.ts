@@ -1,6 +1,10 @@
 import type { JSONContent } from '@tiptap/core'
 import type { AnyExtension } from '@tiptap/core'
 import Highlight from '@tiptap/extension-highlight'
+import { Table } from '@tiptap/extension-table'
+import TableCell from '@tiptap/extension-table-cell'
+import TableHeader from '@tiptap/extension-table-header'
+import TableRow from '@tiptap/extension-table-row'
 import StarterKit from '@tiptap/starter-kit'
 
 /**
@@ -37,8 +41,24 @@ import StarterKit from '@tiptap/starter-kit'
  * el color de resaltado fijado por CSS (`--bs-color-highlight` en
  * `tokens.css`/`exportedStyles.ts`) — no por documento, así que cambiar el
  * tono de la marca no requiere migrar ningún `body` ya guardado.
+ *
+ * `Table`/`TableRow`/`TableHeader`/`TableCell` (tablas editables): mismo
+ * criterio que `Highlight` arriba — se añaden aquí una única vez y los
+ * cuatro sitios las reciben automáticamente. `Table` se configura con
+ * `resizable: false` (deliberado: sin arrastre de anchos de columna, fuera
+ * de alcance de esta fase — evita además que el HTML exportado dependa de
+ * anchos inline calculados por el editor) y con selección de celda/rango
+ * incluida por defecto (comportamiento de fábrica de la extensión, sin
+ * configuración adicional).
  */
-export const RICH_TEXT_EXTENSIONS: AnyExtension[] = [StarterKit, Highlight]
+export const RICH_TEXT_EXTENSIONS: AnyExtension[] = [
+  StarterKit,
+  Highlight,
+  Table.configure({ resizable: false }),
+  TableRow,
+  TableHeader,
+  TableCell,
+]
 
 /** Forma mínima que debe tener un valor para considerarlo un documento
  *  Tiptap ya serializado, en vez de texto plano histórico. */

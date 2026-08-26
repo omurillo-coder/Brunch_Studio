@@ -34,6 +34,17 @@ interface ToolbarButtonConfig {
   onToggle: () => void
 }
 
+/** Botón de la barra contextual de tabla (sin estado activo/inactivo — son
+ *  acciones puntuales, no formatos que se alternan): solo etiqueta, acción y
+ *  si está disponible en el estado actual del documento. */
+interface TableActionConfig {
+  key: string
+  label: string
+  ariaLabel: string
+  enabled: boolean
+  onAction: () => void
+}
+
 /**
  * Editor de texto enriquecido para el campo `body` de un nodo (fase 4,
  * Milestone 2). Barra de herramientas minimalista: negrita, cursiva, lista
@@ -144,7 +155,21 @@ export function RichTextEditor({ body, onCommit, ariaLabelledBy }: RichTextEdito
     editor,
     selector: (ctx) => {
       if (!ctx.editor) {
-        return { bold: false, italic: false, bulletList: false, orderedList: false, highlight: false }
+        return {
+          bold: false,
+          italic: false,
+          bulletList: false,
+          orderedList: false,
+          highlight: false,
+          isInTable: false,
+          canAddRow: false,
+          canDeleteRow: false,
+          canAddColumn: false,
+          canDeleteColumn: false,
+          canDeleteTable: false,
+          canMergeCells: false,
+          canSplitCell: false,
+        }
       }
       return {
         bold: ctx.editor.isActive('bold'),
@@ -152,6 +177,21 @@ export function RichTextEditor({ body, onCommit, ariaLabelledBy }: RichTextEdito
         bulletList: ctx.editor.isActive('bulletList'),
         orderedList: ctx.editor.isActive('orderedList'),
         highlight: ctx.editor.isActive('highlight'),
+        // Estado de la tabla en la posición actual del cursor (fase 9,
+        // tablas editables): controla tanto si el botón "Insertar tabla" se
+        // deshabilita (no tiene sentido anidar tablas) como si aparece la
+        // barra contextual de abajo con sus acciones habilitadas/deshabilitadas
+        // una por una (p.ej. "Eliminar fila" no tiene sentido con una sola
+        // fila — `can()` ya lo resuelve, mismo mecanismo que Tiptap usa
+        // internamente para decidir si un comando es aplicable).
+        isInTable: ctx.editor.isActive('table'),
+        canAddRow: ctx.editor.can().addRowAfter(),
+        canDeleteRow: ctx.editor.can().deleteRow(),
+        canAddColumn: ctx.editor.can().addColumnAfter(),
+        canDeleteColumn: ctx.editor.can().deleteColumn(),
+        canDeleteTable: ctx.editor.can().deleteTable(),
+        canMergeCells: ctx.editor.can().mergeCells(),
+        canSplitCell: ctx.editor.can().splitCell(),
       }
     },
   })
@@ -198,6 +238,69 @@ export function RichTextEditor({ body, onCommit, ariaLabelledBy }: RichTextEdito
     },
   ]
 
+  const isInTable = toolbarState?.isInTable ?? false
+
+  /**
+   * Acciones de la barra contextual de tabla (fase 9): solo visible cuando
+   * el cursor/selección está dentro de una tabla — el resto del tiempo no
+   * ocupa espacio ni distrae, mismo criterio "sobrio, poco intrusivo" que el
+   * resto de la barra principal. Cada acción se deshabilita individualmente
+   * (en vez de ocultarse) según `can()` para que la disposición de botones
+   * no salte al usar la tabla (p.ej. fusionar celdas sin una selección de
+   * varias celdas queda visible pero inerte).
+   */
+  const tableActions: TableActionConfig[] = [
+    {
+      key: 'addRowAfter',
+      label: '+ Fila',
+      ariaLabel: 'Añadir fila',
+      enabled: toolbarState?.canAddRow ?? false,
+      onAction: () => editor.chain().focus().addRowAfter().run(),
+    },
+    {
+      key: 'deleteRow',
+      label: '− Fila',
+      ariaLabel: 'Eliminar fila',
+      enabled: toolbarState?.canDeleteRow ?? false,
+      onAction: () => editor.chain().focus().deleteRow().run(),
+    },
+    {
+      key: 'addColumnAfter',
+      label: '+ Columna',
+      ariaLabel: 'Añadir columna',
+      enabled: toolbarState?.canAddColumn ?? false,
+      onAction: () => editor.chain().focus().addColumnAfter().run(),
+    },
+    {
+      key: 'deleteColumn',
+      label: '− Columna',
+      ariaLabel: 'Eliminar columna',
+      enabled: toolbarState?.canDeleteColumn ?? false,
+      onAction: () => editor.chain().focus().deleteColumn().run(),
+    },
+    {
+      key: 'mergeCells',
+      label: 'Fusionar',
+      ariaLabel: 'Fusionar celdas',
+      enabled: toolbarState?.canMergeCells ?? false,
+      onAction: () => editor.chain().focus().mergeCells().run(),
+    },
+    {
+      key: 'splitCell',
+      label: 'Dividir',
+      ariaLabel: 'Dividir celda',
+      enabled: toolbarState?.canSplitCell ?? false,
+      onAction: () => editor.chain().focus().splitCell().run(),
+    },
+    {
+      key: 'deleteTable',
+      label: 'Eliminar tabla',
+      ariaLabel: 'Eliminar tabla',
+      enabled: toolbarState?.canDeleteTable ?? false,
+      onAction: () => editor.chain().focus().deleteTable().run(),
+    },
+  ]
+
   return (
     <div className={styles.editorWrapper}>
       <div className={styles.toolbar} role="toolbar" aria-label="Formato de texto">
@@ -218,6 +321,23 @@ export function RichTextEditor({ body, onCommit, ariaLabelledBy }: RichTextEdito
             {button.label}
           </button>
         ))}
+        {/* Insertar tabla (fase 9): inserta una tabla 3×3 por defecto con
+            fila de cabecera, en la posición del cursor. Deshabilitado dentro
+            de una tabla existente — anidar tablas no aporta nada aquí y
+            complica la edición; para eso está la barra contextual de abajo. */}
+        <button
+          type="button"
+          className={styles.toolbarButton}
+          aria-label="Insertar tabla"
+          disabled={isInTable}
+          title={isInTable ? 'Ya hay una tabla en el cursor' : 'Insertar tabla'}
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() =>
+            editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()
+          }
+        >
+          ⊞ Tabla
+        </button>
         {/* Corrector ortotipográfico nativo (fase 8): activa/desactiva el
             atributo `spellcheck` del editor en caliente, sin ninguna
             librería propia de diccionario — ver `editorAttributes` arriba. */}
@@ -235,6 +355,26 @@ export function RichTextEditor({ body, onCommit, ariaLabelledBy }: RichTextEdito
           ABC
         </button>
       </div>
+      {/* Barra contextual de tabla (fase 9): solo se monta cuando el cursor
+          está dentro de una tabla, justo debajo de la barra principal —
+          nunca ocupa espacio ni distrae fuera de ese contexto. */}
+      {isInTable && (
+        <div className={styles.tableToolbar} role="toolbar" aria-label="Edición de tabla">
+          {tableActions.map((action) => (
+            <button
+              key={action.key}
+              type="button"
+              className={styles.toolbarButton}
+              aria-label={action.ariaLabel}
+              disabled={!action.enabled}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={action.onAction}
+            >
+              {action.label}
+            </button>
+          ))}
+        </div>
+      )}
       <EditorContent editor={editor} className={styles.editorContent} />
     </div>
   )

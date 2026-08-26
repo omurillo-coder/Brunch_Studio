@@ -24,7 +24,7 @@ describe('Canvas (montaje real de @xyflow/react)', () => {
 
     expect(await screen.findByText('Diapositiva')).toBeInTheDocument()
     expect(screen.getByText('1')).toBeInTheDocument()
-    expect(screen.getByText('Sin título')).toBeInTheDocument()
+    expect(screen.getByText('Sin referencia')).toBeInTheDocument()
 
     const startId = useProjectStore.getState().project.graph.startNodeId
     expect(screen.queryByText(startId)).not.toBeInTheDocument()

@@ -252,6 +252,36 @@ describe('acciones de dominio: una entrada de historial por acción', () => {
     useProjectStore.getState().redo()
     expect(useProjectStore.getState().project.variables).toHaveLength(0)
   })
+
+  it('duplicateNode produce una entrada deshacible/rehacible y selecciona la copia', () => {
+    const startId = startNodeId()
+    const before = useProjectStore.getState().project.graph.nodes.length
+    const historyBefore = useProjectStore.getState().history.past.length
+
+    useProjectStore.getState().duplicateNode(startId)
+
+    expect(useProjectStore.getState().project.graph.nodes.length).toBe(before + 1)
+    expect(useProjectStore.getState().history.past.length).toBe(historyBefore + 1)
+    expect(useProjectStore.getState().history.future.length).toBe(0)
+
+    const selected = useProjectStore.getState().selection.selectedNodeIds
+    expect(selected).toHaveLength(1)
+    expect(selected[0]).not.toBe(startId)
+    const copyId = selected[0]
+    if (!copyId) throw new Error('setup inválido')
+    const copy = useProjectStore.getState().project.graph.nodes.find((n) => n.id === copyId)
+    expect(copy).toBeDefined()
+    // Offset pequeño respecto al original, no exactamente encima.
+    expect(copy?.position).not.toEqual({ x: 0, y: 0 })
+
+    useProjectStore.getState().undo()
+    expect(useProjectStore.getState().project.graph.nodes.length).toBe(before)
+    expect(useProjectStore.getState().project.graph.nodes.some((n) => n.id === copyId)).toBe(false)
+
+    useProjectStore.getState().redo()
+    expect(useProjectStore.getState().project.graph.nodes.length).toBe(before + 1)
+    expect(useProjectStore.getState().project.graph.nodes.some((n) => n.id === copyId)).toBe(true)
+  })
 })
 
 describe('drag de nodos', () => {
@@ -722,5 +752,27 @@ describe('clearTitleFocusRequest', () => {
     useProjectStore.getState().loadProject(fresh)
 
     expect(useProjectStore.getState().ui.titleFocusRequestNodeId).toBeNull()
+  })
+})
+
+describe('setClipboardNodeIds (portapapeles interno de Ctrl/Cmd+C/V, ver useCanvasClipboard)', () => {
+  it('fija ui.clipboardNodeIds sin generar entrada de historial ni tocar la selección', () => {
+    const startId = startNodeId()
+    const historyBefore = useProjectStore.getState().history.past.length
+
+    useProjectStore.getState().setClipboardNodeIds([startId])
+
+    expect(useProjectStore.getState().ui.clipboardNodeIds).toEqual([startId])
+    expect(useProjectStore.getState().history.past.length).toBe(historyBefore)
+  })
+
+  it('loadProject resetea ui.clipboardNodeIds', () => {
+    const startId = startNodeId()
+    useProjectStore.getState().setClipboardNodeIds([startId])
+
+    const fresh = useProjectStore.getState().project
+    useProjectStore.getState().loadProject(fresh)
+
+    expect(useProjectStore.getState().ui.clipboardNodeIds).toEqual([])
   })
 })

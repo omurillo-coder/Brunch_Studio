@@ -4,6 +4,7 @@ import { DEFAULT_PROJECT_TEMPLATE_ID, PROJECT_TEMPLATES, getProjectTemplate } fr
 import type { ProjectDocument } from '../../domain'
 import { convertTweeToProject } from '../../import/twee'
 import { useAppServices } from '../../app/AppServicesContext'
+import { openExistingProject } from '../../app/openExistingProject'
 import { useProjectStore } from '../../store'
 import logo from '../../assets/logo.png'
 import styles from './HomeScreen.module.css'
@@ -109,7 +110,7 @@ export function HomeScreen({ onProjectOpened, initialError }: HomeScreenProps) {
         setBusy(false)
         return
       }
-      const document = await repository.openProject(path)
+      const document = await openExistingProject(repository, path)
       loadProject(document)
       onProjectOpened(path)
     } catch {

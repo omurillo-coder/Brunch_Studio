@@ -21,5 +21,6 @@ export {
   useFocusRequestNodeId,
   useTitleFocusRequestNodeId,
   useViewportCenter,
+  useClipboardNodeIds,
 } from './selectors'
 export { resetProjectStore } from './testHelpers'

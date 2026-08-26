@@ -36,3 +36,5 @@ export const useTitleFocusRequestNodeId = () =>
   useProjectStore((state) => state.ui.titleFocusRequestNodeId)
 
 export const useViewportCenter = () => useProjectStore((state) => state.ui.viewportCenter)
+
+export const useClipboardNodeIds = () => useProjectStore((state) => state.ui.clipboardNodeIds)

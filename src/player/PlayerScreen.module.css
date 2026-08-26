@@ -46,10 +46,22 @@
   border-color: var(--bs-color-border-strong);
 }
 
+/* `align-items: flex-start` (en vez de `center`) a propósito: con contenido
+   largo (texto largo, varias imágenes), centrar verticalmente un flex item
+   más alto que el contenedor recorta igual por arriba que por abajo, pero
+   `overflow-y: auto` en flexbox solo hace alcanzable por scroll el extremo
+   "final" del eje — el principio del contenido queda cortado por encima del
+   área visible y es inalcanzable (bug conocido de flexbox: el "safe centering"
+   real necesitaría `justify-content: safe center`, sin soporte suficiente
+   todavía). Ancla la tarjeta arriba: con contenido corto se ve igual que
+   antes (mismo padding); con contenido largo, el desbordamiento cae hacia
+   abajo, dentro de la zona que `overflow-y: auto` sí hace scrollable de
+   extremo a extremo. `justify-content: center` se mantiene: sigue centrando
+   horizontalmente y no participa en este bug (el eje cruzado es el vertical). */
 .stage {
   flex: 1 1 auto;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   overflow-y: auto;
   padding: var(--bs-space-6);
@@ -220,6 +232,41 @@
 .dangerButton:hover {
   background: var(--bs-color-danger-hover);
   border-color: var(--bs-color-danger-hover);
+}
+
+/* Fila de acciones de la vista Final: "Reintentar" (peligro) + "Salir"
+   (neutro), uno junto al otro. */
+.finalActions {
+  display: flex;
+  align-items: center;
+  gap: var(--bs-space-3);
+}
+
+/* "Salir": no descarta nada ni es irreversible como "Reintentar", así que
+   usa un estilo neutro (mismo criterio que `.secondaryButton` de la
+   cabecera, pero al tamaño de los botones de la tarjeta de Final). */
+.neutralButton {
+  align-self: flex-start;
+  padding: var(--bs-space-2) var(--bs-space-4);
+  border: 1px solid var(--bs-color-border);
+  border-radius: var(--bs-radius-sm);
+  background: var(--bs-color-bg);
+  color: var(--bs-color-text);
+  font-size: var(--bs-font-size-md);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.neutralButton:hover {
+  border-color: var(--bs-color-border-strong);
+}
+
+/* Aviso tras pulsar "Salir": sobrio, debajo de los botones, mismo tono
+   apagado que el resto de metadatos secundarios de la pantalla. */
+.exitMessage {
+  margin: 0;
+  font-size: var(--bs-font-size-sm);
+  color: var(--bs-color-text-muted);
 }
 
 .muted {

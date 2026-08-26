@@ -63,7 +63,7 @@ describe('LeftPanel', () => {
 
     // El proyecto recién creado ya tiene su diapositiva de inicio.
     expect(screen.getByText('Diapositiva')).toBeInTheDocument()
-    expect(screen.getByText('Sin título')).toBeInTheDocument()
+    expect(screen.getByText('Sin referencia')).toBeInTheDocument()
 
     const startNode = useProjectStore.getState().project.graph.nodes[0]
     if (!startNode) throw new Error('El proyecto no tiene nodos')

@@ -60,6 +60,18 @@ export interface UiState {
    * consume este campo debe usar un valor de repuesto razonable.
    */
   viewportCenter: NodePosition | null
+  /**
+   * "Portapapeles" interno de duplicar diapositivas con Ctrl/Cmd+C/V (ver
+   * `useCanvasClipboard` en `src/editor/Canvas/`): ids de los nodos
+   * guardados con el último Ctrl/Cmd+C fuera de un campo editable. NO es el
+   * portapapeles real del sistema operativo (no hace falta la Clipboard API
+   * del navegador para este caso de uso, y así se evitan sus permisos) — es
+   * transitorio, como el resto de `ui`, y por eso vive aquí y no en
+   * `project`. Ctrl/Cmd+V duplica cada id que siga existiendo en el
+   * proyecto en ese momento (uno podría haberse borrado entre copiar y
+   * pegar).
+   */
+  clipboardNodeIds: string[]
 }
 
 /**

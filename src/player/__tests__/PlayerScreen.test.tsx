@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { PlayerScreen } from '../PlayerScreen'
 import { useProjectStore } from '../../store'
 import { resetProjectStore } from '../../store/testHelpers'
@@ -588,5 +588,81 @@ describe('PlayerScreen: puntuación acumulada', () => {
 
     expect(screen.getByText('Fin de la experiencia')).toBeInTheDocument()
     expect(screen.queryByText(/Puntuación final/)).not.toBeInTheDocument()
+  })
+})
+
+describe('PlayerScreen: botón "Salir" (vista Final)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  /** Lleva el Player hasta la tarjeta de Final del recorrido de prueba. */
+  function reachFinal() {
+    buildGraphInStore()
+    renderPlayer()
+    fireEvent.click(screen.getByText('Continuar'))
+    fireEvent.click(screen.getByText('Camino A'))
+    expect(screen.getByText('Fin de la experiencia')).toBeInTheDocument()
+  }
+
+  it('aparece junto a "Reintentar", solo en la tarjeta de Final, con estilo neutro (no de peligro)', () => {
+    buildGraphInStore()
+    renderPlayer()
+
+    expect(screen.queryByText('Salir')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByText('Continuar'))
+    expect(screen.queryByText('Salir')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByText('Camino A'))
+    const exitButton = screen.getByText('Salir')
+    expect(exitButton).toBeInTheDocument()
+    // Estilo neutro, no el de "Reintentar" (color de peligro).
+    expect(exitButton.className).toBe(styles.neutralButton)
+    expect(exitButton.className).not.toBe(styles.dangerButton)
+  })
+
+  it('al pulsarlo llama a window.close() y muestra el aviso de que ya se puede cerrar la pestaña', () => {
+    const closeSpy = vi.spyOn(window, 'close').mockImplementation(() => {})
+    reachFinal()
+
+    expect(screen.queryByText('Ya puedes cerrar esta pestaña.')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByText('Salir'))
+
+    expect(closeSpy).toHaveBeenCalledTimes(1)
+    expect(screen.getByText('Ya puedes cerrar esta pestaña.')).toBeInTheDocument()
+  })
+})
+
+describe('PlayerScreen: contenedor de scroll compartido por las 4 vistas', () => {
+  /** El bug de scroll (ver `PlayerScreen.module.css`, clase `.stage`) podía
+   *  afectar a las cuatro vistas del Player si cada una tuviera su propio
+   *  contenedor; este test confirma que las CUATRO (`continue`, `decision`,
+   *  `final`, `dead-end`) están, de verdad, dentro del mismo `<main>` con la
+   *  clase `.stage`, así que el arreglo de esa única clase las cubre todas. */
+  function mainStage(container: HTMLElement): HTMLElement {
+    const main = container.querySelector('main')
+    if (!main) throw new Error('No se encontró <main> en el Player.')
+    return main
+  }
+
+  it('"dead-end" usa <main class="stage">', () => {
+    // Diapositiva de inicio de un proyecto nuevo, sin destino configurado.
+    const { container } = renderPlayer()
+    expect(mainStage(container).className).toBe(styles.stage)
+  })
+
+  it('"continue", "decision" y "final" usan el mismo <main class="stage"> al navegar', () => {
+    buildGraphInStore()
+    const { container } = renderPlayer()
+
+    expect(mainStage(container).className).toBe(styles.stage) // continue
+    fireEvent.click(screen.getByText('Continuar'))
+
+    expect(mainStage(container).className).toBe(styles.stage) // decision
+    fireEvent.click(screen.getByText('Camino A'))
+
+    expect(mainStage(container).className).toBe(styles.stage) // final
   })
 })

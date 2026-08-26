@@ -36,8 +36,11 @@ export const START_NODE_LABEL = 'Inicio'
  *  defensa adicional si esa cota cambiara en el futuro. */
 const MAX_SUMMARIZED_RESPONSES = MAX_RESPONSES
 
+/** "Referencia" es la etiqueta de UI del campo `title` de dominio (ver el
+ *  `<label>` del Inspector) — el nombre del campo no cambia, solo el texto
+ *  visible. */
 function displayTitle(title: string): string {
-  return title.trim() || 'Sin título'
+  return title.trim() || 'Sin referencia'
 }
 
 /** Texto accesible de la insignia de aviso "sin salida" (punto 1),
@@ -45,11 +48,14 @@ function displayTitle(title: string): string {
 const NO_OUTGOING_WARNING_TEXT = 'Esta diapositiva no tiene ninguna salida conectada'
 
 /** Combina las clases modificadoras de `.card` según el resaltado calculado
- *  en `adapter.ts` (puntos 1 y 4). Centralizado aquí para que
- *  `SlideNodeView`/`FinalNodeView` no dupliquen la combinación. */
+ *  en `adapter.ts` (puntos 1 y 4) y el tipo de nodo. Centralizado aquí para
+ *  que `SlideNodeView`/`FinalNodeView` no dupliquen la combinación.
+ *  `cardFinal` (fondo azul clarito) solo se aplica a `final` — las
+ *  diapositivas `slide` mantienen su fondo neutro sin cambios. */
 function cardClassName(data: CanvasNodeData): string {
   return [
     styles.card,
+    data.nodeType === 'final' && styles.cardFinal,
     data.hasNoOutgoing && styles.cardWarning,
     data.isHighlighted && styles.cardHighlighted,
     data.isDimmed && styles.cardDimmed,

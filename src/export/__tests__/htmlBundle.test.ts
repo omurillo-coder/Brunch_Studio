@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { buildHtmlBundle } from '../htmlBundle'
 import { BUNDLE_ELEMENT_ID } from '../exportedPlayerScript'
 import type { ExportAssetMap } from '../exportAssets'
@@ -360,6 +360,80 @@ describe('buildHtmlBundle — contenido del archivo generado', () => {
     expect(html).toContain('\\u003cmark>destacado\\u003c/mark>')
   })
 
+  it('conserva una tabla (fase 9) con su estructura <table>/<tr>/<th>/<td> en el HTML exportado', () => {
+    // Mismo criterio de documento mínimo independiente que el test de
+    // `highlight` de arriba: solo lo necesario para un nodo `slide` con un
+    // `body` que trae una tabla de 1 fila de cabecera + 1 fila de datos.
+    const slideId = '66666666-6666-4666-8666-666666666666'
+    const cell = (type: 'tableHeader' | 'tableCell', text: string) => ({
+      type,
+      attrs: { colspan: 1, rowspan: 1, colwidth: null },
+      content: [{ type: 'paragraph', content: [{ type: 'text', text }] }],
+    })
+    const body = JSON.stringify({
+      type: 'doc',
+      content: [
+        {
+          type: 'table',
+          content: [
+            { type: 'tableRow', content: [cell('tableHeader', 'Encabezado')] },
+            { type: 'tableRow', content: [cell('tableCell', 'Celda')] },
+          ],
+        },
+      ],
+    })
+
+    const project: ProjectDocument = {
+      schemaVersion: 1,
+      metadata: {
+        id: '99999999-9999-4999-8999-999999999997',
+        name: 'Proyecto con tabla',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+      settings: {},
+      variables: [],
+      graph: {
+        nodes: [
+          {
+            id: slideId,
+            number: 1,
+            type: 'slide',
+            position: { x: 0, y: 0 },
+            title: 'Con tabla',
+            body,
+            targetNodeId: undefined,
+            continueLabel: undefined,
+            responses: [],
+            imageAssetIds: [],
+            audioAssetId: undefined,
+            contentOrder: 'text-first',
+          },
+        ],
+        startNodeId: slideId,
+      },
+      editor: { viewport: { x: 0, y: 0, zoom: 1 } },
+    }
+
+    const html = buildHtmlBundle(project, {})
+
+    // `<` va escapado como \u003c dentro del JSON embebido (ver
+    // `serializeBundle`); `generateHTML` con `RICH_TEXT_EXTENSIONS` (que
+    // incluye las cuatro extensiones de tabla) produce la estructura real
+    // (`<table>` con su `colgroup`/`tbody` propios de la extensión de
+    // tabla, `<tr>`, `<th>`, `<td>`), no texto plano. No se comprueban los
+    // atributos exactos de cada etiqueta (p.ej. el `style="min-width"` que
+    // añade la extensión): son detalle interno de `@tiptap/extension-table`
+    // y no la conservación de la tabla, que es lo que este test verifica.
+    expect(html).toContain('\\u003ctable')
+    expect(html).toContain('\\u003ctr>')
+    expect(html).toContain('\\u003cth')
+    expect(html).toContain('Encabezado')
+    expect(html).toContain('\\u003ctd')
+    expect(html).toContain('Celda')
+    expect(html).toContain('\\u003c/table>')
+  })
+
   it('no incluye en ningún punto la nota interna del nodo (internalNote, tarea 6: nunca se exporta)', () => {
     const html = buildHtmlBundle(sampleProject(), sampleAssets)
 
@@ -517,6 +591,26 @@ describe('buildHtmlBundle — comportamiento del HTML generado (jsdom)', () => {
     expect(currentCard().textContent).toContain(
       'Esta parte de la experiencia no tiene una continuación configurada.',
     )
+  })
+
+  it('"Salir" aparece junto a "Reintentar" en el Final, llama a window.close() y muestra el aviso de cierre', () => {
+    const closeSpy = vi.spyOn(window, 'close').mockImplementation(() => {})
+
+    runExportedBundle(buildHtmlBundle(sampleProject(), sampleAssets))
+    clickButton('Empezar el caso')
+    clickButton('Avisar al responsable')
+
+    const card = currentCard()
+    expect(card.textContent).toContain('Salir')
+    expect(card.querySelector('.dangerButton')?.textContent).toBe('Reintentar')
+    expect(card.textContent).not.toContain('Ya puedes cerrar esta pestaña.')
+
+    clickButton('Salir')
+
+    expect(closeSpy).toHaveBeenCalledTimes(1)
+    expect(currentCard().textContent).toContain('Ya puedes cerrar esta pestaña.')
+
+    closeSpy.mockRestore()
   })
 
   it('una respuesta sin destino se pinta deshabilitada y no navega', () => {

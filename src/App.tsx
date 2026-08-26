@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { AppServicesProvider, useAppServices } from './app/AppServicesContext'
 import type { AppServices } from './app/AppServices'
+import { openExistingProject } from './app/openExistingProject'
 import { HomeScreen } from './editor/HomeScreen/HomeScreen'
 import { useProjectStore } from './store'
 import styles from './App.module.css'
@@ -57,7 +58,7 @@ export interface AppProps {
  * `.brunch` pendiente de abrir (porque el sistema operativo la pasó al
  * arrancar, o porque Rust decidió que esta ventana nueva debía abrirla — ver
  * `src-tauri/src/open_file.rs`), se abre con el MISMO flujo que "Abrir
- * proyecto" en `HomeScreen` (`repository.openProject` + `loadProject`) y se
+ * proyecto" en `HomeScreen` (`openExistingProject` + `loadProject`) y se
  * salta directamente a `EditorScreen`, sin pasar por `HomeScreen`. Si no hay
  * ninguna ruta pendiente (el caso normal: arranque sin argumentos, o
  * "Nueva ventana" desde el menú/Topbar), no cambia nada — `HomeScreen` sigue
@@ -82,7 +83,7 @@ function AppShell() {
       const path = await getInitialOpenPath()
       if (!path || cancelled) return
       try {
-        const document = await repository.openProject(path)
+        const document = await openExistingProject(repository, path)
         if (cancelled) return
         loadProject(document)
         setOpenProjectPath(path)

@@ -212,6 +212,43 @@ describe('script exportado — SCORM 2004 4ª edición', () => {
     }).not.toThrow()
   })
 
+  it('"Salir" en el Final llama a Terminate (misma secuencia de finalización que beforeunload) ANTES de intentar cerrar la ventana', () => {
+    const api = fakeScormAPI()
+    ;(window as unknown as { API_1484_11: typeof api }).API_1484_11 = api
+    const closeSpy = vi.spyOn(window, 'close').mockImplementation(() => {})
+
+    runExportedBundle(buildHtmlBundle(sampleProject(), emptyAssets))
+    clickButton('Continuar')
+    clickButton('Salir')
+
+    expect(api.Terminate).toHaveBeenCalledWith('')
+    expect(closeSpy).toHaveBeenCalledTimes(1)
+    // El orden importa: la finalización SCORM no debe depender solo de que
+    // "beforeunload" llegue a dispararse a tiempo tras cerrar la ventana.
+    const terminateOrder = api.Terminate.mock.invocationCallOrder[0]!
+    const closeOrder = closeSpy.mock.invocationCallOrder[0]!
+    expect(terminateOrder).toBeLessThan(closeOrder)
+
+    closeSpy.mockRestore()
+  })
+
+  it('"Salir" en el Final sin ninguna API SCORM no lanza y sigue mostrando el aviso de cierre', () => {
+    const closeSpy = vi.spyOn(window, 'close').mockImplementation(() => {})
+
+    expect(() => {
+      runExportedBundle(buildHtmlBundle(sampleProject(), emptyAssets))
+      clickButton('Continuar')
+      clickButton('Salir')
+    }).not.toThrow()
+
+    expect(closeSpy).toHaveBeenCalledTimes(1)
+    expect(document.querySelector('#brunch-root .card')?.textContent).toContain(
+      'Ya puedes cerrar esta pestaña.',
+    )
+
+    closeSpy.mockRestore()
+  })
+
   it('una API que lanza en cualquier llamada no rompe la reproducción', () => {
     const api = {
       Initialize: vi.fn(() => {

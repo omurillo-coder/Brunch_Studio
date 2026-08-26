@@ -79,7 +79,11 @@ describe('App: navegación HomeScreen -> EditorScreen', () => {
     fireEvent.click(screen.getByText('Abrir proyecto'))
 
     await screen.findByText('▶ Probar')
-    expect(screen.getAllByText('Proyecto ya guardado').length).toBeGreaterThan(0)
+    // El nombre mostrado se sincroniza con el del archivo ("existente"), no
+    // con el guardado en el documento ("Proyecto ya guardado") — ver
+    // `openExistingProject` (`src/app/openExistingProject.ts`).
+    expect(screen.getAllByText('existente').length).toBeGreaterThan(0)
+    expect(screen.queryByText('Proyecto ya guardado')).not.toBeInTheDocument()
   })
 
   it('cancelar el selector de ruta no rompe nada y deja la pantalla inicial', async () => {
@@ -113,7 +117,11 @@ describe('App: navegación HomeScreen -> EditorScreen', () => {
     )
 
     await screen.findByText('▶ Probar')
-    expect(screen.getAllByText('Proyecto abierto desde el sistema').length).toBeGreaterThan(0)
+    // Mismo criterio que "Abrir proyecto": el nombre mostrado se sincroniza
+    // con el del archivo ("desde-finder"), no con el guardado en el
+    // documento ("Proyecto abierto desde el sistema").
+    expect(screen.getAllByText('desde-finder').length).toBeGreaterThan(0)
+    expect(screen.queryByText('Proyecto abierto desde el sistema')).not.toBeInTheDocument()
     // Nunca llegó a pasar por HomeScreen.
     expect(screen.queryByText('Nuevo proyecto')).not.toBeInTheDocument()
   })

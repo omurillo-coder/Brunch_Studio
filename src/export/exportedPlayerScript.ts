@@ -102,6 +102,15 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
   var letters = bundle.responseLetters || [];
   var texts = bundle.texts || {};
 
+  // Textos del botón "Salir" de la vista 'final' y de su aviso posterior.
+  // Traducción literal de los mismos textos fijos de PlayerScreen.tsx
+  // (\`handleExitAttempt\`). NO viajan por \`texts\` (bundle embebido, ver
+  // \`ExportedTexts\`/\`EXPORTED_TEXTS\` en \`htmlBundle.ts\`) porque ese archivo
+  // queda fuera del alcance de este cambio: se documenta aquí en vez de
+  // silenciarlo.
+  var EXIT_BUTTON_LABEL = 'Salir';
+  var EXIT_MESSAGE = 'Ya puedes cerrar esta pestaña.';
+
   // -------------------------------------------------------------------------
   // SCORM 2004 4ª edición (no-op silencioso fuera de un LMS; ver cabecera
   // del archivo)
@@ -447,6 +456,29 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
     }
   }
 
+  /** Aviso mostrado tras pulsar "Salir" (vista 'final', más abajo):
+   *  \`window.close()\` solo cierra pestañas/ventanas abiertas por script — la
+   *  mayoría de navegadores lo bloquean si no fue así, limitación conocida
+   *  del navegador — y no hay forma fiable de detectar el éxito en todos
+   *  los navegadores, así que este aviso se muestra SIEMPRE tras el intento,
+   *  para cubrir el caso, muy probable, de que el cierre automático no haya
+   *  funcionado. Idempotente respecto a \`card\`: un segundo clic no duplica
+   *  el párrafo. Estilo vía \`style.cssText\` (mismos tokens --bs-* que ya
+   *  define exportedStyles.ts en :root) en vez de una clase nueva: ese
+   *  archivo queda fuera del alcance de este cambio. */
+  function showExitMessage(card) {
+    if (card.querySelector('[data-exit-message]')) {
+      return;
+    }
+    var message = el('p', null);
+    message.setAttribute('data-exit-message', '');
+    message.setAttribute('role', 'status');
+    message.style.cssText =
+      'margin:0;font-size:var(--bs-font-size-sm);color:var(--bs-color-text-muted);';
+    message.textContent = EXIT_MESSAGE;
+    card.appendChild(message);
+  }
+
   /** Resuelve una lista de assetId de imagen a sus \`data:\` URI ya
    *  embebidos, descartando (sin romper nada) los que no se pudieron leer
    *  en tiempo de exportación. */
@@ -594,13 +626,50 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
         points.textContent = texts.pointsPrefix + state.totalPoints + texts.pointsSuffix;
         card.appendChild(points);
       }
+
+      // Fila de acciones: "Reintentar" (peligro) + "Salir" (neutro), una
+      // junto a la otra. Sin clase propia en exportedStyles.ts (fuera de
+      // alcance): flex simple vía \`style.cssText\`.
+      var actions = el('div', null);
+      actions.style.cssText = 'display:flex;align-items:center;gap:var(--bs-space-3);';
+
       var retryButton = el('button', 'dangerButton');
       retryButton.type = 'button';
       retryButton.textContent = texts.retry;
       retryButton.addEventListener('click', function () {
         setState(restart());
       });
-      card.appendChild(retryButton);
+      actions.appendChild(retryButton);
+
+      // "Salir": estilo neutro (no es una acción destructiva como
+      // "Reintentar"), reutilizando los mismos tokens --bs-* que ya define
+      // exportedStyles.ts en :root para que se vea coherente con el resto de
+      // la tarjeta, sin añadir ninguna clase a ese archivo.
+      var exitButton = el('button', null);
+      exitButton.type = 'button';
+      exitButton.textContent = EXIT_BUTTON_LABEL;
+      exitButton.style.cssText =
+        'align-self:flex-start;padding:var(--bs-space-2) var(--bs-space-4);' +
+        'border:1px solid var(--bs-color-border);border-radius:var(--bs-radius-sm);' +
+        'background:var(--bs-color-bg);color:var(--bs-color-text);' +
+        'font-size:var(--bs-font-size-md);font-weight:600;cursor:pointer;';
+      exitButton.addEventListener('click', function () {
+        // Finalización SCORM explícita ANTES de intentar cerrar: no depender
+        // solo de que "beforeunload" llegue a dispararse a tiempo (ver
+        // cabecera del archivo). Reutiliza scormFinish(), la misma función
+        // que ya usa el listener de "beforeunload": no se duplica lógica.
+        scormFinish();
+        // Traducción literal de PlayerScreen.tsx (handleExitAttempt):
+        // window.close() no lanza cuando el navegador lo bloquea (la
+        // pestaña no la abrió un script), simplemente no hace nada, así que
+        // no hace falta try/catch. El aviso de abajo se muestra siempre,
+        // precisamente para cubrir ese caso.
+        window.close();
+        showExitMessage(card);
+      });
+      actions.appendChild(exitButton);
+
+      card.appendChild(actions);
       return card;
     }
 

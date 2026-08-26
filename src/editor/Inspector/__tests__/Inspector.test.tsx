@@ -87,7 +87,7 @@ describe('Inspector', () => {
 
     render(<Inspector filePath={TEST_FILE_PATH} />)
 
-    expect(screen.getByLabelText('Título')).toHaveValue('Bienvenida')
+    expect(screen.getByLabelText('Referencia')).toHaveValue('Bienvenida')
     // El campo "Contenido" es ahora el editor de texto enriquecido
     // (`RichTextEditor`, fase 4 Milestone 2): un `<div contenteditable>`, no
     // un `<textarea>` con `.value` — se comprueba el texto renderizado.
@@ -102,7 +102,7 @@ describe('Inspector', () => {
     })
     render(<Inspector filePath={TEST_FILE_PATH} />)
 
-    const titleInput = screen.getByLabelText('Título')
+    const titleInput = screen.getByLabelText('Referencia')
     expect(titleInput).toHaveAttribute('spellcheck', 'true')
     expect(titleInput).toHaveAttribute('lang', 'es')
   })
@@ -114,7 +114,7 @@ describe('Inspector', () => {
     render(<Inspector filePath={TEST_FILE_PATH} />)
 
     const historyBefore = useProjectStore.getState().history.past.length
-    const titleInput = screen.getByLabelText('Título')
+    const titleInput = screen.getByLabelText('Referencia')
 
     fireEvent.change(titleInput, { target: { value: 'T' } })
     fireEvent.change(titleInput, { target: { value: 'Ti' } })
@@ -141,7 +141,7 @@ describe('Inspector', () => {
     render(<Inspector filePath={TEST_FILE_PATH} />)
 
     const historyBefore = useProjectStore.getState().history.past.length
-    const titleInput = screen.getByLabelText('Título')
+    const titleInput = screen.getByLabelText('Referencia')
 
     fireEvent.change(titleInput, { target: { value: 'Confirmado con Enter' } })
     fireEvent.keyDown(titleInput, { key: 'Enter' })
@@ -157,13 +157,13 @@ describe('Inspector', () => {
     })
     render(<Inspector filePath={TEST_FILE_PATH} />)
 
-    expect(screen.getByLabelText('Título')).toHaveValue('Inicio')
+    expect(screen.getByLabelText('Referencia')).toHaveValue('Inicio')
 
     act(() => {
       useProjectStore.getState().selectNode(slideNodeId())
     })
 
-    expect(screen.getByLabelText('Título')).toHaveValue('Diapositiva 2')
+    expect(screen.getByLabelText('Referencia')).toHaveValue('Diapositiva 2')
   })
 
   it('cambiar de selección sin hacer blur confirma la edición pendiente', () => {
@@ -174,7 +174,7 @@ describe('Inspector', () => {
     render(<Inspector filePath={TEST_FILE_PATH} />)
 
     const historyBefore = useProjectStore.getState().history.past.length
-    const titleInput = screen.getByLabelText('Título')
+    const titleInput = screen.getByLabelText('Referencia')
     fireEvent.change(titleInput, { target: { value: 'Editado sin blur' } })
 
     act(() => {
@@ -203,7 +203,7 @@ describe('Inspector — foco de título tras crear desde el menú contextual (fa
 
     render(<Inspector filePath={TEST_FILE_PATH} />)
 
-    expect(screen.getByLabelText('Título')).toHaveFocus()
+    expect(screen.getByLabelText('Referencia')).toHaveFocus()
     expect(useProjectStore.getState().ui.titleFocusRequestNodeId).toBeNull()
   })
 
@@ -215,7 +215,7 @@ describe('Inspector — foco de título tras crear desde el menú contextual (fa
 
     render(<Inspector filePath={TEST_FILE_PATH} />)
 
-    expect(screen.getByLabelText('Título')).not.toHaveFocus()
+    expect(screen.getByLabelText('Referencia')).not.toHaveFocus()
     expect(useProjectStore.getState().ui.titleFocusRequestNodeId).toBeNull()
   })
 })
@@ -772,7 +772,7 @@ describe('Inspector — lista de imágenes y audio a nivel de nodo (tarea 5: var
     const alert = await screen.findByRole('alert')
     expect(alert.textContent).not.toMatch(/error|stack|undefined|NaN|\[object/i)
     // El resto del Inspector sigue funcionando (el título se puede seguir editando).
-    expect(screen.getByLabelText('Título')).toBeInTheDocument()
+    expect(screen.getByLabelText('Referencia')).toBeInTheDocument()
     expect(slideNode(slideNodeId()).imageAssetIds).toEqual([])
   })
 
@@ -1161,7 +1161,7 @@ describe('Inspector — navegación rápida entre diapositivas conectadas (tarea
     expect(useProjectStore.getState().ui.focusRequestNodeId).toBe(targetId)
   })
 
-  it('muestra "Sin título" para una diapositiva conectada sin título', () => {
+  it('muestra "Sin referencia" para una diapositiva conectada sin título', () => {
     act(() => {
       useProjectStore.getState().createNode('slide', { x: 100, y: 0 })
     })
@@ -1174,7 +1174,7 @@ describe('Inspector — navegación rápida entre diapositivas conectadas (tarea
     render(<Inspector filePath={TEST_FILE_PATH} />)
 
     const outgoing = screen.getByText('A dónde lleva esta diapositiva').closest('div') as HTMLElement
-    expect(within(outgoing).getByText(/Sin título/)).toBeInTheDocument()
+    expect(within(outgoing).getByText(/Sin referencia/)).toBeInTheDocument()
   })
 })
 
@@ -1408,5 +1408,79 @@ describe('Inspector — botón "+ Añadir respuesta" en el flujo del listado (ta
     render(<Inspector filePath={TEST_FILE_PATH} />)
 
     expect(screen.queryByRole('button', { name: '+ Añadir respuesta' })).not.toBeInTheDocument()
+  })
+})
+
+describe('Inspector — botón "Duplicar" (Tarea 1, "Duplicar diapositivas")', () => {
+  it('duplica una diapositiva sin pedir confirmación y selecciona la copia', () => {
+    act(() => {
+      useProjectStore.getState().createNode('slide', { x: 0, y: 0 }, { title: 'Diapositiva 2' })
+    })
+    const slideId = slideNodeId()
+    act(() => {
+      useProjectStore.getState().selectNode(slideId)
+    })
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+    const nodesBefore = useProjectStore.getState().project.graph.nodes.length
+
+    fireEvent.click(screen.getByRole('button', { name: 'Duplicar diapositiva' }))
+
+    // Sin confirmación: un único clic ya duplica, a diferencia de "Eliminar".
+    expect(useProjectStore.getState().project.graph.nodes.length).toBe(nodesBefore + 1)
+    const selected = useProjectStore.getState().selection.selectedNodeIds
+    expect(selected).toHaveLength(1)
+    expect(selected[0]).not.toBe(slideId)
+  })
+
+  it('duplica un nodo Final', () => {
+    act(() => {
+      useProjectStore.getState().createNode('final', { x: 0, y: 0 })
+      const finalId = useProjectStore
+        .getState()
+        .project.graph.nodes.find((n) => n.type === 'final')?.id
+      if (!finalId) throw new Error('setup inválido')
+      useProjectStore.getState().selectNode(finalId)
+    })
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+    const nodesBefore = useProjectStore.getState().project.graph.nodes.length
+
+    fireEvent.click(screen.getByRole('button', { name: 'Duplicar final' }))
+
+    expect(useProjectStore.getState().project.graph.nodes.length).toBe(nodesBefore + 1)
+  })
+
+  it('el botón "Duplicar" SÍ aparece para la diapositiva de inicio (a diferencia de "Eliminar")', () => {
+    act(() => {
+      useProjectStore.getState().selectNode(startNodeId())
+    })
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    expect(screen.getByRole('button', { name: 'Duplicar diapositiva' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Eliminar /i })).not.toBeInTheDocument()
+  })
+})
+
+describe('Inspector — etiqueta "Referencia" (renombrado de UI del campo `title`)', () => {
+  it('el campo de título se muestra con la etiqueta "Referencia", no "Título"', () => {
+    act(() => {
+      useProjectStore.getState().selectNode(startNodeId())
+    })
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    expect(screen.getByText('Referencia')).toBeInTheDocument()
+    expect(screen.queryByText('Título')).not.toBeInTheDocument()
+  })
+
+  it('un nodo sin título se etiqueta "Sin referencia" en el selector de destino', () => {
+    act(() => {
+      useProjectStore.getState().createNode('final', { x: 0, y: 0 })
+      useProjectStore.getState().selectNode(startNodeId())
+    })
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    // El nodo final recién creado, sin título, aparece como destino posible
+    // de "Continuar" con la etiqueta "Sin referencia" (ver `nodeOptionLabel`).
+    expect(screen.getByText(/Final \d+ — Sin referencia/)).toBeInTheDocument()
+    expect(screen.queryByText(/Sin título/)).not.toBeInTheDocument()
   })
 })

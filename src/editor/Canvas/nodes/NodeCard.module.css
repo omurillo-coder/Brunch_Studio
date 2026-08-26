@@ -54,6 +54,17 @@
   opacity: 0.5;
 }
 
+/* Diapositiva `final`: fondo azul clarito propio, para distinguirla de un
+   vistazo de las diapositivas normales (que mantienen el fondo neutro de
+   `.card`, `--bs-color-surface`). Solo cambia el fondo — el texto sigue
+   usando `--bs-color-text` sin tocarlo, ya comprobado con contraste AAA
+   sobre este azul en claro y en oscuro (ver `tokens.css`). El anillo de
+   selección (`.selected .card` más abajo) y el aviso `.cardWarning` no
+   tocan `background`, así que se combinan sin conflicto. */
+.cardFinal {
+  background: var(--bs-color-final-bg);
+}
+
 /* Insignia de aviso (punto 1): un indicador pequeño y barato, no un icono
    con librería aparte. Círculo sólido en la esquina superior derecha de la
    tarjeta, con "!" — `title` en el propio `<span>` (ver `nodeTypes.tsx`)

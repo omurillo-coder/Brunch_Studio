@@ -400,6 +400,34 @@
   border-color: var(--bs-color-border);
 }
 
+/* Fila que agrupa "Duplicar" y "Eliminar" (ver `NodeFields` en
+   `Inspector.tsx`): mismo `align-self: flex-start` que llevaban los botones
+   sueltos antes de agruparse, para que la fila no se estire a lo ancho de
+   `.fields`. */
+.nodeActions {
+  display: flex;
+  align-self: flex-start;
+  gap: var(--bs-space-2);
+}
+
+/* Botón "Duplicar" (sin confirmación, no es una acción destructiva): mismo
+   tamaño/forma que `.deleteNodeButton`, pero con la paleta neutra habitual
+   de esta app en vez de la de peligro — duplicar no borra ni sobrescribe
+   nada del original. */
+.duplicateNodeButton {
+  padding: var(--bs-space-2) var(--bs-space-3);
+  border: 1px solid var(--bs-color-border);
+  border-radius: var(--bs-radius-sm);
+  background: var(--bs-color-surface);
+  color: var(--bs-color-text);
+  font-size: var(--bs-font-size-sm);
+  cursor: pointer;
+}
+
+.duplicateNodeButton:hover {
+  background: var(--bs-color-bg);
+}
+
 .deleteNodeButton {
   align-self: flex-start;
   padding: var(--bs-space-2) var(--bs-space-3);

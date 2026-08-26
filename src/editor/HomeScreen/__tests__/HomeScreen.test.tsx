@@ -96,7 +96,23 @@ describe('HomeScreen', () => {
     fireEvent.click(screen.getByText('Abrir proyecto'))
 
     await vi.waitFor(() => expect(onProjectOpened).toHaveBeenCalledWith('/tmp/existente.brunch'))
-    expect(useProjectStore.getState().project.metadata.name).toBe('Proyecto existente')
+    // El nombre del proyecto en el store se sincroniza con el del archivo
+    // real ("existente"), no con el que tuviera guardado el documento
+    // ("Proyecto existente") — ver `openExistingProject`.
+    expect(useProjectStore.getState().project.metadata.name).toBe('existente')
+  })
+
+  it('"Abrir proyecto" con un nombre guardado desincronizado del archivo (renombrado fuera de la app) corrige metadata.name al nombre real del archivo', async () => {
+    const repository = new MemoryProjectRepository()
+    const staleName = createProject('Nombre antiguo, antes de renombrar el archivo')
+    await repository.createProject('/tmp/Nombre Nuevo del Archivo.brunch', staleName)
+    const pickOpenProjectPath = vi.fn().mockResolvedValue('/tmp/Nombre Nuevo del Archivo.brunch')
+    const onProjectOpened = renderHomeScreen({ repository, pickOpenProjectPath })
+
+    fireEvent.click(screen.getByText('Abrir proyecto'))
+
+    await vi.waitFor(() => expect(onProjectOpened).toHaveBeenCalled())
+    expect(useProjectStore.getState().project.metadata.name).toBe('Nombre Nuevo del Archivo')
   })
 
   it('cancelar el diálogo de abrir no notifica ni muestra error', async () => {

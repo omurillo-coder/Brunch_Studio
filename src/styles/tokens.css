@@ -59,6 +59,18 @@
      selección/foco de la interfaz. Texto encima en `--bs-color-text`
      (#1b1b1f): 14.9:1, sobra para AAA. */
   --bs-color-highlight: #ffe066;
+  /* Fondo distintivo de la tarjeta de una diapositiva `final` en el lienzo
+     (ver `NodeCard.module.css`): azul clarito, deliberadamente distinto del
+     turquesa de acento y del ámbar de aviso para no confundirse con ninguno
+     de los dos — y elegido pensando en que, en una fase futura, convivirá
+     en el mismo lienzo con un verde clarito equivalente para el nodo
+     "Inicio", sin resultar chillón. Contraste: `--bs-color-text` (#1b1b1f)
+     sobre este azul da 15.3:1 (AAA de sobra).
+     Nota: el `.type`/`.bodyPreview` de la tarjeta usan sus propios colores
+     de texto muted/faint ya definidos, que sobre un fondo tan claro como
+     éste siguen leyéndose con holgura — no hace falta un token de texto
+     aparte. */
+  --bs-color-final-bg: #e7f0fc;
 
   /* Espaciado */
   --bs-space-1: 4px;
@@ -119,6 +131,11 @@
        "marcador" sin doler la vista. Texto encima en `--bs-color-text`
        (#ededef): 5.98:1, AA para texto normal. */
     --bs-color-highlight: #6b5717;
+    /* Mismo azul clarito de `final` pero oscurecido para fondo oscuro
+       (mismo criterio que `--bs-color-highlight` arriba: un azul pastel
+       claro sobre fondo oscuro deslumbraría). Contraste:
+       `--bs-color-text` (#ededef) sobre este azul da 12.2:1 (AAA). */
+    --bs-color-final-bg: #1d2b3f;
     --bs-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
   }
 }

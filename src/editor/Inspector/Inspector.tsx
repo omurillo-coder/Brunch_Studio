@@ -72,11 +72,14 @@ const NO_TARGET_VALUE = '__none__'
 /**
  * Etiqueta legible de un nodo para mostrarlo como destino posible en un
  * `<select>` — nunca el `id` interno (UUID) como texto visible. Formato:
- * "<Tipo> <número> — <título o 'Sin título'>", p.ej.
- * "Diapositiva 3 — Bienvenida".
+ * "<Tipo> <número> — <referencia o 'Sin referencia'>", p.ej.
+ * "Diapositiva 3 — Bienvenida". "Referencia" es la etiqueta de UI del campo
+ * `title` del dominio (ver comentario de `NodeFields` más abajo, junto al
+ * `<label>` del campo): el nombre del campo en el modelo no cambia, solo su
+ * texto visible.
  */
 function nodeOptionLabel(node: Node): string {
-  const title = node.title.trim() || 'Sin título'
+  const title = node.title.trim() || 'Sin referencia'
   return `${NODE_TYPE_LABEL[node.type]} ${node.number} — ${title}`
 }
 
@@ -1642,6 +1645,34 @@ function DeleteNodeButton({ node }: { node: Node }) {
 }
 
 /**
+ * Botón "Duplicar" del nodo seleccionado (Tarea 1, "Duplicar diapositivas").
+ * A diferencia de `DeleteNodeButton`, no lleva confirmación: duplicar no es
+ * una acción destructiva (crea un nodo nuevo, nunca toca ni sobrescribe el
+ * original) y ya cuenta con deshacer si el usuario se arrepiente, mismo
+ * criterio que el resto de acciones directas de esta app (p.ej. "Ordenar
+ * automáticamente" en `Canvas`).
+ *
+ * Disponible también para la diapositiva de inicio (a diferencia de
+ * `DeleteNodeButton`, que `NodeFields` nunca monta para ella): duplicarla es
+ * perfectamente seguro porque la copia NO hereda esa condición especial —
+ * ver el comentario de diseño de `duplicateNode` en `src/domain/project.ts`.
+ */
+function DuplicateNodeButton({ node }: { node: Node }) {
+  const duplicateNode = useProjectStore((state) => state.duplicateNode)
+  const typeLabel = NODE_TYPE_LABEL[node.type].toLowerCase()
+
+  return (
+    <button
+      type="button"
+      className={styles.duplicateNodeButton}
+      onClick={() => duplicateNode(node.id)}
+    >
+      Duplicar {typeLabel}
+    </button>
+  )
+}
+
+/**
  * Campos de edición de un nodo (título/body), comunes a cualquier tipo, más
  * — para una Diapositiva — sus adjuntos, su modo "de continuar" (si no tiene
  * respuestas) y la sección de respuestas.
@@ -1731,8 +1762,14 @@ function NodeFields({
   return (
     <div className={styles.fields}>
       <div>
+        {/* "Referencia" es la etiqueta de UI del campo `title` del dominio
+            (el nombre del campo en el modelo/schema no cambia, solo su
+            texto visible — ver también `nodeOptionLabel` más arriba y los
+            "Sin referencia" de `LeftPanel`/`nodeTypes.tsx`). `id`/`htmlFor`
+            se dejan como estaban: son detalle interno del DOM, no texto
+            visible. */}
         <label className={styles.label} htmlFor="inspector-node-title">
-          Título
+          Referencia
         </label>
         <input
           id="inspector-node-title"
@@ -1776,12 +1813,18 @@ function NodeFields({
         </>
       )}
       <ConnectionsSection node={node} project={project} />
-      {/* Acción de borrado descubrible sin depender de la tecla Supr/Backspace
-          del lienzo (ver `Canvas`, que tiene su propia confirmación por
-          doble pulsación). Nunca se muestra para la diapositiva de inicio —
-          `store.deleteNode` (dominio) lanzaría si se intentara. Confirmación
-          inline de dos pasos, ver `DeleteNodeButton` más arriba. */}
-      {node.id !== startNodeId && <DeleteNodeButton node={node} />}
+      {/* "Duplicar" (sin confirmación, ver su comentario de diseño) y
+          "Eliminar" (con confirmación inline de dos pasos, ver
+          `DeleteNodeButton`), agrupados para que se lean como un mismo
+          bloque de acciones sobre el nodo. "Eliminar" descubrible sin
+          depender de la tecla Supr/Backspace del lienzo (que tiene su
+          propia confirmación por doble pulsación) y nunca se muestra para
+          la diapositiva de inicio — `store.deleteNode` (dominio) lanzaría
+          si se intentara. */}
+      <div className={styles.nodeActions}>
+        <DuplicateNodeButton node={node} />
+        {node.id !== startNodeId && <DeleteNodeButton node={node} />}
+      </div>
     </div>
   )
 }

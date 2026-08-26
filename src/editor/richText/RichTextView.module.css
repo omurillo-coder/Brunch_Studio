@@ -25,3 +25,28 @@
   border-radius: var(--bs-radius-sm);
   padding: 0 1px;
 }
+
+/* Tabla (fase 9): mismas reglas que `RichTextEditor.module.css` (salvo
+   `.selectedCell`, exclusiva del editor — aquí no hay selección posible, es
+   solo lectura) y que `.body table/th/td` en `exportedStyles.ts`, para que
+   el Player pinte la tabla igual que el editor. */
+.content :global(.tiptap table) {
+  width: 100%;
+  margin: 0 0 var(--bs-space-2);
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.content :global(.tiptap th),
+.content :global(.tiptap td) {
+  min-width: 1em;
+  padding: var(--bs-space-2);
+  border: 1px solid var(--bs-color-border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.content :global(.tiptap th) {
+  background: var(--bs-color-surface);
+  font-weight: 600;
+}

@@ -99,6 +99,44 @@ describe('parseRichBody / serializeRichBody', () => {
     })
   })
 
+  it('hace roundtrip de un documento con una tabla (fase 9) sin perder información', () => {
+    const doc = {
+      type: 'doc',
+      content: [
+        {
+          type: 'table',
+          content: [
+            {
+              type: 'tableRow',
+              content: [
+                {
+                  type: 'tableHeader',
+                  attrs: { colspan: 1, rowspan: 1, colwidth: null },
+                  content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Encabezado' }] }],
+                },
+              ],
+            },
+            {
+              type: 'tableRow',
+              content: [
+                {
+                  type: 'tableCell',
+                  attrs: { colspan: 1, rowspan: 1, colwidth: null },
+                  content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Celda' }] }],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    }
+
+    const raw = serializeRichBody(doc)
+    const parsed = parseRichBody(raw)
+
+    expect(parsed).toEqual(doc)
+  })
+
   it('serializeRichBody produce JSON.stringify del documento', () => {
     const doc = { type: 'doc', content: [{ type: 'paragraph', content: [] }] }
     expect(serializeRichBody(doc)).toBe(JSON.stringify(doc))

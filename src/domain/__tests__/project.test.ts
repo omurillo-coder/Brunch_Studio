@@ -6,6 +6,7 @@ import {
   createProject,
   deleteNode,
   deleteVariable,
+  duplicateNode,
   moveNode,
   moveNodes,
   updateNode,
@@ -380,6 +381,125 @@ describe('createConnectedNode', () => {
     const project = createNode(createProject('P'), 'final', { x: 0, y: 0 })
     const finalId = otherNodeIdOf(project, 'final')
     expect(() => createConnectedNode(project, 'slide', { x: 0, y: 0 }, finalId)).toThrow()
+  })
+})
+
+describe('duplicateNode', () => {
+  it('clona título/body/adjuntos/orden de contenido/continueLabel de una diapositiva con id y number nuevos', () => {
+    let project = createProject('P')
+    const startId = project.graph.startNodeId
+    project = updateNode(project, startId, {
+      title: 'Original',
+      body: 'cuerpo',
+      imageAssetIds: ['11111111-1111-1111-1111-111111111111'],
+      audioAssetId: '22222222-2222-2222-2222-222222222222',
+      contentOrder: 'image-first',
+      continueLabel: 'Siguiente',
+      internalNote: 'nota interna',
+    })
+
+    const { project: updated, nodeId } = duplicateNode(project, startId, { x: 40, y: 40 })
+
+    expect(updated.graph.nodes).toHaveLength(2)
+    expect(nodeId).not.toBe(startId)
+    const copy = updated.graph.nodes.find((n) => n.id === nodeId) as SlideNode
+    expect(copy.number).not.toBe(1)
+    expect(copy.position).toEqual({ x: 40, y: 40 })
+    expect(copy.title).toBe('Original')
+    expect(copy.body).toBe('cuerpo')
+    expect(copy.imageAssetIds).toEqual(['11111111-1111-1111-1111-111111111111'])
+    expect(copy.audioAssetId).toBe('22222222-2222-2222-2222-222222222222')
+    expect(copy.contentOrder).toBe('image-first')
+    expect(copy.continueLabel).toBe('Siguiente')
+    expect(copy.internalNote).toBe('nota interna')
+
+    // Inmutabilidad: el proyecto original no se toca.
+    expect(project.graph.nodes).toHaveLength(1)
+  })
+
+  it('la copia NO conserva targetNodeId/condition/elseTargetNodeId del original (decisión de diseño deliberada)', () => {
+    let project = createProject('P')
+    const startId = project.graph.startNodeId
+    project = createNode(project, 'final', { x: 200, y: 0 })
+    const finalId = otherNodeIdOf(project, 'final')
+    project = connect(project, startId, finalId)
+    project = updateNode(project, startId, {
+      condition: { variableId: 'v1', operator: '==', value: true },
+      elseTargetNodeId: finalId,
+    })
+
+    const original = project.graph.nodes.find((n) => n.id === startId) as SlideNode
+    expect(original.targetNodeId).toBe(finalId) // setup sano
+
+    const { project: updated, nodeId } = duplicateNode(project, startId, { x: 0, y: 100 })
+    const copy = updated.graph.nodes.find((n) => n.id === nodeId) as SlideNode
+
+    expect(copy.targetNodeId).toBeUndefined()
+    expect(copy.condition).toBeUndefined()
+    expect(copy.elseTargetNodeId).toBeUndefined()
+    // El original no se ha tocado.
+    const originalAfter = updated.graph.nodes.find((n) => n.id === startId) as SlideNode
+    expect(originalAfter.targetNodeId).toBe(finalId)
+  })
+
+  it('clona respuestas con texto/puntos/efectos/condición pero con id nuevo y targetNodeId limpio', () => {
+    let project = createProject('P')
+    const startId = project.graph.startNodeId
+    project = createNode(project, 'final', { x: 200, y: 0 })
+    const finalId = otherNodeIdOf(project, 'final')
+    project = addResponse(project, startId)
+    const responseId = (project.graph.nodes.find((n) => n.id === startId) as SlideNode).responses[0]
+      ?.id
+    if (!responseId) throw new Error('setup inválido')
+    project = updateResponse(project, startId, responseId, {
+      text: 'Opción A',
+      points: 5,
+      effects: [{ variableId: 'v1', operation: 'set', value: 1 }],
+      condition: { variableId: 'v1', operator: '==', value: true },
+    })
+    project = connect(project, startId, finalId, responseId)
+
+    const { project: updated, nodeId } = duplicateNode(project, startId, { x: 0, y: 0 })
+    const copy = updated.graph.nodes.find((n) => n.id === nodeId) as SlideNode
+
+    expect(copy.responses).toHaveLength(1)
+    const clonedResponse = copy.responses[0]
+    expect(clonedResponse?.id).not.toBe(responseId)
+    expect(clonedResponse?.text).toBe('Opción A')
+    expect(clonedResponse?.points).toBe(5)
+    expect(clonedResponse?.effects).toEqual([{ variableId: 'v1', operation: 'set', value: 1 }])
+    expect(clonedResponse?.condition).toEqual({ variableId: 'v1', operator: '==', value: true })
+    expect(clonedResponse?.targetNodeId).toBeUndefined()
+  })
+
+  it('duplica un nodo final (título/body/internalNote, sin campos propios de diapositiva)', () => {
+    let project = createNode(createProject('P'), 'final', { x: 0, y: 0 }, { title: 'Fin', body: 'x' })
+    const finalId = otherNodeIdOf(project, 'final')
+    project = updateNode(project, finalId, { internalNote: 'nota' })
+
+    const { project: updated, nodeId } = duplicateNode(project, finalId, { x: 50, y: 50 })
+    const copy = updated.graph.nodes.find((n) => n.id === nodeId)
+
+    expect(copy?.type).toBe('final')
+    expect(copy?.title).toBe('Fin')
+    expect(copy?.body).toBe('x')
+    expect(copy?.internalNote).toBe('nota')
+    expect(copy?.position).toEqual({ x: 50, y: 50 })
+  })
+
+  it('duplicar la diapositiva de inicio no traslada esa condición a la copia', () => {
+    const project = createProject('P')
+    const startId = project.graph.startNodeId
+
+    const { project: updated, nodeId } = duplicateNode(project, startId, { x: 40, y: 40 })
+
+    expect(updated.graph.startNodeId).toBe(startId)
+    expect(updated.graph.startNodeId).not.toBe(nodeId)
+  })
+
+  it('lanza error si el nodo no existe', () => {
+    const project = createProject('P')
+    expect(() => duplicateNode(project, 'no-existe', { x: 0, y: 0 })).toThrow()
   })
 })
 

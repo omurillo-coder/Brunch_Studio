@@ -10,6 +10,7 @@ import {
   deleteNode as domainDeleteNode,
   deleteVariable as domainDeleteVariable,
   disconnect as domainDisconnect,
+  duplicateNode as domainDuplicateNode,
   moveNode as domainMoveNode,
   moveNodes as domainMoveNodes,
   removeResponse as domainRemoveResponse,
@@ -194,6 +195,13 @@ export interface ProjectStoreActions {
   connect: (sourceNodeId: string, targetNodeId: string, responseId?: string) => void
   disconnect: (sourceNodeId: string, responseId?: string) => void
 
+  // -- Duplicar una diapositiva/final (Tarea 1 de "Duplicar diapositivas"):
+  // -- una única entrada de historial, misma familia que el resto de
+  // -- acciones de dominio de arriba. Calcula un offset pequeño respecto al
+  // -- original (ver comentario de la implementación) y selecciona la copia
+  // -- recién creada, mismo criterio que `createConnectedNodeFromMenu`.
+  duplicateNode: (nodeId: string) => void
+
   // -- Variables del proyecto (fase 1 de "Variables/condiciones"): mismo
   // -- patrón que el resto de acciones de dominio, una entrada de historial
   // -- por acción --
@@ -241,6 +249,11 @@ export interface ProjectStoreActions {
   setHover: (nodeId: string | null) => void
   setPreviewMode: (enabled: boolean) => void
 
+  // -- Portapapeles interno de duplicar con Ctrl/Cmd+C/V (transitorio; ver
+  // -- `UiState.clipboardNodeIds` y `useCanvasClipboard` en
+  // -- `src/editor/Canvas/`) --
+  setClipboardNodeIds: (nodeIds: string[]) => void
+
   // -- Foco de lienzo (transitorio; ver `UiState.focusRequestNodeId`) --
   focusNode: (nodeId: string) => void
   clearFocusRequest: () => void
@@ -275,6 +288,7 @@ export function createInitialState(): ProjectStoreData {
       focusRequestNodeId: null,
       titleFocusRequestNodeId: null,
       viewportCenter: null,
+      clipboardNodeIds: [],
     },
     saveStatus: 'idle',
     history: { past: [], future: [] },
@@ -374,6 +388,31 @@ export const useProjectStore = create<ProjectStoreState>()(
         state.history.past.push(state.project as ProjectDocument)
         state.history.future = []
         state.project = next
+      })
+    },
+
+    duplicateNode: (nodeId) => {
+      const current = get().project
+      const source = current.graph.nodes.find((node) => node.id === nodeId)
+      // Guarda defensiva: el nodo podría haber desaparecido entre pintar el
+      // botón/atajo y disparar la acción (p.ej. borrado desde otra parte de
+      // la UI en el mismo tick). `duplicateNode` de dominio lanzaría en ese
+      // caso; se ignora en silencio en vez de romper la UI, mismo criterio
+      // que `handleConnect`/`handleNodesDelete` en `Canvas`.
+      if (!source) return
+
+      // Offset pequeño respecto al original para que la copia no quede
+      // exactamente encima (mismo problema que resolvía `nextCascadePosition`
+      // en `LeftPanel`, pero aquí basta un offset fijo: ya sabemos de dónde
+      // parte la copia, a diferencia de una creación "desde cero").
+      const position = { x: source.position.x + 40, y: source.position.y + 40 }
+      const { project: next, nodeId: newNodeId } = domainDuplicateNode(current, nodeId, position)
+
+      set((state) => {
+        state.history.past.push(state.project as ProjectDocument)
+        state.history.future = []
+        state.project = next
+        state.selection.selectedNodeIds = [newNodeId]
       })
     },
 
@@ -537,6 +576,7 @@ export const useProjectStore = create<ProjectStoreState>()(
           focusRequestNodeId: null,
           titleFocusRequestNodeId: null,
           viewportCenter: null,
+          clipboardNodeIds: [],
         }
         state.saveStatus = 'idle'
         state.drag = null
@@ -603,6 +643,12 @@ export const useProjectStore = create<ProjectStoreState>()(
     setPreviewMode: (enabled) => {
       set((state) => {
         state.ui.previewMode = enabled
+      })
+    },
+
+    setClipboardNodeIds: (nodeIds) => {
+      set((state) => {
+        state.ui.clipboardNodeIds = [...nodeIds]
       })
     },
 

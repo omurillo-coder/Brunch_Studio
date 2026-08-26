@@ -301,6 +301,182 @@ describe('RichTextEditor: destacado (fase 8)', () => {
   })
 })
 
+describe('RichTextEditor: tablas editables (fase 9)', () => {
+  it('el botón "Insertar tabla" inserta una tabla 3×3 con fila de cabecera en el cursor', async () => {
+    render(<RichTextEditor body="" onCommit={vi.fn()} />)
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Insertar tabla' })).toBeInTheDocument()
+    })
+
+    const editable = document.querySelector('[contenteditable="true"]') as HTMLElement
+    editable.focus()
+    await waitOneFrame()
+
+    const insertButton = screen.getByRole('button', { name: 'Insertar tabla' })
+    fireEvent.mouseDown(insertButton)
+    fireEvent.click(insertButton)
+
+    await waitFor(() => {
+      expect(document.querySelector('table')).toBeInTheDocument()
+    })
+    expect(document.querySelectorAll('tr')).toHaveLength(3)
+    // Fila de cabecera: 3 `<th>` (una por columna); las otras dos filas
+    // aportan 3 `<td>` cada una.
+    expect(document.querySelectorAll('th')).toHaveLength(3)
+    expect(document.querySelectorAll('td')).toHaveLength(6)
+  })
+
+  it('insertar una tabla deshabilita el propio botón "Insertar tabla" (no se anidan tablas)', async () => {
+    render(<RichTextEditor body="" onCommit={vi.fn()} />)
+
+    const editable = document.querySelector('[contenteditable="true"]') as HTMLElement
+    editable.focus()
+    await waitOneFrame()
+
+    const insertButton = screen.getByRole('button', { name: 'Insertar tabla' })
+    expect(insertButton).not.toBeDisabled()
+
+    fireEvent.mouseDown(insertButton)
+    fireEvent.click(insertButton)
+
+    await waitFor(() => {
+      expect(insertButton).toBeDisabled()
+    })
+  })
+
+  it('con el cursor dentro de una tabla aparece la barra contextual con las acciones de fila/columna', async () => {
+    render(<RichTextEditor body="" onCommit={vi.fn()} />)
+
+    const editable = document.querySelector('[contenteditable="true"]') as HTMLElement
+    editable.focus()
+    await waitOneFrame()
+
+    expect(screen.queryByRole('toolbar', { name: 'Edición de tabla' })).not.toBeInTheDocument()
+
+    const insertButton = screen.getByRole('button', { name: 'Insertar tabla' })
+    fireEvent.mouseDown(insertButton)
+    fireEvent.click(insertButton)
+
+    await waitFor(() => {
+      expect(screen.getByRole('toolbar', { name: 'Edición de tabla' })).toBeInTheDocument()
+    })
+    expect(screen.getByRole('button', { name: 'Añadir fila' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Eliminar fila' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Añadir columna' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Eliminar columna' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Eliminar tabla' })).toBeInTheDocument()
+  })
+
+  /**
+   * Se comprueba el número total de filas y de celdas (`th` + `td`), no CUÁL
+   * fila/columna exacta cambia: tras `addRowAfter`/`deleteRow`, ProseMirror
+   * puede reubicar el cursor dentro de la tabla de formas que no dependen de
+   * este componente (es comportamiento interno de la extensión, no algo que
+   * este test deba fijar) — comprobar solo el recuento total sigue
+   * verificando de punta a punta que cada botón dispara el comando de Tiptap
+   * correcto, sin acoplarse a ese detalle interno.
+   */
+  it('"Añadir fila"/"Eliminar fila" y "Añadir columna"/"Eliminar columna" mutan la tabla', async () => {
+    render(<RichTextEditor body="" onCommit={vi.fn()} />)
+
+    const editable = document.querySelector('[contenteditable="true"]') as HTMLElement
+    editable.focus()
+    await waitOneFrame()
+
+    const insertButton = screen.getByRole('button', { name: 'Insertar tabla' })
+    fireEvent.mouseDown(insertButton)
+    fireEvent.click(insertButton)
+
+    const totalCells = () => document.querySelectorAll('th, td').length
+
+    await waitFor(() => {
+      expect(document.querySelectorAll('tr')).toHaveLength(3)
+    })
+    expect(totalCells()).toBe(9) // 3 filas × 3 columnas
+
+    const addRow = screen.getByRole('button', { name: 'Añadir fila' })
+    fireEvent.mouseDown(addRow)
+    fireEvent.click(addRow)
+    await waitFor(() => {
+      expect(document.querySelectorAll('tr')).toHaveLength(4)
+    })
+    expect(totalCells()).toBe(12) // 4 filas × 3 columnas
+
+    const deleteRow = screen.getByRole('button', { name: 'Eliminar fila' })
+    fireEvent.mouseDown(deleteRow)
+    fireEvent.click(deleteRow)
+    await waitFor(() => {
+      expect(document.querySelectorAll('tr')).toHaveLength(3)
+    })
+    expect(totalCells()).toBe(9) // de vuelta a 3 filas × 3 columnas
+
+    const addColumn = screen.getByRole('button', { name: 'Añadir columna' })
+    fireEvent.mouseDown(addColumn)
+    fireEvent.click(addColumn)
+    await waitFor(() => {
+      expect(totalCells()).toBe(12) // 3 filas × 4 columnas
+    })
+    expect(document.querySelectorAll('tr')).toHaveLength(3)
+
+    const deleteColumn = screen.getByRole('button', { name: 'Eliminar columna' })
+    fireEvent.mouseDown(deleteColumn)
+    fireEvent.click(deleteColumn)
+    await waitFor(() => {
+      expect(totalCells()).toBe(9) // de vuelta a 3 filas × 3 columnas
+    })
+  })
+
+  it('"Eliminar tabla" borra la tabla entera y la barra contextual desaparece', async () => {
+    render(<RichTextEditor body="" onCommit={vi.fn()} />)
+
+    const editable = document.querySelector('[contenteditable="true"]') as HTMLElement
+    editable.focus()
+    await waitOneFrame()
+
+    const insertButton = screen.getByRole('button', { name: 'Insertar tabla' })
+    fireEvent.mouseDown(insertButton)
+    fireEvent.click(insertButton)
+
+    await waitFor(() => {
+      expect(document.querySelector('table')).toBeInTheDocument()
+    })
+
+    const deleteTable = screen.getByRole('button', { name: 'Eliminar tabla' })
+    fireEvent.mouseDown(deleteTable)
+    fireEvent.click(deleteTable)
+
+    await waitFor(() => {
+      expect(document.querySelector('table')).not.toBeInTheDocument()
+    })
+    expect(screen.queryByRole('toolbar', { name: 'Edición de tabla' })).not.toBeInTheDocument()
+  })
+
+  it('la tabla insertada sobrevive al roundtrip de confirmación (commit on blur)', async () => {
+    const onCommit = vi.fn()
+    render(<RichTextEditor body="" onCommit={onCommit} />)
+
+    const editable = document.querySelector('[contenteditable="true"]') as HTMLElement
+    editable.focus()
+    await waitOneFrame()
+
+    const insertButton = screen.getByRole('button', { name: 'Insertar tabla' })
+    fireEvent.mouseDown(insertButton)
+    fireEvent.click(insertButton)
+
+    await waitFor(() => {
+      expect(document.querySelector('table')).toBeInTheDocument()
+    })
+
+    await blurByMovingFocusAway()
+
+    expect(onCommit).toHaveBeenCalledTimes(1)
+    const committedDoc = JSON.parse(onCommit.mock.calls[0]?.[0] as string)
+    expect(committedDoc.content[0].type).toBe('table')
+    expect(committedDoc.content[0].content).toHaveLength(3)
+  })
+})
+
 describe('RichTextEditor: corrector ortotipográfico nativo (fase 8)', () => {
   it('el elemento editable tiene spellcheck="true" y lang="es" al montar (activado por defecto)', async () => {
     render(<RichTextEditor body="Hola" onCommit={vi.fn()} />)
