@@ -200,6 +200,17 @@
   border-top: 1px solid var(--bs-color-border);
 }
 
+/* Edición de la diapositiva de Inicio (nodo `intro`, milestone "Diapositiva
+   de Inicio"): ciclo/asignatura en cascada, nombre del caso y destino tras
+   la portada. Mismo criterio de espaciado en columna que `.continueSection`,
+   sin borde superior (es la primera sección de campos propios del nodo, no
+   una sección condicional que aparece/desaparece como esa). */
+.introSection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--bs-space-3);
+}
+
 .removeResponseButton {
   padding: 0;
   border: none;

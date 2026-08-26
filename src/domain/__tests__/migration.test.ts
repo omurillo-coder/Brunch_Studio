@@ -1,7 +1,22 @@
 import { describe, expect, it } from 'vitest'
 import { ProjectMigrationError, parseOrMigrateProjectDocument } from '../migration'
 import { createProject } from '../project'
-import type { ContentBlock } from '../schemas'
+import type { ContentBlock, IntroNode, ProjectDocument } from '../schemas'
+
+/**
+ * Milestone "Diapositiva de Inicio": TODAS las formas que reconoce
+ * `parseOrMigrateProjectDocument` (la actual incluida, si le falta el nodo
+ * `intro`) terminan con `ensureIntroNode` sintetizando la portada — ver el
+ * punto 0 de la cabecera de `src/domain/migration.ts`. Atajo de lectura
+ * compartido por los tests de este archivo que necesitan localizarla (su
+ * `id` es siempre nuevo/aleatorio, así que ningún test puede fijarlo de
+ * antemano como hace con el resto de ids de los fixtures).
+ */
+function introNodeOf(project: ProjectDocument): IntroNode {
+  const node = project.graph.nodes.find((candidate) => candidate.type === 'intro')
+  if (!node) throw new Error('El documento migrado no tiene ningún nodo "intro"')
+  return node
+}
 
 /**
  * Fixtures con la forma ANTIGUA del documento (`start`/`content`/`decision`/
@@ -111,16 +126,26 @@ function legacyFullDocument(): unknown {
 }
 
 describe('parseOrMigrateProjectDocument — documento con forma antigua', () => {
-  it('convierte content y decision en slide, elimina el start y fija startNodeId a su destino', () => {
+  it('convierte content y decision en slide, elimina el start, sintetiza un intro y lo fija como startNodeId', () => {
     const migrated = parseOrMigrateProjectDocument(legacyFullDocument())
 
-    // El nodo start desaparece; los otros tres se conservan.
+    // El nodo start desaparece; los otros tres se conservan, MÁS el intro
+    // sintetizado (milestone "Diapositiva de Inicio", encadenado tras la
+    // migración legacy -> pre-bloques -> content).
+    const intro = introNodeOf(migrated)
     expect(migrated.graph.nodes.map((node) => node.id)).toEqual([
+      intro.id,
       CONTENT_ID,
       DECISION_ID,
       FINAL_ID,
     ])
-    expect(migrated.graph.startNodeId).toBe(CONTENT_ID)
+    // El intro sintetizado apunta a donde apuntaba el antiguo `start`
+    // (CONTENT_ID, ver `legacyFullDocument`), y es el nuevo startNodeId.
+    expect(intro.targetNodeId).toBe(CONTENT_ID)
+    expect(migrated.graph.startNodeId).toBe(intro.id)
+    expect(intro.cicloId).toBeUndefined()
+    expect(intro.asignaturaId).toBeUndefined()
+    expect(intro.caseName).toBe('')
 
     // Metadata/editor/settings intactos.
     expect(migrated.metadata).toEqual(legacyBase().metadata)
@@ -176,7 +201,7 @@ describe('parseOrMigrateProjectDocument — documento con forma antigua', () => 
     expect(final.body).toBe('<p>Has terminado</p>')
   })
 
-  it('si el start no tenía destino, el inicio pasa a ser el nodo de menor number', () => {
+  it('si el start no tenía destino, el inicio narrativo (destino del intro sintetizado) pasa a ser el nodo de menor number', () => {
     const document = legacyFullDocument() as {
       graph: { nodes: { id: string; targetNodeId?: string }[] }
     }
@@ -184,8 +209,12 @@ describe('parseOrMigrateProjectDocument — documento con forma antigua', () => 
     if (start) delete start.targetNodeId
 
     const migrated = parseOrMigrateProjectDocument(document)
-    // El de menor `number` entre los migrados es el antiguo content (2).
-    expect(migrated.graph.startNodeId).toBe(CONTENT_ID)
+    const intro = introNodeOf(migrated)
+    // El de menor `number` entre los migrados es el antiguo content (2); el
+    // intro sintetizado (milestone "Diapositiva de Inicio") es quien ahora
+    // es literalmente `graph.startNodeId`, apuntando a ese nodo.
+    expect(intro.targetNodeId).toBe(CONTENT_ID)
+    expect(migrated.graph.startNodeId).toBe(intro.id)
   })
 
   it('si el start apuntaba a un nodo que ya no existe, cae al nodo de menor number', () => {
@@ -196,10 +225,12 @@ describe('parseOrMigrateProjectDocument — documento con forma antigua', () => 
     if (start) start.targetNodeId = '00000000-0000-4000-8000-000000000000'
 
     const migrated = parseOrMigrateProjectDocument(document)
-    expect(migrated.graph.startNodeId).toBe(CONTENT_ID)
+    const intro = introNodeOf(migrated)
+    expect(intro.targetNodeId).toBe(CONTENT_ID)
+    expect(migrated.graph.startNodeId).toBe(intro.id)
   })
 
-  it('un documento antiguo con solo el nodo start convierte ese start en la diapositiva de inicio', () => {
+  it('un documento antiguo con solo el nodo start lo convierte en diapositiva y sintetiza el intro delante, apuntándola', () => {
     const document = {
       ...legacyBase(),
       graph: {
@@ -217,13 +248,18 @@ describe('parseOrMigrateProjectDocument — documento con forma antigua', () => 
     }
 
     const migrated = parseOrMigrateProjectDocument(document)
-    expect(migrated.graph.nodes).toHaveLength(1)
-    expect(migrated.graph.nodes[0]?.type).toBe('slide')
-    expect(migrated.graph.nodes[0]?.title).toBe('Arranque')
-    expect(migrated.graph.startNodeId).toBe(START_ID)
+    // El antiguo `start` (convertido en diapositiva) más el intro
+    // sintetizado encima: dos nodos en total.
+    expect(migrated.graph.nodes).toHaveLength(2)
+    const intro = introNodeOf(migrated)
+    const slide = migrated.graph.nodes.find((node) => node.id === START_ID)
+    expect(slide?.type).toBe('slide')
+    expect(slide?.title).toBe('Arranque')
+    expect(intro.targetNodeId).toBe(START_ID)
+    expect(migrated.graph.startNodeId).toBe(intro.id)
   })
 
-  it('un documento antiguo sin ningún start usa el nodo de menor number como inicio', () => {
+  it('un documento antiguo sin ningún start usa el nodo de menor number como destino del intro sintetizado', () => {
     const document = {
       ...legacyBase(),
       graph: {
@@ -250,17 +286,84 @@ describe('parseOrMigrateProjectDocument — documento con forma antigua', () => 
     }
 
     const migrated = parseOrMigrateProjectDocument(document)
-    expect(migrated.graph.startNodeId).toBe(CONTENT_ID)
+    const intro = introNodeOf(migrated)
+    expect(intro.targetNodeId).toBe(CONTENT_ID)
+    expect(migrated.graph.startNodeId).toBe(intro.id)
+  })
+
+  it('cadena completa desde el formato más antiguo posible: cuatro migraciones (legacy -> pre-bloques -> content -> intro) en una sola llamada', () => {
+    // El caso más antiguo reconocible: start/content/decision/final, SIN
+    // graph.startNodeId, SIN content blocks (body/imageAssetId/audioAssetId
+    // singulares) y SIN nodo intro. Debe encadenar las CUATRO migraciones
+    // (legacy -> pre-bloques-de-contenido -> bloques de contenido -> intro
+    // sintetizado) en una única llamada a `parseOrMigrateProjectDocument`.
+    const migrated = parseOrMigrateProjectDocument(legacyFullDocument())
+
+    // Forma final: válida, con bloques de contenido Y con su intro.
+    const intro = introNodeOf(migrated)
+    expect(intro.type).toBe('intro')
+    expect(migrated.graph.startNodeId).toBe(intro.id)
+    expect(intro.targetNodeId).toBe(CONTENT_ID)
+
+    const contentSlide = migrated.graph.nodes.find((node) => node.id === CONTENT_ID)
+    expect(contentSlide?.type).toBe('slide')
+    if (contentSlide?.type !== 'slide') throw new Error('esperaba una diapositiva')
+    expect(blockShapes(contentSlide.content)).toEqual([
+      { type: 'text', body: '<p>Hola</p>' },
+      { type: 'image', assetId: IMAGE_ID },
+      { type: 'audio', assetId: AUDIO_ID },
+    ])
+
+    // Cuatro nodos en total: intro + los tres migrados desde la forma legacy.
+    expect(migrated.graph.nodes).toHaveLength(4)
   })
 })
 
 describe('parseOrMigrateProjectDocument — documento ya en forma nueva', () => {
-  it('lo devuelve sin cambios', () => {
+  it('si ya tiene un nodo intro, lo devuelve sin cambios', () => {
+    // `createProject` (bajo nivel, ver su comentario en src/domain/project.ts)
+    // no siembra ningún intro; se simula aquí a mano el caso real de un
+    // `.brunch` ya guardado DESPUÉS del milestone "Diapositiva de Inicio"
+    // (creado vía una plantilla, que sí lo siembra), añadiéndolo a pelo.
+    const base = createProject('Escenario nuevo')
+    const introId = '00000000-0000-4000-8000-0000000000aa'
+    const document = {
+      ...base,
+      graph: {
+        nodes: [
+          {
+            id: introId,
+            number: 2,
+            type: 'intro' as const,
+            position: { x: -260, y: 0 },
+            title: '',
+            cicloId: undefined,
+            asignaturaId: undefined,
+            caseName: '',
+            targetNodeId: base.graph.startNodeId,
+          },
+          ...base.graph.nodes,
+        ],
+        startNodeId: introId,
+      },
+    }
+
+    const parsed = parseOrMigrateProjectDocument(JSON.parse(JSON.stringify(document)))
+    expect(parsed).toEqual(JSON.parse(JSON.stringify(document)))
+    expect(parsed.graph.startNodeId).toBe(introId)
+  })
+
+  it('si NO tiene ningún nodo intro (la forma que producía createProject hasta este milestone), le sintetiza uno', () => {
     const document = createProject('Escenario nuevo')
     const parsed = parseOrMigrateProjectDocument(JSON.parse(JSON.stringify(document)))
 
-    expect(parsed).toEqual(JSON.parse(JSON.stringify(document)))
-    expect(parsed.graph.startNodeId).toBe(document.graph.startNodeId)
+    const intro = introNodeOf(parsed)
+    expect(parsed.graph.nodes).toHaveLength(document.graph.nodes.length + 1)
+    expect(intro.targetNodeId).toBe(document.graph.startNodeId)
+    expect(parsed.graph.startNodeId).toBe(intro.id)
+    // El resto del documento (la diapositiva original) se conserva intacto.
+    const originalSlide = parsed.graph.nodes.find((node) => node.id === document.graph.startNodeId)
+    expect(originalSlide).toEqual(document.graph.nodes[0])
   })
 })
 
@@ -460,10 +563,12 @@ describe('parseOrMigrateProjectDocument — documento en la forma "imagen única
     ])
   })
 
-  it('el resto de nodos (respuestas, final) y el startNodeId se conservan intactos', () => {
+  it('el resto de nodos (respuestas, final) se conservan intactos y el intro sintetizado apunta al antiguo startNodeId', () => {
     const migrated = parseOrMigrateProjectDocument(singularImageDocument({ imageAssetId: IMAGE_ID }))
 
-    expect(migrated.graph.startNodeId).toBe(CONTENT_ID)
+    const intro = introNodeOf(migrated)
+    expect(intro.targetNodeId).toBe(CONTENT_ID)
+    expect(migrated.graph.startNodeId).toBe(intro.id)
     const decision = migrated.graph.nodes.find((node) => node.id === DECISION_ID)
     expect(decision?.type).toBe('slide')
     if (decision?.type !== 'slide') throw new Error('esperaba una diapositiva')

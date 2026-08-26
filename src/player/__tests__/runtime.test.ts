@@ -556,3 +556,87 @@ describe('runtime del Player: enrutado condicional de una diapositiva "de contin
     expect(advance(project, state)).toEqual(state)
   })
 })
+
+// ---------------------------------------------------------------------------
+// Diapositiva de Inicio (nodo `intro`, milestone "Diapositiva de Inicio")
+// ---------------------------------------------------------------------------
+
+describe('runtime del Player: nodo intro (portada)', () => {
+  /**
+   * Proyecto con una portada (`intro`) conectada a una diapositiva "de
+   * continuar" real. `createNode(project, 'intro', ...)` ya deja `intro`
+   * como `startNodeId` (ver `createNode` en `src/domain/project.ts`), así
+   * que no hace falta tocar `graph.startNodeId` a mano.
+   */
+  function buildIntroGraph() {
+    let project = createProject('P')
+    const slideId = project.graph.startNodeId // slide sembrado por createProject
+    project = createNode(project, 'intro', { x: -200, y: 0 })
+    const introId = project.graph.startNodeId // createNode desplaza startNodeId al intro
+    project = updateNode(project, introId, {
+      cicloId: 'ciclo-de-prueba',
+      asignaturaId: 'asignatura-de-prueba',
+      caseName: 'Mi caso práctico',
+    })
+    project = connect(project, introId, slideId)
+    return { project, introId, slideId }
+  }
+
+  it('getView devuelve kind "intro" con el nodo intro completo cuando el recorrido empieza en la portada', () => {
+    const { project, introId } = buildIntroGraph()
+
+    const state = getInitialState(project)
+    expect(state.currentNodeId).toBe(introId)
+
+    const view = getView(project, state)
+    expect(view.kind).toBe('intro')
+    if (view.kind === 'intro') {
+      expect(view.node.id).toBe(introId)
+      expect(view.node.caseName).toBe('Mi caso práctico')
+      expect(view.node.cicloId).toBe('ciclo-de-prueba')
+      expect(view.node.asignaturaId).toBe('asignatura-de-prueba')
+    }
+  })
+
+  it('advance avanza desde la portada a targetNodeId (primera diapositiva narrativa real)', () => {
+    const { project, slideId } = buildIntroGraph()
+    const state = getInitialState(project)
+
+    const next = advance(project, state)
+    expect(next.currentNodeId).toBe(slideId)
+    // El resto del estado (puntuación, variables) no lo toca avanzar desde
+    // la portada, igual que avanzar desde una diapositiva "de continuar".
+    expect(next.totalPoints).toBeNull()
+    expect(next.variables).toEqual(state.variables)
+  })
+
+  it('sin targetNodeId, la portada cae al mismo dead-end que el resto del motor (no un botón que no lleva a ningún sitio)', () => {
+    let project = createNode(createProject('P'), 'intro', { x: -200, y: 0 })
+    const introId = project.graph.startNodeId
+    project = updateNode(project, introId, { caseName: 'Caso sin destino aún' })
+
+    const state = getInitialState(project)
+    expect(state.currentNodeId).toBe(introId)
+
+    const view = getView(project, state)
+    expect(view.kind).toBe('dead-end')
+    if (view.kind === 'dead-end') {
+      expect(view.node?.id).toBe(introId)
+    }
+
+    // advance es un no-op: no hay a dónde ir.
+    expect(advance(project, state)).toEqual(state)
+  })
+
+  it('un proyecto recién creado desde plantilla/migración arranca en la portada, no directamente en la narrativa', () => {
+    // createNode('intro', ...) reproduce la invariante de dominio (siempre
+    // desplaza startNodeId a la portada, ver comentario de `createNode`):
+    // el recorrido YA NO empieza en la primera diapositiva narrativa, sino
+    // en la portada.
+    const { project, introId, slideId } = buildIntroGraph()
+
+    const state = getInitialState(project)
+    expect(state.currentNodeId).toBe(introId)
+    expect(state.currentNodeId).not.toBe(slideId)
+  })
+})

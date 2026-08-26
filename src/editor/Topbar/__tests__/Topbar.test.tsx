@@ -11,6 +11,7 @@ import {
 } from '../../../persistence'
 import { useProjectStore } from '../../../store'
 import { resetProjectStore } from '../../../store/testHelpers'
+import { CICLOS } from '../../../domain'
 
 const TEST_FILE_PATH = '/tmp/topbar-test.brunch'
 
@@ -44,6 +45,48 @@ function renderTopbar(services: Partial<AppServices> = {}, extra?: ReactElement)
 beforeEach(() => {
   resetProjectStore()
 })
+
+/**
+ * Añade una diapositiva de Inicio (nodo `intro`, milestone "Diapositiva de
+ * Inicio") completa —ciclo, asignatura coherente con ese ciclo y nombre de
+ * caso— al proyecto del store. Necesaria en los tests de "Exportar HTML"/
+ * "Exportar SCORM" de más abajo desde que ambos hooks bloquean la
+ * exportación con `validateIntroForExport` (`src/domain/introValidation.ts`,
+ * fase 3 del milestone): el proyecto "de fábrica" de `resetProjectStore`
+ * (creado con la función de bajo nivel `createProject`, ver su comentario en
+ * `src/domain/project.ts`) NO nace con ningún nodo `intro`, así que sin esto
+ * la exportación quedaría siempre bloqueada y estos tests —que verifican la
+ * mecánica de exportar (pedir ruta, generar, escribir), no la validación de
+ * la portada— dejarían de poder probarla.
+ */
+function seedCompleteIntro(): void {
+  act(() => {
+    useProjectStore.getState().createNode('intro', { x: -300, y: 0 })
+  })
+  const introId = useProjectStore
+    .getState()
+    .project.graph.nodes.find((node) => node.type === 'intro')?.id
+  if (!introId) throw new Error('seedCompleteIntro: no se creó ningún nodo "intro"')
+
+  const ciclo = CICLOS[0]!
+  const asignatura = ciclo.asignaturas[0]!
+  act(() => {
+    useProjectStore.getState().updateNode(introId, {
+      cicloId: ciclo.id,
+      asignaturaId: asignatura.id,
+      caseName: 'Caso de prueba',
+    })
+  })
+}
+
+/** Id del nodo `slide` del proyecto de prueba — ya no es necesariamente
+ *  `graph.startNodeId` una vez `seedCompleteIntro` añade la portada (que lo
+ *  desplaza, ver `createNode` en `src/domain/project.ts`). */
+function slideNodeId(): string {
+  const id = useProjectStore.getState().project.graph.nodes.find((node) => node.type === 'slide')?.id
+  if (!id) throw new Error('No hay ningún nodo "slide" en el proyecto de prueba')
+  return id
+}
 
 describe('Topbar', () => {
   it('muestra el nombre del proyecto y el estado de guardado', () => {
@@ -201,6 +244,10 @@ describe('Topbar', () => {
 })
 
 describe('Topbar — Exportar HTML', () => {
+  beforeEach(() => {
+    seedCompleteIntro()
+  })
+
   it('pide la ruta, genera el HTML y lo escribe', async () => {
     const htmlBundleWriter = new MemoryHtmlBundleWriter()
     const pickExportHtmlPath = vi.fn(async () => '/tmp/experiencia.html')
@@ -260,6 +307,10 @@ describe('Topbar — Exportar HTML', () => {
 })
 
 describe('Topbar — Exportar SCORM', () => {
+  beforeEach(() => {
+    seedCompleteIntro()
+  })
+
   it('pide la ruta, genera el HTML y el manifiesto, y empaqueta el .zip', async () => {
     const scormPackageWriter = new MemoryScormPackageWriter()
     const pickExportScormPath = vi.fn(async () => '/tmp/experiencia.zip')
@@ -328,8 +379,7 @@ describe('Topbar — Exportar SCORM', () => {
     // fallido (ver `exportAssets.test.ts`) en vez de abortar toda la
     // exportación.
     act(() => {
-      const startNodeId = useProjectStore.getState().project.graph.startNodeId
-      useProjectStore.getState().addImageBlock(startNodeId, 'asset-inexistente')
+      useProjectStore.getState().addImageBlock(slideNodeId(), 'asset-inexistente')
     })
     renderTopbar({
       pickExportScormPath: async () => '/tmp/experiencia.zip',

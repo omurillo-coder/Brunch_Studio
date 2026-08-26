@@ -3,6 +3,7 @@ import {
   addImageBlock,
   addResponse,
   addTextBlock,
+  CICLOS,
   connect,
   createNode,
   createProject,
@@ -21,6 +22,15 @@ function otherNodeIdOf(project: ProjectDocument, type: 'slide' | 'final'): strin
     (n) => n.type === type && n.id !== project.graph.startNodeId,
   )?.id
   if (!id) throw new Error(`No hay nodo "${type}" distinto del inicio en el setup`)
+  return id
+}
+
+/** Id del nodo `intro` del proyecto — a diferencia de `otherNodeIdOf`, un
+ *  `intro` SIEMPRE es `graph.startNodeId` cuando existe (ver
+ *  `IntroNodeSchema`), así que se busca directamente por tipo. */
+function introNodeId(project: ProjectDocument): string {
+  const id = project.graph.nodes.find((n) => n.type === 'intro')?.id
+  if (!id) throw new Error('No hay nodo "intro" en el setup')
   return id
 }
 
@@ -338,6 +348,63 @@ describe('toFlowNodes — internalNote (tarea 6) y bodyPreview (tarea 8)', () =>
 
     const flowNodes = toFlowNodes(project, [])
     expect(flowNodes.find((n) => n.id === finalId)?.data.bodyPreview).toBe('Fin del recorrido')
+  })
+})
+
+describe('toFlowNodes — nodo `intro` (milestone "Diapositiva de Inicio", Tarea 4)', () => {
+  it('no lanza con un nodo `intro` recién creado (sin cicloId/asignaturaId/caseName)', () => {
+    const project = createNode(createProject('P'), 'intro', { x: -260, y: 0 })
+    expect(() => toFlowNodes(project, [])).not.toThrow()
+  })
+
+  it('un `intro` incompleto muestra un aviso sutil de "pendiente de completar", nunca un id crudo', () => {
+    const project = createNode(createProject('P'), 'intro', { x: -260, y: 0 })
+    const introId = introNodeId(project)
+
+    const flowNodes = toFlowNodes(project, [])
+    const preview = flowNodes.find((n) => n.id === introId)?.data.bodyPreview
+    expect(preview).toBe('(pendiente de completar)')
+  })
+
+  it('un `intro` completo resuelve ciclo/asignatura a sus NOMBRES legibles, nunca a sus ids', () => {
+    const ciclo = CICLOS[0]
+    const asignatura = ciclo?.asignaturas[0]
+    if (!ciclo || !asignatura) throw new Error('El catálogo de prueba está vacío')
+
+    let project = createNode(createProject('P'), 'intro', { x: -260, y: 0 })
+    const introId = introNodeId(project)
+    project = updateNode(project, introId, {
+      cicloId: ciclo.id,
+      asignaturaId: asignatura.id,
+      caseName: 'Simulación de urgencias',
+    })
+
+    const flowNodes = toFlowNodes(project, [])
+    const preview = flowNodes.find((n) => n.id === introId)?.data.bodyPreview
+    expect(preview).toBe(`${ciclo.name} · ${asignatura.name} — Simulación de urgencias`)
+    expect(preview).not.toContain(ciclo.id)
+    expect(preview).not.toContain(asignatura.id)
+  })
+
+  it('un `intro` sin targetNodeId se marca hasNoOutgoing, igual que una diapositiva "de continuar" sin destino', () => {
+    const project = createNode(createProject('P'), 'intro', { x: -260, y: 0 })
+    const introId = introNodeId(project)
+
+    const flowNodes = toFlowNodes(project, [])
+    expect(flowNodes.find((n) => n.id === introId)?.data.hasNoOutgoing).toBe(true)
+  })
+
+  it('un `intro` CON targetNodeId no se marca hasNoOutgoing', () => {
+    let project = createNode(createProject('P'), 'intro', { x: -260, y: 0 })
+    const introId = introNodeId(project)
+    // El `intro` desplaza `startNodeId`; el destino es la `SlideNode` que
+    // antes era el inicio.
+    const slideId = project.graph.nodes.find((n) => n.type === 'slide')?.id
+    if (!slideId) throw new Error('setup inválido')
+    project = connect(project, introId, slideId)
+
+    const flowNodes = toFlowNodes(project, [])
+    expect(flowNodes.find((n) => n.id === introId)?.data.hasNoOutgoing).toBe(false)
   })
 })
 

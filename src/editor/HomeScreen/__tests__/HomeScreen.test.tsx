@@ -41,8 +41,12 @@ describe('HomeScreen', () => {
     const stored = await repository.openProject('/tmp/nuevo.brunch')
     expect(stored.metadata.name).toBe('Mi escenario')
     expect(useProjectStore.getState().project.metadata.name).toBe('Mi escenario')
-    // Plantilla por defecto ("En blanco"): un único nodo, igual que antes.
-    expect(stored.graph.nodes).toHaveLength(1)
+    // Plantilla por defecto ("En blanco"): una diapositiva + la diapositiva
+    // de Inicio obligatoria (nodo `intro`, milestone "Diapositiva de
+    // Inicio", ver `seedIntroNode` en `src/domain/templates.ts`).
+    expect(stored.graph.nodes).toHaveLength(2)
+    const intros = stored.graph.nodes.filter((node) => node.type === 'intro')
+    expect(intros).toHaveLength(1)
   })
 
   it('elegir la plantilla "Decisión simple" crea un documento con esa estructura', async () => {
@@ -61,8 +65,12 @@ describe('HomeScreen', () => {
 
     const stored = await repository.openProject('/tmp/decision.brunch')
     expect(stored.metadata.name).toBe('Con plantilla')
-    // Inicio + decisión + 2 finales.
-    expect(stored.graph.nodes).toHaveLength(4)
+    // Diapositiva de Inicio (`intro`) + Inicio narrativo + decisión + 2
+    // finales (milestone "Diapositiva de Inicio": la portada obligatoria se
+    // antepone al resto de la plantilla, ver `seedIntroNode`).
+    expect(stored.graph.nodes).toHaveLength(5)
+    const intros = stored.graph.nodes.filter((node) => node.type === 'intro')
+    expect(intros).toHaveLength(1)
     const finals = stored.graph.nodes.filter((node) => node.type === 'final')
     expect(finals).toHaveLength(2)
   })

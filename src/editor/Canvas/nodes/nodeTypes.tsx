@@ -7,22 +7,28 @@ import { IN_HANDLE_ID, OUT_HANDLE_ID, responseHandleId } from '../handles'
 import styles from './NodeCard.module.css'
 
 /**
- * Nodos personalizados del lienzo, uno por tipo de dominio (`slide` y
- * `final`). Compactos a propósito: tipo traducido + número visible + título
- * (nunca el `id` interno), truncados con CSS si son largos. El `body`
+ * Nodos personalizados del lienzo, uno por tipo de dominio (`intro`, `slide`
+ * y `final`). Compactos a propósito: tipo traducido + número visible +
+ * título (nunca el `id` interno), truncados con CSS si son largos. El `body`
  * completo del nodo nunca se pinta aquí — el lienzo debe seguir siendo
  * legible con decenas de nodos; el contenido completo se edita en el
  * inspector.
  *
- * Ya no existe un nodo visual de "Inicio": la diapositiva de inicio
- * (`graph.startNodeId`) es una diapositiva normal, marcada con una etiqueta
- * discreta en su cabecera (`data.isStart`).
+ * Milestone "Diapositiva de Inicio": SÍ vuelve a existir un nodo visual de
+ * "Inicio" (`intro`), a diferencia del antiguo tipo `start` que este mismo
+ * comentario descartaba — pero es un nodo de dominio real (portada de
+ * ciclo/asignatura/caso), no el marcador puramente visual de antes. Cuando
+ * el proyecto todavía no tiene `intro` (documentos construidos con
+ * `createProject` de bajo nivel, ver su comentario), `graph.startNodeId`
+ * sigue pudiendo apuntar a una `SlideNode` normal, marcada con la etiqueta
+ * discreta de siempre en su cabecera (`data.isStart`).
  */
 
 /** Exportado para que otros componentes del lienzo (p.ej. `ConnectionMenu`,
  *  el menú "¿Qué quieres añadir?") reutilicen el mismo diccionario de
  *  etiquetas en vez de duplicarlo. */
 export const NODE_TYPE_LABEL: Record<NodeType, string> = {
+  intro: 'Inicio',
   slide: 'Diapositiva',
   final: 'Final',
 }
@@ -44,18 +50,23 @@ function displayTitle(title: string): string {
 }
 
 /** Texto accesible de la insignia de aviso "sin salida" (punto 1),
- *  reutilizado como `title` del `<span>` — ver `NodeCard.module.css`. */
-const NO_OUTGOING_WARNING_TEXT = 'Esta diapositiva no tiene ninguna salida conectada'
+ *  reutilizado como `title` del `<span>` — ver `NodeCard.module.css`.
+ *  Genérico ("nodo", no "diapositiva") desde el milestone "Diapositiva de
+ *  Inicio": ahora también se pinta sobre un `intro` sin `targetNodeId`. */
+const NO_OUTGOING_WARNING_TEXT = 'Este nodo no tiene ninguna salida conectada'
 
 /** Combina las clases modificadoras de `.card` según el resaltado calculado
  *  en `adapter.ts` (puntos 1 y 4) y el tipo de nodo. Centralizado aquí para
- *  que `SlideNodeView`/`FinalNodeView` no dupliquen la combinación.
- *  `cardFinal` (fondo azul clarito) solo se aplica a `final` — las
- *  diapositivas `slide` mantienen su fondo neutro sin cambios. */
+ *  que `SlideNodeView`/`FinalNodeView`/`IntroNodeView` no dupliquen la
+ *  combinación. `cardFinal` (fondo azul clarito) solo se aplica a `final`;
+ *  `cardIntro` (fondo verde clarito, milestone "Diapositiva de Inicio") solo
+ *  a `intro` — las diapositivas `slide` mantienen su fondo neutro sin
+ *  cambios. */
 function cardClassName(data: CanvasNodeData): string {
   return [
     styles.card,
     data.nodeType === 'final' && styles.cardFinal,
+    data.nodeType === 'intro' && styles.cardIntro,
     data.hasNoOutgoing && styles.cardWarning,
     data.isHighlighted && styles.cardHighlighted,
     data.isDimmed && styles.cardDimmed,
@@ -66,7 +77,8 @@ function cardClassName(data: CanvasNodeData): string {
 
 /** Insignia de aviso "sin salida" (punto 1): solo se pinta para
  *  `data.hasNoOutgoing`, que `adapter.ts` ya garantiza `false` para nodos
- *  `final`. */
+ *  `final`, y calcula igual para `slide`/`intro` (milestone "Diapositiva de
+ *  Inicio", ver comentario de `hasNoOutgoing` en `adapter.ts`). */
 function NoOutgoingBadge({ data }: { data: CanvasNodeData }) {
   if (!data.hasNoOutgoing) return null
   return (
@@ -96,7 +108,11 @@ function Header({ data }: { data: CanvasNodeData }) {
   return (
     <div className={styles.header}>
       <span className={styles.type}>{NODE_TYPE_LABEL[data.nodeType]}</span>
-      {data.isStart && (
+      {/* La marca "Inicio" solo aporta información en una `SlideNode` que
+          hace de inicio (documentos sin `intro`, ver comentario de cabecera
+          del módulo): en un nodo `intro` sería redundante, ya que su propia
+          insignia de tipo ya dice "Inicio" (`NODE_TYPE_LABEL.intro`). */}
+      {data.isStart && data.nodeType !== 'intro' && (
         <span className={styles.startMark} title="Diapositiva de inicio">
           {START_NODE_LABEL}
         </span>
@@ -195,12 +211,38 @@ export function FinalNodeView({ data }: NodeProps<CanvasFlowNode>) {
 }
 
 /**
+ * Tarjeta de la diapositiva de Inicio (nodo `intro`, milestone "Diapositiva
+ * de Inicio"). A diferencia de `SlideNodeView`/`FinalNodeView`:
+ * - SIN `InHandle`: nada puede conectar HACIA el inicio, es siempre el punto
+ *   de partida del recorrido (mismo criterio que documenta
+ *   `IntroNodeSchema` en `src/domain/schemas.ts`).
+ * - CON `OutHandle` siempre presente (nunca condicionado a "sin respuestas",
+ *   a diferencia de `SlideNodeView`): un `intro` no tiene `responses`, su
+ *   única salida es siempre la de "continuar" hacia `targetNodeId` — mismo
+ *   handle (`OUT_HANDLE_ID`) que ya usa una diapositiva "de continuar".
+ * - `BodyPreview` pinta aquí el resumen de ciclo/asignatura/caso resuelto a
+ *   nombres legibles (`introSummaryFor` en `adapter.ts`), nunca el `content`
+ *   de una diapositiva normal (un `intro` no tiene).
+ */
+export function IntroNodeView({ data }: NodeProps<CanvasFlowNode>) {
+  return (
+    <div className={cardClassName(data)}>
+      <NoOutgoingBadge data={data} />
+      <Header data={data} />
+      <BodyPreview data={data} />
+      <OutHandle />
+    </div>
+  )
+}
+
+/**
  * Mapa `nodeTypes` de `@xyflow/react`. Definido una sola vez a nivel de
  * módulo (no dentro del componente `Canvas`) para que sea una referencia
  * estable entre renders — `@xyflow/react` avisa (`error002`) si detecta un
  * objeto `nodeTypes`/`edgeTypes` nuevo en cada render.
  */
 export const nodeTypes = {
+  intro: IntroNodeView,
   slide: SlideNodeView,
   final: FinalNodeView,
 }

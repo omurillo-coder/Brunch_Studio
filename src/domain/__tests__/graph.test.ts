@@ -4,6 +4,14 @@ import { connect, disconnect, deriveEdges } from '../graph'
 import { addResponse } from '../responses'
 import type { ProjectDocument } from '../schemas'
 
+/** Primer nodo del documento que sea el nodo `intro` (milestone
+ *  "Diapositiva de Inicio"). */
+function introIdOf(project: ProjectDocument): string {
+  const node = project.graph.nodes.find((candidate) => candidate.type === 'intro')
+  if (!node) throw new Error('El proyecto no tiene ningún nodo "intro" en el setup')
+  return node.id
+}
+
 /** Id de variable de pega, solo para condiciones de prueba (no necesita
  *  existir en `project.variables`: `deriveEdges` no la consulta). */
 const FAKE_VARIABLE_ID = '00000000-0000-4000-8000-000000000001'
@@ -210,5 +218,47 @@ describe('deriveEdges — rama "si no" (fase 2, Variables/condiciones)', () => {
     const edges = deriveEdges(project)
     expect(edges.some((edge) => edge.kind === 'else')).toBe(false)
     expect(edges).toHaveLength(1)
+  })
+})
+
+describe('deriveEdges — nodo "intro" (milestone "Diapositiva de Inicio")', () => {
+  it('deriva una arista simple desde el intro hacia su targetNodeId', () => {
+    let project = createNode(createProject('P'), 'intro', { x: -260, y: 0 })
+    const introId = introIdOf(project)
+    const slideId = project.graph.nodes.find((n) => n.id !== introId)?.id
+    if (!slideId) throw new Error('setup inválido')
+
+    project = connect(project, introId, slideId)
+
+    const edges = deriveEdges(project)
+    expect(edges).toEqual([{ id: `${introId}->${slideId}`, source: introId, target: slideId }])
+  })
+
+  it('no genera arista cuando el intro no tiene destino', () => {
+    const project = createNode(createProject('P'), 'intro', { x: -260, y: 0 })
+    expect(deriveEdges(project)).toEqual([])
+  })
+
+  it('el BFS de alcanzabilidad de validateProject arranca desde el intro y atraviesa su arista', async () => {
+    // Import diferido para no crear una dependencia circular a nivel de
+    // módulo entre graph.test.ts y validation.ts (ninguno de los dos la
+    // tiene hoy, pero este test es el único de este archivo que necesita
+    // `validateProject`).
+    const { validateProject } = await import('../validation')
+
+    let project = createNode(createProject('P'), 'intro', { x: -260, y: 0 })
+    const introId = introIdOf(project)
+    const slideId = project.graph.nodes.find((n) => n.id !== introId)?.id
+    if (!slideId) throw new Error('setup inválido')
+    project = createNode(project, 'final', { x: 200, y: 0 })
+    const finalId = project.graph.nodes.find((n) => n.type === 'final')?.id
+    if (!finalId) throw new Error('setup inválido')
+
+    project = connect(project, introId, slideId)
+    project = connect(project, slideId, finalId)
+
+    const issues = validateProject(project)
+    expect(issues.some((issue) => issue.code === 'UNREACHABLE_NODE')).toBe(false)
+    expect(issues.some((issue) => issue.code === 'NO_REACHABLE_FINAL')).toBe(false)
   })
 })

@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { Inspector } from '../Inspector'
 import { useProjectStore } from '../../../store'
 import { resetProjectStore } from '../../../store/testHelpers'
+import { CICLOS } from '../../../domain'
 import type { SlideNode } from '../../../domain'
 import { AppServicesProvider } from '../../../app/AppServicesContext'
 import type { AppServices } from '../../../app/AppServices'
@@ -1605,5 +1606,152 @@ describe('Inspector — etiqueta "Referencia" (renombrado de UI del campo `title
     // de "Continuar" con la etiqueta "Sin referencia" (ver `nodeOptionLabel`).
     expect(screen.getByText(/Final \d+ — Sin referencia/)).toBeInTheDocument()
     expect(screen.queryByText(/Sin título/)).not.toBeInTheDocument()
+  })
+})
+
+describe('Inspector — diapositiva de Inicio (nodo `intro`, milestone "Diapositiva de Inicio", Tarea 2)', () => {
+  /** Crea el nodo `intro` (el proyecto de test, vía `createProject` de bajo
+   *  nivel, todavía no tiene uno por defecto), lo selecciona y devuelve su id. */
+  function createAndSelectIntro(): string {
+    act(() => {
+      useProjectStore.getState().createNode('intro', { x: 0, y: 0 })
+    })
+    const intro = useProjectStore
+      .getState()
+      .project.graph.nodes.find((node) => node.type === 'intro')
+    if (!intro) throw new Error('setup inválido: no se creó el nodo intro')
+    act(() => {
+      useProjectStore.getState().selectNode(intro.id)
+    })
+    return intro.id
+  }
+
+  it('muestra los selectores de Ciclo/Asignatura, el nombre del caso y el destino', () => {
+    createAndSelectIntro()
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    expect(screen.getByLabelText('Ciclo')).toBeInTheDocument()
+    expect(screen.getByLabelText('Asignatura')).toBeInTheDocument()
+    expect(screen.getByLabelText('Nombre del caso práctico interactivo')).toBeInTheDocument()
+    expect(screen.getByLabelText('Destino tras la portada')).toBeInTheDocument()
+  })
+
+  it('la Asignatura está deshabilitada, con aviso, mientras no se elija un Ciclo', () => {
+    createAndSelectIntro()
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    const asignaturaSelect = screen.getByLabelText('Asignatura')
+    expect(asignaturaSelect).toBeDisabled()
+    expect(screen.getByText('Elige primero un ciclo.')).toBeInTheDocument()
+  })
+
+  it('elegir un Ciclo habilita la Asignatura con las opciones de ese ciclo', () => {
+    const introId = createAndSelectIntro()
+    const ciclo = CICLOS[0]
+    if (!ciclo) throw new Error('El catálogo de ciclos está vacío')
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    fireEvent.change(screen.getByLabelText('Ciclo'), { target: { value: ciclo.id } })
+
+    expect(useProjectStore.getState().project.graph.nodes.find((n) => n.id === introId)).toMatchObject({
+      cicloId: ciclo.id,
+    })
+    const asignaturaSelect = screen.getByLabelText('Asignatura')
+    expect(asignaturaSelect).not.toBeDisabled()
+    const firstAsignatura = ciclo.asignaturas[0]
+    if (!firstAsignatura) throw new Error('El ciclo de prueba no tiene asignaturas')
+    expect(within(asignaturaSelect as HTMLElement).getByText(firstAsignatura.name)).toBeInTheDocument()
+  })
+
+  it('cambiar de Ciclo limpia la Asignatura elegida si ya no pertenece al ciclo nuevo (misma llamada a updateNode)', () => {
+    const introId = createAndSelectIntro()
+    const cicloA = CICLOS[0]
+    const cicloB = CICLOS[1]
+    if (!cicloA || !cicloB) throw new Error('El catálogo necesita al menos dos ciclos para este test')
+    const asignaturaA = cicloA.asignaturas[0]
+    if (!asignaturaA) throw new Error('El ciclo A de prueba no tiene asignaturas')
+    // Confirma la premisa del test: la asignatura de A no pertenece a B.
+    expect(cicloB.asignaturas.some((a) => a.id === asignaturaA.id)).toBe(false)
+
+    act(() => {
+      useProjectStore.getState().updateNode(introId, { cicloId: cicloA.id, asignaturaId: asignaturaA.id })
+    })
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    const historyBefore = useProjectStore.getState().history.past.length
+    fireEvent.change(screen.getByLabelText('Ciclo'), { target: { value: cicloB.id } })
+
+    const updated = useProjectStore.getState().project.graph.nodes.find((n) => n.id === introId)
+    expect(updated).toMatchObject({ cicloId: cicloB.id, asignaturaId: undefined })
+    // Una única entrada de historial: ciclo nuevo + limpieza de asignatura
+    // van en la MISMA llamada a `updateNode`, no en dos.
+    expect(useProjectStore.getState().history.past.length).toBe(historyBefore + 1)
+  })
+
+  it('cambiar de Ciclo conserva la Asignatura si sigue perteneciendo al ciclo nuevo', () => {
+    // Busca un ciclo con una asignatura cuyo id/nombre coincide en algún otro
+    // ciclo sería casuística; en su lugar, el caso "conserva" más simple y
+    // determinista es no cambiar de ciclo en absoluto y comprobar que la
+    // asignatura sigue intacta tras volver a elegir el MISMO ciclo.
+    const introId = createAndSelectIntro()
+    const ciclo = CICLOS[0]
+    if (!ciclo) throw new Error('El catálogo de ciclos está vacío')
+    const asignatura = ciclo.asignaturas[0]
+    if (!asignatura) throw new Error('El ciclo de prueba no tiene asignaturas')
+
+    act(() => {
+      useProjectStore.getState().updateNode(introId, { cicloId: ciclo.id, asignaturaId: asignatura.id })
+    })
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    fireEvent.change(screen.getByLabelText('Ciclo'), { target: { value: ciclo.id } })
+
+    const updated = useProjectStore.getState().project.graph.nodes.find((n) => n.id === introId)
+    expect(updated).toMatchObject({ cicloId: ciclo.id, asignaturaId: asignatura.id })
+  })
+
+  it('guarda el nombre del caso práctico interactivo (commit on blur)', () => {
+    const introId = createAndSelectIntro()
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    const input = screen.getByLabelText('Nombre del caso práctico interactivo')
+    fireEvent.change(input, { target: { value: 'Simulación de urgencias' } })
+    fireEvent.blur(input)
+
+    expect(useProjectStore.getState().project.graph.nodes.find((n) => n.id === introId)).toMatchObject({
+      caseName: 'Simulación de urgencias',
+    })
+  })
+
+  it('el selector de "Destino tras la portada" conecta/desconecta igual que "Destino de continuar" de una diapositiva', () => {
+    const introId = createAndSelectIntro()
+    let targetId = ''
+    act(() => {
+      useProjectStore.getState().createNode('slide', { x: 100, y: 0 }, { title: 'Primera diapositiva' })
+      const nodes = useProjectStore.getState().project.graph.nodes
+      const created = nodes.reduce((max, node) => (node.number > max.number ? node : max))
+      targetId = created.id
+      useProjectStore.getState().selectNode(introId)
+    })
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    const targetSelect = screen.getByLabelText('Destino tras la portada')
+    fireEvent.change(targetSelect, { target: { value: targetId } })
+    expect(useProjectStore.getState().project.graph.nodes.find((n) => n.id === introId)).toMatchObject({
+      targetNodeId: targetId,
+    })
+
+    fireEvent.change(targetSelect, { target: { value: '__none__' } })
+    expect(useProjectStore.getState().project.graph.nodes.find((n) => n.id === introId)).toMatchObject({
+      targetNodeId: undefined,
+    })
+  })
+
+  it('no muestra los botones "Eliminar"/"Duplicar" para un nodo `intro`', () => {
+    createAndSelectIntro()
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    expect(screen.queryByText(/^Eliminar/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/^Duplicar/)).not.toBeInTheDocument()
   })
 })

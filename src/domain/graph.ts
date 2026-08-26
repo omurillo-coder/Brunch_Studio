@@ -52,12 +52,34 @@ export interface Edge {
  *   `nodeIdsWithOutgoingEdge`) cuentan la rama "si no" como una salida
  *   válida gratis, sin lógica duplicada en ningún otro sitio.
  *
+ * Para un nodo `intro` (milestone "Diapositiva de Inicio"): una única
+ * arista desde `targetNodeId`, si lo tiene — MISMO tratamiento que una
+ * diapositiva "de continuar" sin respuestas, sin `condition`/
+ * `elseTargetNodeId` (un `intro` nunca los tiene, ver `IntroNodeSchema`).
+ * Es deliberado que se derive aquí igual que el resto: como `intro` es
+ * SIEMPRE `graph.startNodeId` cuando existe (ver esa propiedad en
+ * `src/domain/schemas.ts`), el BFS de alcanzabilidad de `validateProject`
+ * arranca desde él — si esta función no generara su arista saliente, TODO
+ * el resto del grafo aparecería como inalcanzable en cuanto un proyecto
+ * tuviera portada, que es justo el caso normal tras este milestone.
+ *
  * Los nodos `final` no tienen salida: no generan aristas.
  */
 export function deriveEdges(project: ProjectDocument): Edge[] {
   const edges: Edge[] = []
 
   for (const node of project.graph.nodes) {
+    if (node.type === 'intro') {
+      if (node.targetNodeId) {
+        edges.push({
+          id: `${node.id}->${node.targetNodeId}`,
+          source: node.id,
+          target: node.targetNodeId,
+        })
+      }
+      continue
+    }
+
     if (node.type !== 'slide') continue
 
     if (node.responses.length > 0) {
@@ -101,10 +123,16 @@ function assertNodeExists(project: ProjectDocument, nodeId: string): void {
 }
 
 /**
- * Localiza la diapositiva de origen de un `connect`/`disconnect` y valida
- * que la combinación nodo/respuesta sea coherente. Lanza `Error` con un
- * mensaje explícito en cualquier caso inválido, igual que el resto del
- * dominio.
+ * Localiza el nodo de origen de un `connect`/`disconnect` y valida que la
+ * combinación nodo/respuesta sea coherente. Lanza `Error` con un mensaje
+ * explícito en cualquier caso inválido, igual que el resto del dominio.
+ *
+ * Milestone "Diapositiva de Inicio": un nodo `intro` es ahora también un
+ * origen válido (mismo caso que una `SlideNode` "de continuar" sin
+ * `responseId`, ver `connect`/`disconnect` más abajo), porque tiene su
+ * propio `targetNodeId` — pero NUNCA con `responseId`, ya que un `intro` no
+ * tiene `responses` (no es un punto de decisión). Solo `final` sigue sin
+ * salida.
  */
 function assertConnectableSource(
   project: ProjectDocument,
@@ -115,20 +143,32 @@ function assertConnectableSource(
   if (!source) {
     throw new Error(`No existe un nodo con id "${sourceNodeId}".`)
   }
-  if (source.type !== 'slide') {
+  if (source.type === 'final') {
     throw new Error('Un nodo "final" no tiene salida; no se puede conectar.')
   }
-  if (responseId && !source.responses.some((response) => response.id === responseId)) {
-    throw new Error(`El nodo "${sourceNodeId}" no tiene una respuesta con id "${responseId}".`)
+  if (responseId) {
+    if (source.type !== 'slide') {
+      throw new Error(
+        `El nodo "${sourceNodeId}" es de tipo "${source.type}" y nunca tiene respuestas; no se puede conectar por "responseId".`,
+      )
+    }
+    if (!source.responses.some((response) => response.id === responseId)) {
+      throw new Error(`El nodo "${sourceNodeId}" no tiene una respuesta con id "${responseId}".`)
+    }
   }
 }
 
 /**
- * Conecta una salida de una diapositiva a un destino.
+ * Conecta una salida de una diapositiva (o de un nodo `intro`, ver más
+ * abajo) a un destino.
  *
- * - Con `responseId`: conecta el destino de esa respuesta concreta.
- * - Sin `responseId`: conecta el destino general de la diapositiva
- *   (`targetNodeId`, el de "Continuar").
+ * - Con `responseId`: conecta el destino de esa respuesta concreta (solo
+ *   válido si el origen es una `SlideNode`).
+ * - Sin `responseId`: conecta el destino general del nodo de origen
+ *   (`targetNodeId`) — el de "Continuar" en una `SlideNode`, o el único
+ *   destino posible en un nodo `intro` (la diapositiva a la que lleva la
+ *   portada tras el milestone "Diapositiva de Inicio"; mismo campo, mismo
+ *   cableado, ver `IntroNodeSchema.targetNodeId`).
  * - Los nodos `final` no tienen salida y no se pueden usar como origen.
  */
 export function connect(
@@ -142,9 +182,10 @@ export function connect(
 
   return produce(project, (draft) => {
     const draftSource = draft.graph.nodes.find((node) => node.id === sourceNodeId)
-    if (!draftSource || draftSource.type !== 'slide') return
+    if (!draftSource || draftSource.type === 'final') return
 
     if (responseId) {
+      if (draftSource.type !== 'slide') return
       const response = draftSource.responses.find((candidate) => candidate.id === responseId)
       if (response) {
         response.targetNodeId = targetNodeId
@@ -158,9 +199,10 @@ export function connect(
 }
 
 /**
- * Desconecta una salida de una diapositiva (la de una respuesta concreta si
- * se indica `responseId`, o la general de "Continuar" si no), dejando el
- * `targetNodeId` correspondiente en `undefined`.
+ * Desconecta una salida de un nodo (la de una respuesta concreta si se
+ * indica `responseId`, o la general si no — de "Continuar" en una
+ * `SlideNode`, o la única de un nodo `intro`), dejando el `targetNodeId`
+ * correspondiente en `undefined`.
  */
 export function disconnect(
   project: ProjectDocument,
@@ -171,9 +213,10 @@ export function disconnect(
 
   return produce(project, (draft) => {
     const draftSource = draft.graph.nodes.find((node) => node.id === sourceNodeId)
-    if (!draftSource || draftSource.type !== 'slide') return
+    if (!draftSource || draftSource.type === 'final') return
 
     if (responseId) {
+      if (draftSource.type !== 'slide') return
       const response = draftSource.responses.find((candidate) => candidate.id === responseId)
       if (response) {
         response.targetNodeId = undefined

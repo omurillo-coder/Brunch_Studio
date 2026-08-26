@@ -3,6 +3,7 @@ import { createId, nextNodeNumber } from './id'
 import { connect } from './graph'
 import type {
   FinalNode,
+  IntroNode,
   Node,
   NodePosition,
   NodeType,
@@ -62,6 +63,20 @@ export interface CreateNodeExtra {
  * variable vive en `project.variables`, fuera del nodo que se está
  * editando); es responsabilidad de la UI en la fase de editor, igual que se
  * documenta en el comentario de `VariableConditionSchema`.
+ *
+ * `cicloId`/`asignaturaId`/`caseName` (milestone "Diapositiva de Inicio",
+ * ver `IntroNodeSchema`): solo aplican a un nodo `intro`; si el patch los
+ * incluye (aunque sea `null`, para los dos primeros) y el nodo es `slide` o
+ * `final`, `updateNode` lanza — mismo criterio que el resto de campos
+ * "exclusivos de un tipo" de este patch. `cicloId`/`asignaturaId` siguen la
+ * semántica habitual de patch opcional-borrable (`undefined` no toca, `null`
+ * borra, string fija); `caseName` no admite `null` porque el campo nunca es
+ * `undefined` en el nodo (nace en `''`, ver `IntroNodeSchema.caseName`) —
+ * mismo criterio que `body` de un `final`, que tampoco admite `null`.
+ * `targetNodeId` de un `intro` NO se edita aquí (es un campo estructural de
+ * conexión, igual que el de una `SlideNode`): usa `connect`/`disconnect` de
+ * `src/domain/graph.ts`, generalizados para aceptar un nodo `intro` como
+ * origen.
  */
 export interface UpdateNodePatch {
   title?: string
@@ -70,6 +85,9 @@ export interface UpdateNodePatch {
   internalNote?: string | null
   condition?: VariableCondition | null
   elseTargetNodeId?: string | null
+  cicloId?: string | null
+  asignaturaId?: string | null
+  caseName?: string
 }
 
 /**
@@ -100,6 +118,19 @@ function newSlideNode(
  *
  * Ya no existe un nodo "Inicio" separado e invisible: la primera
  * diapositiva del proyecto ES el inicio.
+ *
+ * Nota "Diapositiva de Inicio" (nodo `intro`): esta función de bajo nivel
+ * DELIBERADAMENTE no siembra ningún nodo `intro` — sigue produciendo
+ * exactamente el documento mínimo de siempre (una única `SlideNode` como
+ * inicio), para no romper a quien ya la usa como bloque de construcción
+ * puro (la mayoría de tests de dominio, y el resto de funciones de este
+ * archivo). La portada obligatoria la añaden las plantillas de
+ * `src/domain/templates.ts` (las tres, incluida "En blanco") a partir del
+ * resultado de esta función — es el único camino de creación de proyecto
+ * expuesto a la UI (`HomeScreen`), así que todo proyecto que un usuario
+ * real llega a crear SÍ nace con su `intro`. Un `.brunch` guardado sin
+ * `intro` (cualquiera creado antes de este milestone) lo sintetiza
+ * `src/domain/migration.ts` al abrirlo.
  */
 export function createProject(name: string): ProjectDocument {
   const now = new Date().toISOString()
@@ -149,6 +180,19 @@ function findNodeIndex(project: ProjectDocument, nodeId: string): number {
  * "segundo nodo start" porque el tipo `start` no existe; lo que sí sigue
  * siendo imposible es crear un tipo inexistente (lo impide el tipado de
  * `NodeType`, y el `switch` es exhaustivo).
+ *
+ * Guarda de dominio para `type: 'intro'` (milestone "Diapositiva de
+ * Inicio"): lanza `Error` si el proyecto YA tiene un nodo `intro` — solo
+ * puede haber uno, ver `IntroNodeSchema`. La UI de fases futuras
+ * deshabilitará el botón de crear otra portada cuando ya exista una, pero
+ * esta guarda es defensa en profundidad del propio dominio, que no debe
+ * confiar en que la UI sea la única vía de entrada (mismo criterio que el
+ * resto de invariantes de este archivo). Si no lo tenía, el nodo `intro`
+ * nuevo se crea Y ADEMÁS se convierte en `graph.startNodeId`,
+ * DESPLAZANDO lo que hubiera antes (una `SlideNode`, siempre, ya que solo
+ * puede haber un `intro`) — una portada recién añadida a un proyecto ya
+ * empezado pasa a ser su punto de partida real de inmediato, sin paso
+ * intermedio en el que el proyecto se quede sin inicio válido.
  */
 export function createNode(
   project: ProjectDocument,
@@ -156,6 +200,12 @@ export function createNode(
   position: NodePosition,
   extra: CreateNodeExtra = {},
 ): ProjectDocument {
+  if (type === 'intro' && project.graph.nodes.some((node) => node.type === 'intro')) {
+    throw new Error(
+      'El proyecto ya tiene una diapositiva de Inicio: solo puede haber una por proyecto.',
+    )
+  }
+
   const number = nextNodeNumber(project.graph.nodes.map((node) => node.number))
   const title = extra.title ?? ''
   const body = extra.body ?? ''
@@ -163,6 +213,18 @@ export function createNode(
 
   let newNode: Node
   switch (type) {
+    case 'intro': {
+      const node: IntroNode = {
+        ...common,
+        type: 'intro',
+        cicloId: undefined,
+        asignaturaId: undefined,
+        caseName: '',
+        targetNodeId: undefined,
+      }
+      newNode = node
+      break
+    }
     case 'slide': {
       newNode = newSlideNode({ ...common, body })
       break
@@ -176,6 +238,9 @@ export function createNode(
 
   return produce(project, (draft) => {
     draft.graph.nodes.push(newNode)
+    if (newNode.type === 'intro') {
+      draft.graph.startNodeId = newNode.id
+    }
     touchUpdatedAt(draft)
   })
 }
@@ -192,11 +257,26 @@ export function createNode(
  * un estado del que no se puede salir por la vía interactiva normal. Lanza
  * `Error` en vez de ignorar la petición en silencio, mismo criterio que el
  * resto de guardas de esta función.
+ *
+ * Milestone "Diapositiva de Inicio": un nodo `intro` NUNCA se puede
+ * eliminar, comprobado con DOS guardas independientes — por `type ===
+ * 'intro'` (robusta, no depende de nada más) Y por `nodeId ===
+ * graph.startNodeId` (la guarda ya existente, que sigue disparando también
+ * porque `intro` es siempre `startNodeId` cuando existe). Duplicar la
+ * comprobación es deliberado: la primera no depende de que ambas
+ * condiciones coincidan en ese instante (defensa en profundidad si algún
+ * futuro cambio de dominio llegara a desincronizarlas), y quitar la segunda
+ * dejaría de proteger el caso — hoy inalcanzable por otras guardas, pero no
+ * garantizado a seguir siéndolo — de un proyecto sin `intro` cuyo
+ * `startNodeId` señale una `SlideNode`.
  */
 export function deleteNode(project: ProjectDocument, nodeId: string): ProjectDocument {
   const index = findNodeIndex(project, nodeId)
   if (index === -1) {
     throw new Error(`No existe un nodo con id "${nodeId}".`)
+  }
+  if (project.graph.nodes[index]?.type === 'intro') {
+    throw new Error('La diapositiva de Inicio no se puede eliminar.')
   }
   if (nodeId === project.graph.startNodeId) {
     throw new Error('No se puede eliminar la diapositiva de inicio del proyecto.')
@@ -206,6 +286,12 @@ export function deleteNode(project: ProjectDocument, nodeId: string): ProjectDoc
     draft.graph.nodes = draft.graph.nodes.filter((node) => node.id !== nodeId)
 
     for (const node of draft.graph.nodes) {
+      if (node.type === 'intro') {
+        if (node.targetNodeId === nodeId) {
+          node.targetNodeId = undefined
+        }
+        continue
+      }
       if (node.type !== 'slide') continue
       if (node.targetNodeId === nodeId) {
         node.targetNodeId = undefined
@@ -319,6 +405,13 @@ export function updateNode(
       `El nodo "${nodeId}" es de tipo "${node.type}" y no tiene un único "body": usa las funciones de src/domain/content.ts para editar sus bloques de contenido.`,
     )
   }
+  const setsIntroOnlyField =
+    patch.cicloId !== undefined || patch.asignaturaId !== undefined || patch.caseName !== undefined
+  if (setsIntroOnlyField && node && node.type !== 'intro') {
+    throw new Error(
+      `El nodo "${nodeId}" es de tipo "${node.type}" y no admite campos de diapositiva de Inicio (ciclo/asignatura/nombre de caso).`,
+    )
+  }
 
   return produce(project, (draft) => {
     const draftNode = draft.graph.nodes[index]
@@ -341,6 +434,15 @@ export function updateNode(
         draftNode.elseTargetNodeId =
           patch.elseTargetNodeId === null ? undefined : patch.elseTargetNodeId
       }
+    }
+    if (draftNode.type === 'intro') {
+      if (patch.cicloId !== undefined) {
+        draftNode.cicloId = patch.cicloId === null ? undefined : patch.cicloId
+      }
+      if (patch.asignaturaId !== undefined) {
+        draftNode.asignaturaId = patch.asignaturaId === null ? undefined : patch.asignaturaId
+      }
+      if (patch.caseName !== undefined) draftNode.caseName = patch.caseName
     }
     touchUpdatedAt(draft)
   })
@@ -446,12 +548,20 @@ export interface DuplicateNodeResult {
  * Implementación genérica por tipo de nodo, igual que `createNode`: los
  * campos comunes (`title`/`body`/`internalNote`) se copian para cualquier
  * tipo, y un único `switch (source.type)` exhaustivo añade los campos
- * propios de cada tipo concreto (hoy solo `slide` tiene campos adicionales
- * que copiar/limpiar). El tipado de `NodeType` obliga a que ese `switch`
- * cubra cualquier tipo nuevo que se añada en el futuro — el compilador
- * avisa si falta un `case`, así que esta función no puede "olvidarse" de un
- * tipo nuevo en silencio, no hace falta ningún `if (type === 'slide' ||
- * type === 'final')` explícito.
+ * propios de cada tipo concreto (hoy `slide` tiene campos adicionales que
+ * copiar/limpiar, y `intro` ni siquiera eso — ver más abajo). El tipado de
+ * `NodeType` obliga a que ese `switch` cubra cualquier tipo nuevo que se
+ * añada en el futuro — el compilador avisa si falta un `case`, así que esta
+ * función no puede "olvidarse" de un tipo nuevo en silencio, no hace falta
+ * ningún `if (type === 'slide' || type === 'final')` explícito.
+ *
+ * Milestone "Diapositiva de Inicio": duplicar un nodo `intro` LANZA — no se
+ * puede ni debe duplicar, ya que solo puede haber uno por proyecto (ver
+ * `IntroNodeSchema`); una copia dejaría el proyecto con dos, violando esa
+ * invariante de inmediato. A diferencia de otras guardas de este archivo
+ * que comparan contra `graph.startNodeId`, aquí basta con el `case 'intro'`
+ * del `switch`: cualquier nodo de ese tipo, sea o no el `startNodeId`
+ * actual (siempre lo es cuando existe), no se puede duplicar.
  */
 export function duplicateNode(
   project: ProjectDocument,
@@ -474,6 +584,11 @@ export function duplicateNode(
 
   let duplicate: Node
   switch (source.type) {
+    case 'intro': {
+      throw new Error(
+        'La diapositiva de Inicio no se puede duplicar: solo puede haber una por proyecto.',
+      )
+    }
     case 'slide': {
       const node: SlideNode = {
         ...common,

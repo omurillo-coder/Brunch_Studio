@@ -20,6 +20,19 @@ import { z } from 'zod'
  * (`ProjectGraph.startNodeId`) a una `SlideNode` existente. Los documentos
  * `.brunch` guardados con el modelo anterior se convierten al abrirlos,
  * ver `src/domain/migration.ts`.
+ *
+ * Milestone "Diapositiva de Inicio": se añade un TERCER tipo de nodo,
+ * `intro` (ver `IntroNodeSchema` más abajo), que representa la portada
+ * obligatoria de todo proyecto — datos de ciclo/asignatura/nombre del caso
+ * práctico para el paquete SCORM exportado. A diferencia de `slide`/`final`,
+ * que pueden existir en cualquier cantidad, `intro` está pensado para
+ * existir COMO MUCHO UNA VEZ por proyecto y ser siempre
+ * `ProjectGraph.startNodeId` — esa invariante NO se codifica a nivel de
+ * schema Zod (ver la nota de `IntroNodeSchema` sobre por qué) sino que la
+ * hacen cumplir las funciones de dominio (`createNode`/`deleteNode`/
+ * `duplicateNode` en `src/domain/project.ts`). Los documentos `.brunch`
+ * guardados antes de este milestone no tienen ningún nodo `intro`; se les
+ * sintetiza uno vacío al abrirlos, ver `src/domain/migration.ts`.
  */
 
 // ---------------------------------------------------------------------------
@@ -273,8 +286,92 @@ export const ContentBlockSchema = z.discriminatedUnion('type', [
 ])
 
 /**
- * Diapositiva: el único tipo de nodo "con salida" del modelo. Una misma
- * diapositiva puede comportarse de dos formas según tenga o no respuestas:
+ * Diapositiva de Inicio (portada) de un proyecto: nodo `intro`.
+ *
+ * Milestone "Diapositiva de Inicio". Es un tipo de nodo aparte de `slide`
+ * (no una diapositiva más) porque su propósito es distinto y ajeno al resto
+ * del recorrido: no muestra contenido narrativo ni tiene respuestas, sino
+ * que recoge los metadatos administrativos del caso práctico interactivo
+ * (ciclo formativo, asignatura, nombre del caso) que la fase de exportación
+ * (fase 3, futura) necesita para el paquete SCORM. Mezclar estos campos
+ * dentro de `SlideNodeSchema` habría contaminado el modelo de diapositiva
+ * narrativa con campos que ninguna otra diapositiva del proyecto usa nunca.
+ *
+ * Solo puede existir COMO MUCHO UN nodo `intro` por proyecto, y cuando
+ * existe es SIEMPRE `ProjectGraph.startNodeId` (ver comentario de esa
+ * propiedad) — el punto de partida real del recorrido pasa a ser, tras este
+ * milestone, la diapositiva a la que apunta `targetNodeId` de este nodo, no
+ * el nodo `intro` en sí (el Player mostrará la portada y solo entonces
+ * arrancará el recorrido narrativo). Esta unicidad/obligatoriedad NO se
+ * expresa en el schema Zod (que valida cada nodo de forma aislada, sin
+ * conocer cuántos nodos `intro` hay en el array `nodes` que lo contiene, ni
+ * si `startNodeId` coincide con él — igual limitación que ya documentan
+ * `VariableConditionSchema`/`VariableEffectSchema` para invariantes que
+ * cruzan varias partes del documento): la hacen cumplir en tiempo de
+ * ejecución `createNode` (lanza si ya hay un `intro`, y fija `startNodeId`
+ * al crearlo), `deleteNode` (nunca permite borrarlo) y `duplicateNode`
+ * (lanza, nunca se duplica) en `src/domain/project.ts`.
+ *
+ * `cicloId`/`asignaturaId`/`caseName`/`targetNodeId` son TODOS opcionales o
+ * con valor por defecto vacío a nivel de schema — deliberado: un proyecto
+ * recién creado (o recién migrado desde un `.brunch` sin `intro`, ver
+ * `src/domain/migration.ts`) nace con esta portada incompleta, y debe poder
+ * guardarse/abrirse así sin que el schema lo rechace. La obligación de
+ * rellenarlos se exige SOLO al exportar, nunca al guardar/abrir el
+ * proyecto — ver `validateIntroForExport` en `src/domain/introValidation.ts`,
+ * que la fase de export (fase 3, futura) usará para bloquear la exportación
+ * con un mensaje claro por cada campo que falte.
+ */
+export const IntroNodeSchema = z.object({
+  ...baseNodeFields,
+  type: z.literal('intro'),
+  /**
+   * Id de un `CatalogCiclo` de `src/domain/catalog.ts`. Deliberadamente NO
+   * se valida aquí que exista de verdad en `CICLOS` — el schema de un nodo
+   * no tiene ninguna razón para acoplarse al catálogo (que además podría
+   * cambiar de contenido sin que eso deba invalidar un documento ya
+   * guardado que referenciaba un ciclo hoy desaparecido del catálogo). Ver
+   * `asignaturaBelongsToCiclo` en `src/domain/introValidation.ts` para la
+   * validación de coherencia ciclo/asignatura, que sí consulta el catálogo,
+   * pero como función aparte que quien la llama invoca explícitamente.
+   */
+  cicloId: z.string().optional(),
+  /**
+   * Id de una `CatalogAsignatura` DENTRO del ciclo `cicloId`. Mismo criterio
+   * que `cicloId`: no se valida contra el catálogo a nivel de schema, ni
+   * tampoco que pertenezca de verdad al ciclo elegido (esa coherencia
+   * cruzada — dos campos del mismo objeto, pero que requiere consultar una
+   * fuente externa al documento, el catálogo — tampoco encaja en un schema
+   * Zod aislado; ver `asignaturaBelongsToCiclo`).
+   */
+  asignaturaId: z.string().optional(),
+  /**
+   * Nombre del caso práctico interactivo, decidido libremente por el
+   * diseñador instruccional (no viene del catálogo). `.default('')`: un
+   * nodo `intro` recién creado nace con este campo presente pero vacío, en
+   * vez de ausente — mismo criterio que otros campos de texto obligatorios
+   * en tiempo de export pero opcionales en tiempo de edición
+   * (`initialValue` de una variable no aplica aquí, pero el patrón "vacío
+   * por defecto, exigido solo al exportar" es el mismo).
+   */
+  caseName: z.string().default(''),
+  /**
+   * Destino tras la portada: la primera diapositiva narrativa real del
+   * recorrido. MISMO concepto que el `targetNodeId` de una `SlideNode` "de
+   * continuar" (ver más abajo) — se cablea igual, con `connect`/`disconnect`
+   * de `src/domain/graph.ts`, generalizados para aceptar un nodo `intro`
+   * como origen — pero un nodo `intro` nunca tiene `responses`: la portada
+   * no es un punto de decisión, solo un paso previo obligatorio de un único
+   * destino.
+   */
+  targetNodeId: z.string().uuid().optional(),
+})
+
+/**
+ * Diapositiva: el único tipo de nodo "con salida" del modelo narrativo
+ * (aparte del nodo `intro`, que también tiene una única salida pero no es
+ * narrativo, ver `IntroNodeSchema`). Una misma diapositiva puede comportarse
+ * de dos formas según tenga o no respuestas:
  *
  * - `responses` vacío → diapositiva "de continuar": su salida es
  *   `targetNodeId` y el Player muestra un único botón de continuar, con el
@@ -354,9 +451,13 @@ export const FinalNodeSchema = z.object({
   body: z.string(),
 })
 
-export const NodeSchema = z.discriminatedUnion('type', [SlideNodeSchema, FinalNodeSchema])
+export const NodeSchema = z.discriminatedUnion('type', [
+  IntroNodeSchema,
+  SlideNodeSchema,
+  FinalNodeSchema,
+])
 
-export const NODE_TYPES = ['slide', 'final'] as const
+export const NODE_TYPES = ['intro', 'slide', 'final'] as const
 
 // ---------------------------------------------------------------------------
 // Documento de proyecto
@@ -388,9 +489,18 @@ export const EditorStateSchema = z.object({
 
 /**
  * Grafo del escenario. `startNodeId` es el punto de partida del recorrido:
- * el id de la `SlideNode` por la que empieza el Player. No es un nodo
- * aparte (el antiguo tipo `start` ya no existe) sino una referencia a una
- * diapositiva real, que además nunca se puede borrar (ver `deleteNode`).
+ * el id del nodo por el que empieza el Player. No es un nodo aparte (el
+ * antiguo tipo `start` ya no existe) sino una referencia a un nodo real del
+ * grafo, que además nunca se puede borrar (ver `deleteNode`).
+ *
+ * Desde el milestone "Diapositiva de Inicio": en todo proyecto que ya tenga
+ * un nodo `intro` (creado desde plantilla, o sintetizado por
+ * `src/domain/migration.ts` al abrir un `.brunch` antiguo), `startNodeId`
+ * apunta SIEMPRE a ese nodo `intro` — `createNode` lo fuerza al crearlo, ver
+ * `IntroNodeSchema`. Solo un `ProjectDocument` construido con la función de
+ * bajo nivel `createProject` (sin pasar por una plantilla) puede seguir
+ * teniendo `startNodeId` apuntando a una `SlideNode`, como en el modelo
+ * previo a este milestone.
  */
 export const ProjectGraphSchema = z.object({
   nodes: z.array(NodeSchema),
@@ -437,6 +547,7 @@ export type VariableEffect = z.infer<typeof VariableEffectSchema>
 export type DecisionResponse = z.infer<typeof DecisionResponseSchema>
 export type ContentBlock = z.infer<typeof ContentBlockSchema>
 
+export type IntroNode = z.infer<typeof IntroNodeSchema>
 export type SlideNode = z.infer<typeof SlideNodeSchema>
 export type FinalNode = z.infer<typeof FinalNodeSchema>
 export type Node = z.infer<typeof NodeSchema>

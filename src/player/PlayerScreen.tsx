@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useProject, useProjectStore } from '../store'
-import { DEFAULT_CONTINUE_LABEL, RESPONSE_LETTERS } from '../domain'
-import type { ContentBlock, DecisionResponse, SlideNode } from '../domain'
+import { CICLOS, DEFAULT_CONTINUE_LABEL, RESPONSE_LETTERS } from '../domain'
+import type { ContentBlock, DecisionResponse, IntroNode, SlideNode } from '../domain'
 import { advance, choose, getInitialState, getView } from './runtime'
 import type { PlayerState } from './runtime'
 import { useAppServices } from '../app/AppServicesContext'
@@ -217,6 +217,63 @@ function ResponseOption({
   )
 }
 
+/**
+ * Resuelve `cicloId`/`asignaturaId` de un nodo `intro` a sus nombres
+ * legibles, vía el catálogo `CICLOS` (`src/domain/catalog.ts`). Dentro de la
+ * app esto es un `import` TS normal — a diferencia del runtime exportado
+ * (`src/export/exportedPlayerScript.ts`), que no puede importar `catalog.ts`
+ * (JS vanilla embebido, sin módulos) y por eso recibe los nombres ya
+ * resueltos dentro del bundle, ver `resolveIntroCatalogNames` en
+ * `src/export/htmlBundle.ts` — misma lógica, aplicada en dos momentos
+ * distintos (aquí, en cada render; allí, una vez, en tiempo de exportación).
+ * `undefined` si el campo no está elegido, o si el id ya no existe en el
+ * catálogo: mismo criterio tolerante que `asignaturaBelongsToCiclo`
+ * (`src/domain/introValidation.ts`) — la portada puede "probarse" incompleta
+ * antes de exportar, ver `validateIntroForExport`.
+ */
+function resolveIntroNames(node: IntroNode): { cicloName?: string; asignaturaName?: string } {
+  const ciclo = node.cicloId ? CICLOS.find((candidate) => candidate.id === node.cicloId) : undefined
+  const asignatura =
+    ciclo && node.asignaturaId
+      ? ciclo.asignaturas.find((candidate) => candidate.id === node.asignaturaId)
+      : undefined
+  return { cicloName: ciclo?.name, asignaturaName: asignatura?.name }
+}
+
+/**
+ * Tarjeta de portada (nodo `intro`, milestone "Diapositiva de Inicio"):
+ * primera vista del recorrido en casi todo proyecto (ver comentario de
+ * `IntroNodeSchema` en `src/domain/schemas.ts`). Jerarquía visual: ciclo +
+ * asignatura como contexto secundario (arriba, apagado, igual que
+ * `.nodeReferenceTitle`), `caseName` como título principal (`.title`, mismo
+ * peso visual que el título fijo de la vista Final) y un botón de continuar
+ * con el mismo estilo que el de la vista `continue` — la portada no define
+ * `continueLabel` propio (no existe en `IntroNodeSchema`), así que usa
+ * siempre `DEFAULT_CONTINUE_LABEL`.
+ *
+ * Ningún campo es obligatorio para pintar esta vista (el proyecto puede
+ * "probarse" incompleto antes de exportar, ver `validateIntroForExport`):
+ * cada pieza que falte (ciclo/asignatura sin elegir, `caseName` vacío) se
+ * omite sin más, nunca un placeholder o un error — mismo criterio de "vacío
+ * = nada" que el resto de este archivo (p.ej. `ContentBlockView`, bloque de
+ * texto vacío).
+ */
+function IntroCard({ node, onContinue }: { node: IntroNode; onContinue: () => void }) {
+  const { cicloName, asignaturaName } = resolveIntroNames(node)
+  const contextLabel = [cicloName, asignaturaName].filter(Boolean).join(' · ')
+  const caseName = node.caseName.trim()
+
+  return (
+    <div className={styles.card}>
+      {contextLabel && <p className={styles.introContext}>{contextLabel}</p>}
+      {caseName && <h1 className={styles.title}>{caseName}</h1>}
+      <button type="button" className={styles.primaryButton} onClick={onContinue}>
+        {DEFAULT_CONTINUE_LABEL}
+      </button>
+    </div>
+  )
+}
+
 export interface PlayerScreenProps {
   /**
    * Ruta absoluta del `.brunch` abierto. La necesita el Player para pedir
@@ -297,6 +354,14 @@ export function PlayerScreen({ filePath }: PlayerScreenProps) {
       </header>
 
       <main className={styles.stage}>
+        {view.kind === 'intro' && (
+          <IntroCard
+            key={view.node.id}
+            node={view.node}
+            onContinue={() => setPlayerState((current) => advance(project, current))}
+          />
+        )}
+
         {view.kind === 'continue' && (
           <div key={view.node.id} className={styles.card}>
             {/* Referencia interna del diseñador instruccional (nunca

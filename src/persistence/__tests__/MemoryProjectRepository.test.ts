@@ -5,12 +5,25 @@ import { MemoryProjectRepository } from '../MemoryProjectRepository'
 describe('MemoryProjectRepository', () => {
   it('crear y luego abrir devuelve el mismo documento', async () => {
     const repo = new MemoryProjectRepository()
+    // `createProject` (dominio, de bajo nivel) no siembra ninguna diapositiva
+    // de Inicio — abrir el documento la sintetiza (`ensureIntroNode`, parte
+    // de la migración), así que el grafo gana ese nodo respecto al original;
+    // el resto del documento sí se conserva exactamente igual.
     const document = createProject('Mi escenario')
 
     await repo.createProject('/fake/path/proyecto.brunch', document)
     const reopened = await repo.openProject('/fake/path/proyecto.brunch')
 
-    expect(reopened).toEqual(document)
+    expect(reopened.metadata).toEqual(document.metadata)
+    expect(reopened.settings).toEqual(document.settings)
+    expect(reopened.graph.nodes).toHaveLength(document.graph.nodes.length + 1)
+    const intro = reopened.graph.nodes.find((node) => node.type === 'intro')
+    expect(intro).toBeDefined()
+    expect(reopened.graph.startNodeId).toBe(intro?.id)
+    expect(intro?.type === 'intro' ? intro.targetNodeId : undefined).toBe(document.graph.startNodeId)
+    expect(
+      reopened.graph.nodes.find((node) => node.id === document.graph.startNodeId),
+    ).toEqual(document.graph.nodes.find((node) => node.id === document.graph.startNodeId))
   })
 
   it('guardar sobrescribe el documento y abrir devuelve la versión nueva', async () => {

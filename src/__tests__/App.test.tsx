@@ -60,10 +60,15 @@ describe('App: navegación HomeScreen -> EditorScreen', () => {
     expect(screen.getAllByText('Escenario de prueba').length).toBeGreaterThan(0)
     expect(screen.getByText('+ Diapositiva')).toBeInTheDocument()
     expect(screen.getByText('+ Final')).toBeInTheDocument()
-    // La diapositiva de inicio, creada automáticamente por `createProject`,
-    // ya aparece en la lista del panel izquierdo y en el lienzo, marcada
-    // como punto de partida del recorrido.
-    expect(screen.getAllByTitle('Diapositiva de inicio').length).toBeGreaterThanOrEqual(1)
+    // La diapositiva de Inicio, sembrada automáticamente por la plantilla
+    // al crear el proyecto, ya aparece en la lista del panel izquierdo
+    // (etiquetada "Inicio", sin la marca aparte de "punto de partida" que
+    // usan los demás tipos — su propia etiqueta de tipo ya lo dice) y el
+    // botón "+ Inicio" queda deshabilitado porque ya existe una.
+    // "Inicio" aparece tanto en la tarjeta del lienzo como en el panel
+    // izquierdo — dos elementos distintos con el mismo texto.
+    expect(screen.getAllByText('Inicio').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getByText('+ Inicio')).toBeDisabled()
   })
 
   it('"Abrir proyecto" con un documento existente lleva a EditorScreen con esos datos', async () => {

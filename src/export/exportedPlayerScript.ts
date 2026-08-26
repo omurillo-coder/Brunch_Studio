@@ -101,6 +101,14 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
   var assetUris = bundle.assetUris || {};
   var letters = bundle.responseLetters || [];
   var texts = bundle.texts || {};
+  // Nombres de ciclo/asignatura de la portada (nodo \`intro\`), ya resueltos
+  // contra el catálogo EN TIEMPO DE EXPORTACIÓN (ver
+  // \`resolveIntroCatalogNames\` en \`htmlBundle.ts\`): este script no puede
+  // importar \`src/domain/catalog.ts\` (JS vanilla embebido, sin módulos), así
+  // que recibe ya el resultado (dos strings, o \`null\`) en vez del catálogo
+  // entero.
+  var introCicloName = bundle.introCicloName || null;
+  var introAsignaturaName = bundle.introAsignaturaName || null;
 
   // Textos del botón "Salir" de la vista 'final' y de su aviso posterior.
   // Traducción literal de los mismos textos fijos de PlayerScreen.tsx
@@ -345,6 +353,14 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
       return { kind: 'dead-end', node: null };
     }
 
+    if (node.type === 'intro') {
+      // Traducción literal de runtime.ts: sin targetNodeId, dead-end en vez
+      // de una portada con un botón que no lleva a ningún sitio.
+      return node.targetNodeId
+        ? { kind: 'intro', node: node }
+        : { kind: 'dead-end', node: node };
+    }
+
     if (node.type === 'final') {
       return { kind: 'final', node: node };
     }
@@ -368,7 +384,20 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
       return state;
     }
     var node = findNode(state.currentNodeId);
-    if (!node || node.type !== 'slide') {
+    if (!node) {
+      return state;
+    }
+    // Traducción literal de runtime.ts: mismo verbo generalizado a los dos
+    // orígenes posibles de "un único destino, sin decisión" — un \`intro\`
+    // avanza directamente a su \`targetNodeId\`, sin condición (un \`intro\` no
+    // tiene \`condition\`).
+    if (node.type === 'intro') {
+      if (!node.targetNodeId) {
+        return state;
+      }
+      return { currentNodeId: node.targetNodeId, totalPoints: state.totalPoints, variables: state.variables };
+    }
+    if (node.type !== 'slide') {
       return state;
     }
     var responses = node.responses || [];
@@ -633,7 +662,50 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
     return wrapper;
   }
 
+  /** Traducción literal de \`IntroCard\` en \`src/player/PlayerScreen.tsx\`:
+   *  contexto (ciclo · asignatura, ya resueltos, ver \`introCicloName\`/
+   *  \`introAsignaturaName\` arriba) + \`caseName\` como título principal + botón
+   *  de continuar con el mismo texto fijo que la vista 'continue' sin
+   *  \`continueLabel\` propio (un \`intro\` no tiene ese campo). Cada pieza que
+   *  falte (contexto vacío, \`caseName\` vacío) se omite sin más — mismo
+   *  criterio de "vacío = nada" que el resto de este runtime. */
+  function buildIntroCard(node) {
+    var card = el('section', 'card');
+
+    var contextLabel = [introCicloName, introAsignaturaName]
+      .filter(function (value) {
+        return !!value;
+      })
+      .join(' · ');
+    if (contextLabel) {
+      var context = el('p', 'introContext');
+      context.textContent = contextLabel;
+      card.appendChild(context);
+    }
+
+    var caseName = trimmed(node.caseName);
+    if (caseName) {
+      var heading = el('h1', 'title');
+      heading.textContent = caseName;
+      card.appendChild(heading);
+    }
+
+    var continueButton = el('button', 'primaryButton');
+    continueButton.type = 'button';
+    continueButton.textContent = texts.defaultContinueLabel;
+    continueButton.addEventListener('click', function () {
+      setState(advance(state));
+    });
+    card.appendChild(continueButton);
+
+    return card;
+  }
+
   function buildCard(view) {
+    if (view.kind === 'intro') {
+      return buildIntroCard(view.node);
+    }
+
     var card = el('section', 'card');
 
     if (view.kind === 'continue') {

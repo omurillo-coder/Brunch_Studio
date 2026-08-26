@@ -36,6 +36,12 @@ describe('openExistingProject', () => {
 
   it('cuando el nombre guardado ya coincide con el del archivo, no cambia nada más del documento', async () => {
     const repository = new MemoryProjectRepository()
+    // `createProject` (dominio, de bajo nivel) no siembra ninguna diapositiva
+    // de Inicio — eso lo hacen las plantillas, un nivel por encima (ver
+    // `src/domain/templates.ts`). Abrir un documento sin ninguna la sintetiza
+    // (`ensureIntroNode`, paso final incondicional de la migración), así que
+    // el grafo SÍ cambia al abrir en ese caso concreto — es la única parte
+    // del documento que la migración toca; el resto permanece intacto.
     const original = createProject('Coincide')
     await repository.createProject('/tmp/Coincide.brunch', original)
 
@@ -43,7 +49,16 @@ describe('openExistingProject', () => {
 
     expect(document.metadata.name).toBe('Coincide')
     expect(document.metadata.id).toBe(original.metadata.id)
-    expect(document.graph).toEqual(original.graph)
+    expect(document.graph.nodes).toHaveLength(original.graph.nodes.length + 1)
+    const intro = document.graph.nodes.find((node) => node.type === 'intro')
+    expect(intro).toBeDefined()
+    expect(document.graph.startNodeId).toBe(intro?.id)
+    expect(intro?.type === 'intro' ? intro.targetNodeId : undefined).toBe(original.graph.startNodeId)
+    // El nodo original (que antes era el punto de partida) sigue presente,
+    // sin ningún otro cambio.
+    expect(document.graph.nodes.find((node) => node.id === original.graph.startNodeId)).toEqual(
+      original.graph.nodes.find((node) => node.id === original.graph.startNodeId),
+    )
   })
 
   it('propaga el rechazo si el repositorio no puede abrir la ruta', async () => {

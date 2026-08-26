@@ -1,5 +1,13 @@
 import { applyVariableEffects, evaluateCondition, resolveSlideTarget } from '../domain'
-import type { DecisionResponse, FinalNode, Node, ProjectDocument, SlideNode, VariableState } from '../domain'
+import type {
+  DecisionResponse,
+  FinalNode,
+  IntroNode,
+  Node,
+  ProjectDocument,
+  SlideNode,
+  VariableState,
+} from '../domain'
 
 /**
  * ---------------------------------------------------------------------------
@@ -42,8 +50,27 @@ import type { DecisionResponse, FinalNode, Node, ProjectDocument, SlideNode, Var
  *   TODAS las respuestas quedan filtradas por su `condition`, o ninguna de
  *   las visibles tiene destino, es un `dead-end` igual que hoy.
  * - `graph.startNodeId` sin nodo correspondiente (`node: null`).
+ * - Un nodo `intro` SIN `targetNodeId` (milestone "Diapositiva de Inicio",
+ *   ver más abajo): mismo criterio que una diapositiva "de continuar" sin
+ *   destino — no tiene sentido mostrar un botón de continuar que no lleva a
+ *   ningún sitio, así que se resuelve a `dead-end` en vez de a `intro`.
+ *
+ * `intro` (milestone "Diapositiva de Inicio"): el nodo `intro` completo, sin
+ * más estado — quien pinte la vista resuelve `cicloId`/`asignaturaId` a
+ * nombres legibles vía `CICLOS` (`src/domain/catalog.ts`) y muestra
+ * `caseName`. Desde este milestone `graph.startNodeId` apunta casi siempre a
+ * un nodo `intro` (ver comentario de `IntroNodeSchema` en
+ * `src/domain/schemas.ts`), así que esta suele ser la primera vista que ve
+ * quien juega el recorrido; avanzar a la primera diapositiva narrativa real
+ * es `advance` (mismo verbo que ya usa una diapositiva "de continuar", ver
+ * más abajo), no un verbo aparte. A diferencia de `cicloId`/`asignaturaId`/
+ * `caseName` (que pueden estar vacíos sin que la vista se resuelva a
+ * `dead-end`: quien pinta la vista los muestra o los omite, ver
+ * `PlayerScreen.tsx`), la AUSENCIA de `targetNodeId` sí cambia el `kind` de
+ * la vista — ver el bullet de `dead-end` de arriba.
  */
 export type PlayerView =
+  | { kind: 'intro'; node: IntroNode }
   | { kind: 'continue'; node: SlideNode }
   | {
       kind: 'decision'
@@ -159,6 +186,14 @@ export function getView(project: ProjectDocument, state: PlayerState): PlayerVie
     return { kind: 'dead-end', node: null }
   }
 
+  if (node.type === 'intro') {
+    // Mismo criterio que una diapositiva "de continuar" sin destino (ver
+    // más abajo, `resolveSlideTarget`): sin `targetNodeId` no hay a dónde
+    // avanzar, así que es un dead-end en vez de una portada con un botón que
+    // no lleva a ningún sitio.
+    return node.targetNodeId ? { kind: 'intro', node } : { kind: 'dead-end', node }
+  }
+
   if (node.type === 'final') {
     return { kind: 'final', node }
   }
@@ -186,15 +221,27 @@ export function getView(project: ProjectDocument, state: PlayerState): PlayerVie
  * Avanza desde una diapositiva "de continuar" siguiendo su destino real
  * (`resolveSlideTarget`, que devuelve `node.targetNodeId` sin condición, o
  * decide entre `targetNodeId`/`elseTargetNodeId` según `node.condition` y
- * `state.variables` — ver `src/domain/variables.ts`). Si el nodo actual no
- * es una diapositiva sin respuestas, o no tiene destino resuelto, no hace
- * nada y devuelve el mismo estado — la UI solo debería llamarla cuando
- * `getView` haya devuelto `kind: 'continue'`.
+ * `state.variables` — ver `src/domain/variables.ts`), o desde un nodo
+ * `intro` siguiendo directamente su `targetNodeId` (sin condición: un `intro`
+ * no tiene `condition`, ver `IntroNodeSchema`) — MISMO verbo generalizado a
+ * los dos orígenes posibles de "un único destino, sin decisión", en vez de un
+ * verbo aparte para la portada: la API pública de este módulo queda igual de
+ * estable para quien ya la usaba (`PlayerScreen`/`exportedPlayerScript.ts`).
+ * Si el nodo actual no es ninguno de los dos, o no tiene destino resuelto, no
+ * hace nada y devuelve el mismo estado — la UI solo debería llamarla cuando
+ * `getView` haya devuelto `kind: 'continue'` o `kind: 'intro'`.
  */
 export function advance(project: ProjectDocument, state: PlayerState): PlayerState {
   if (state.currentNodeId === null) return state
   const node = findNode(project, state.currentNodeId)
-  if (!node || node.type !== 'slide') return state
+  if (!node) return state
+
+  if (node.type === 'intro') {
+    if (!node.targetNodeId) return state
+    return { ...state, currentNodeId: node.targetNodeId }
+  }
+
+  if (node.type !== 'slide') return state
   if (node.responses.length > 0) return state
   const target = resolveSlideTarget(node, state.variables)
   if (!target) return state

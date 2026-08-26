@@ -251,13 +251,43 @@ describe('useAutosave — fidelidad de reapertura (criterio de aceptación del m
     const repository = new MemoryProjectRepository()
     const filePath = '/tmp/fidelidad-reapertura.brunch'
 
+    // `createProject` (bajo nivel) NO siembra ningún nodo `intro` (ver su
+    // comentario en `src/domain/project.ts`), pero `repository.openProject`
+    // SÍ lo sintetiza incondicionalmente al abrir (`ensureIntroNode`,
+    // `src/domain/migration.ts`, milestone "Diapositiva de Inicio") — igual
+    // que el flujo real de la app (`openExistingProject` + `loadProject`,
+    // ver `HomeScreen.handleOpen`). Se reproduce ese mismo camino aquí (guardar
+    // en bruto, reabrir vía el repositorio, y SOLO ENTONCES cargar en el
+    // store) para que el documento cargado ya tenga su `intro` desde el
+    // principio: si se cargara `initial` directamente (como antes de este
+    // milestone), el siguiente `repository.openProject(filePath)` de más
+    // abajo sintetizaría un `intro` NUEVO que `inMemory` nunca tuvo,
+    // rompiendo la comparación de fidelidad por una razón ajena a lo que
+    // este test intenta comprobar (edición/autoguardado/reapertura).
     const initial = createProject('Proyecto de fidelidad')
     await repository.createProject(filePath, initial)
+    const migratedInitial = await repository.openProject(filePath)
     act(() => {
-      useProjectStore.getState().loadProject(initial)
+      useProjectStore.getState().loadProject(migratedInitial)
     })
 
     renderHarness(repository, filePath)
+
+    // La diapositiva de Inicio "narrativa" (`SlideNode`, la que sembraba
+    // `createProject`) ya NO es `graph.startNodeId` — ese id apunta ahora al
+    // `intro` recién sintetizado (ver comentario de arriba). El resto de
+    // este test edita/conecta esa diapositiva exactamente igual que antes de
+    // este milestone, así que se recupera su id explícitamente por tipo (en
+    // este punto es la única `slide` del documento) en vez de asumir que
+    // coincide con `graph.startNodeId`.
+    const introId = useProjectStore.getState().project.graph.startNodeId
+    const seedSlide = useProjectStore
+      .getState()
+      .project.graph.nodes.find((node) => node.type === 'slide')
+    if (!seedSlide) {
+      throw new Error('setup inválido: falta la diapositiva semilla')
+    }
+    const startId = seedSlide.id
 
     // 1. Crea nodos con título/body propios.
     act(() => {
@@ -268,7 +298,6 @@ describe('useAutosave — fidelidad de reapertura (criterio de aceptación del m
     })
 
     const project = useProjectStore.getState().project
-    const startId = project.graph.startNodeId
     const slideIds = project.graph.nodes
       .filter((node) => node.type === 'slide' && node.id !== startId)
       .map((node) => node.id)
@@ -322,9 +351,13 @@ describe('useAutosave — fidelidad de reapertura (criterio de aceptación del m
     // campo, para que un fallo señale con precisión qué se perdió.
     expect(reopened).toEqual(inMemory)
 
-    expect(reopened.graph.nodes).toHaveLength(4)
-    // La referencia de inicio sobrevive al ciclo guardar/reabrir.
-    expect(reopened.graph.startNodeId).toBe(startId)
+    // 4 nodos "narrativos" (igual que antes de este milestone) + 1 nodo
+    // `intro` sintetizado al abrir por primera vez (ver comentario de
+    // cabecera del test).
+    expect(reopened.graph.nodes).toHaveLength(5)
+    // La referencia de inicio (el `intro` sintetizado) sobrevive al ciclo
+    // guardar/reabrir.
+    expect(reopened.graph.startNodeId).toBe(introId)
 
     const reopenedStart = reopened.graph.nodes.find((node) => node.id === startId)
     const reopenedContent = reopened.graph.nodes.find((node) => node.id === contentId)
@@ -369,13 +402,16 @@ describe('useAutosave — fidelidad de reapertura (criterio de aceptación del m
     const edges = deriveEdges(reopened)
     expect(edges).toEqual(
       expect.arrayContaining([
+        expect.objectContaining({ source: introId, target: startId }),
         expect.objectContaining({ source: startId, target: contentId }),
         expect.objectContaining({ source: contentId, target: decisionId }),
         expect.objectContaining({ source: decisionId, target: finalId }),
         expect.objectContaining({ source: decisionId, target: contentId }),
       ]),
     )
-    expect(edges).toHaveLength(4)
+    // Las 4 conexiones narrativas de siempre + la del `intro` sintetizado
+    // hacia la diapositiva semilla (ver comentario de cabecera del test).
+    expect(edges).toHaveLength(5)
 
     // Mismo viewport (x/y/zoom).
     expect(reopened.editor.viewport).toEqual({ x: 42, y: -17, zoom: 1.5 })

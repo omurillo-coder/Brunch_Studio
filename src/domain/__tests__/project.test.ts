@@ -12,7 +12,7 @@ import {
   updateNode,
   updateVariable,
 } from '../project'
-import { connect } from '../graph'
+import { connect, disconnect } from '../graph'
 import { addResponse, updateResponse } from '../responses'
 import { addAudioBlock, addImageBlock, updateTextBlockBody } from '../content'
 import type { ProjectDocument, SlideNode } from '../schemas'
@@ -515,6 +515,127 @@ describe('updateNode — condition/elseTargetNodeId', () => {
     const project = createNode(createProject('P'), 'final', { x: 0, y: 0 })
     const finalId = otherNodeIdOf(project, 'final')
     expect(() => updateNode(project, finalId, { elseTargetNodeId: 'x' })).toThrow()
+  })
+})
+
+describe('nodo "intro" (milestone "Diapositiva de Inicio")', () => {
+  function introIdOf(project: ProjectDocument): string {
+    const node = project.graph.nodes.find((candidate) => candidate.type === 'intro')
+    if (!node) throw new Error('El proyecto no tiene ningún nodo "intro"')
+    return node.id
+  }
+
+  describe('createNode', () => {
+    it('crea el primer intro, lo añade vacío y lo fija como startNodeId (desplazando el anterior)', () => {
+      const project = createProject('P')
+      const oldStartId = project.graph.startNodeId
+
+      const updated = createNode(project, 'intro', { x: -260, y: 0 })
+
+      expect(updated.graph.nodes).toHaveLength(2)
+      const introId = introIdOf(updated)
+      const intro = updated.graph.nodes.find((n) => n.id === introId)
+      expect(intro?.type === 'intro' ? intro.cicloId : 'missing').toBeUndefined()
+      expect(intro?.type === 'intro' ? intro.asignaturaId : 'missing').toBeUndefined()
+      expect(intro?.type === 'intro' ? intro.caseName : undefined).toBe('')
+      expect(intro?.type === 'intro' ? intro.targetNodeId : 'missing').toBeUndefined()
+
+      // Desplaza el startNodeId anterior (la diapositiva original).
+      expect(updated.graph.startNodeId).toBe(introId)
+      expect(updated.graph.startNodeId).not.toBe(oldStartId)
+      // Inmutabilidad: el proyecto original no se toca.
+      expect(project.graph.startNodeId).toBe(oldStartId)
+    })
+
+    it('lanza si el proyecto ya tiene un nodo intro', () => {
+      const project = createNode(createProject('P'), 'intro', { x: -260, y: 0 })
+      expect(() => createNode(project, 'intro', { x: -260, y: 100 })).toThrow()
+      // No debe haber mutado nada aunque haya lanzado.
+      expect(project.graph.nodes.filter((n) => n.type === 'intro')).toHaveLength(1)
+    })
+  })
+
+  describe('deleteNode', () => {
+    it('nunca se puede eliminar el nodo intro, aunque coincida o no con graph.startNodeId', () => {
+      const project = createNode(createProject('P'), 'intro', { x: -260, y: 0 })
+      const introId = introIdOf(project)
+
+      // Caso normal: intro === startNodeId.
+      expect(project.graph.startNodeId).toBe(introId)
+      expect(() => deleteNode(project, introId)).toThrow()
+      expect(project.graph.nodes.some((n) => n.id === introId)).toBe(true)
+    })
+  })
+
+  describe('duplicateNode', () => {
+    it('lanza al intentar duplicar el nodo intro: solo puede haber uno por proyecto', () => {
+      const project = createNode(createProject('P'), 'intro', { x: -260, y: 0 })
+      const introId = introIdOf(project)
+      expect(() => duplicateNode(project, introId, { x: 0, y: 200 })).toThrow()
+      // No debe haber mutado nada aunque haya lanzado.
+      expect(project.graph.nodes).toHaveLength(2)
+    })
+  })
+
+  describe('connect / disconnect (generalizados a un origen intro)', () => {
+    it('conecta y desconecta el targetNodeId del intro igual que el "de continuar" de una diapositiva', () => {
+      let project = createNode(createProject('P'), 'intro', { x: -260, y: 0 })
+      const introId = introIdOf(project)
+      const slideId = project.graph.nodes.find((n) => n.id !== introId)?.id
+      if (!slideId) throw new Error('setup inválido')
+
+      project = connect(project, introId, slideId)
+      let intro = project.graph.nodes.find((n) => n.id === introId)
+      expect(intro?.type === 'intro' ? intro.targetNodeId : undefined).toBe(slideId)
+
+      project = disconnect(project, introId)
+      intro = project.graph.nodes.find((n) => n.id === introId)
+      expect(intro?.type === 'intro' ? intro.targetNodeId : 'missing').toBeUndefined()
+    })
+
+    it('connect con un responseId sobre un intro lanza (un intro nunca tiene respuestas)', () => {
+      let project = createNode(createProject('P'), 'intro', { x: -260, y: 0 })
+      const introId = introIdOf(project)
+      const slideId = project.graph.nodes.find((n) => n.id !== introId)?.id
+      if (!slideId) throw new Error('setup inválido')
+
+      expect(() => connect(project, introId, slideId, 'cualquier-id')).toThrow()
+    })
+  })
+
+  describe('updateNode — cicloId/asignaturaId/caseName', () => {
+    it('fija, cambia y borra cicloId/asignaturaId; fija caseName', () => {
+      let project = createNode(createProject('P'), 'intro', { x: -260, y: 0 })
+      const introId = introIdOf(project)
+
+      project = updateNode(project, introId, {
+        cicloId: 'troncal_esp',
+        asignaturaId: 'TR_ENGL_GM',
+        caseName: 'Atención a un cliente disgustado',
+      })
+      let intro = project.graph.nodes.find((n) => n.id === introId)
+      expect(intro?.type === 'intro' ? intro.cicloId : undefined).toBe('troncal_esp')
+      expect(intro?.type === 'intro' ? intro.asignaturaId : undefined).toBe('TR_ENGL_GM')
+      expect(intro?.type === 'intro' ? intro.caseName : undefined).toBe(
+        'Atención a un cliente disgustado',
+      )
+
+      project = updateNode(project, introId, { cicloId: null, asignaturaId: null })
+      intro = project.graph.nodes.find((n) => n.id === introId)
+      expect(intro?.type === 'intro' ? intro.cicloId : 'missing').toBeUndefined()
+      expect(intro?.type === 'intro' ? intro.asignaturaId : 'missing').toBeUndefined()
+    })
+
+    it('lanza si se fija cicloId/asignaturaId/caseName en una diapositiva o un final', () => {
+      const withSlide = createProject('P')
+      expect(() =>
+        updateNode(withSlide, withSlide.graph.startNodeId, { cicloId: 'troncal_esp' }),
+      ).toThrow()
+
+      const withFinal = createNode(createProject('P'), 'final', { x: 0, y: 0 })
+      const finalId = otherNodeIdOf(withFinal, 'final')
+      expect(() => updateNode(withFinal, finalId, { caseName: 'x' })).toThrow()
+    })
   })
 })
 

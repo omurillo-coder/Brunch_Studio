@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest'
 import {
   ContentBlockSchema,
   DecisionResponseSchema,
+  IntroNodeSchema,
+  NODE_TYPES,
+  NodeSchema,
   ProjectDocumentSchema,
   SlideNodeSchema,
   VariableConditionSchema,
@@ -251,6 +254,63 @@ describe('SlideNodeSchema — condition/elseTargetNodeId opcionales', () => {
   it('rechaza un elseTargetNodeId que no es uuid', () => {
     const result = SlideNodeSchema.safeParse({ ...base, elseTargetNodeId: 'no-es-uuid' })
     expect(result.success).toBe(false)
+  })
+})
+
+describe('IntroNodeSchema (milestone "Diapositiva de Inicio")', () => {
+  const base = {
+    id: NODE_ID,
+    number: 1,
+    position: { x: 0, y: 0 },
+    title: '',
+    type: 'intro' as const,
+  }
+
+  it('acepta un intro con solo los campos base (cicloId/asignaturaId/targetNodeId ausentes, caseName por defecto)', () => {
+    const result = IntroNodeSchema.safeParse(base)
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data.caseName).toBe('')
+      expect(result.data.cicloId).toBeUndefined()
+      expect(result.data.asignaturaId).toBeUndefined()
+      expect(result.data.targetNodeId).toBeUndefined()
+    }
+  })
+
+  it('acepta un intro con todos los campos rellenos', () => {
+    const result = IntroNodeSchema.safeParse({
+      ...base,
+      cicloId: 'troncal_esp',
+      asignaturaId: 'TR_ENGL_GM',
+      caseName: 'Atención a un cliente disgustado',
+      targetNodeId: '44444444-4444-4444-8444-444444444444',
+    })
+    expect(result.success).toBe(true)
+  })
+
+  it('NO valida que cicloId/asignaturaId existan en el catálogo ni que sean coherentes entre sí (responsabilidad de introValidation.ts)', () => {
+    const result = IntroNodeSchema.safeParse({
+      ...base,
+      cicloId: 'no-existe-en-el-catalogo',
+      asignaturaId: 'tampoco-existe',
+    })
+    expect(result.success).toBe(true)
+  })
+
+  it('rechaza un targetNodeId que no es uuid', () => {
+    expect(IntroNodeSchema.safeParse({ ...base, targetNodeId: 'no-es-uuid' }).success).toBe(false)
+  })
+
+  it('rechaza type distinto de "intro"', () => {
+    expect(IntroNodeSchema.safeParse({ ...base, type: 'slide' }).success).toBe(false)
+  })
+
+  it('NODE_TYPES incluye "intro", "slide" y "final" en ese orden', () => {
+    expect(NODE_TYPES).toEqual(['intro', 'slide', 'final'])
+  })
+
+  it('NodeSchema (unión discriminada) acepta un nodo intro', () => {
+    expect(NodeSchema.safeParse(base).success).toBe(true)
   })
 })
 

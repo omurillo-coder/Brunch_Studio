@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { PlayerScreen } from '../PlayerScreen'
 import { useProjectStore } from '../../store'
 import { resetProjectStore } from '../../store/testHelpers'
-import { createProject } from '../../domain'
+import { CICLOS, createProject } from '../../domain'
 import type { AppServices } from '../../app/AppServices'
 import { AppServicesProvider } from '../../app/AppServicesContext'
 import { MemoryAssetRepository } from '../../persistence'
@@ -660,5 +660,106 @@ describe('PlayerScreen: contenedor de scroll compartido por las 4 vistas', () =>
     fireEvent.click(screen.getByText('Camino A'))
 
     expect(mainStage(container).className).toBe(styles.stage) // final
+  })
+})
+
+describe('PlayerScreen: portada (nodo intro, milestone "Diapositiva de Inicio")', () => {
+  /**
+   * Añade una portada (`intro`) completa al proyecto del store —
+   * `createNode('intro', ...)` ya desplaza `graph.startNodeId` a ella, ver
+   * `createNode` en `src/domain/project.ts`— y la conecta a un Final
+   * trivial, para poder observar tanto la portada como el avance tras
+   * pulsar "Continuar".
+   */
+  function buildIntroInStore() {
+    act(() => {
+      useProjectStore.getState().createNode('intro', { x: -200, y: 0 })
+    })
+    const introId = useProjectStore.getState().project.graph.startNodeId
+    const ciclo = CICLOS[0]!
+    const asignatura = ciclo.asignaturas[0]!
+    act(() => {
+      useProjectStore.getState().updateNode(introId, {
+        cicloId: ciclo.id,
+        asignaturaId: asignatura.id,
+        caseName: 'Caso de la fábrica',
+      })
+      useProjectStore
+        .getState()
+        .createNode('final', { x: 200, y: 0 }, { title: 'Fin', body: 'Fin del caso.' })
+    })
+    const finalId = otherNodeIdOf('final')
+    act(() => {
+      useProjectStore.getState().connect(introId, finalId)
+    })
+    return { introId, finalId, ciclo, asignatura }
+  }
+
+  it('el recorrido empieza en la portada, con ciclo/asignatura/caseName resueltos a nombres legibles', () => {
+    const { ciclo, asignatura } = buildIntroInStore()
+    renderPlayer()
+
+    expect(screen.getByText('Caso de la fábrica')).toBeInTheDocument()
+    expect(screen.getByText(`${ciclo.name} · ${asignatura.name}`)).toBeInTheDocument()
+    expect(screen.getByText('Continuar')).toBeInTheDocument()
+  })
+
+  it('el botón de continuar de la portada avanza a targetNodeId (primera diapositiva narrativa real)', () => {
+    buildIntroInStore()
+    renderPlayer()
+
+    fireEvent.click(screen.getByText('Continuar'))
+
+    expect(screen.getByText('Fin de la experiencia')).toBeInTheDocument()
+    expect(screen.getByText('Fin del caso.')).toBeInTheDocument()
+  })
+
+  it('con la portada incompleta (sin ciclo/asignatura/caseName) no rompe la vista: omite lo que falta', () => {
+    act(() => {
+      useProjectStore.getState().createNode('intro', { x: -200, y: 0 })
+    })
+    const introId = useProjectStore.getState().project.graph.startNodeId
+    act(() => {
+      useProjectStore.getState().createNode('final', { x: 200, y: 0 })
+    })
+    const finalId = otherNodeIdOf('final')
+    act(() => {
+      useProjectStore.getState().connect(introId, finalId)
+    })
+
+    renderPlayer()
+
+    // Ni ciclo/asignatura ni caseName están elegidos: la vista sigue
+    // pintando el botón de continuar sin romperse.
+    expect(screen.getByText('Continuar')).toBeInTheDocument()
+  })
+
+  it('"Reiniciar experiencia" desde cualquier punto del recorrido vuelve a mostrar la portada', () => {
+    buildIntroInStore()
+    renderPlayer()
+
+    fireEvent.click(screen.getByText('Continuar'))
+    expect(screen.getByText('Fin de la experiencia')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByText('↺ Reiniciar experiencia'))
+
+    expect(screen.getByText('Caso de la fábrica')).toBeInTheDocument()
+  })
+
+  it('sin targetNodeId, la portada muestra el mismo aviso de "sin continuación" que el resto del motor', () => {
+    act(() => {
+      useProjectStore.getState().createNode('intro', { x: -200, y: 0 })
+    })
+    const introId = useProjectStore.getState().project.graph.startNodeId
+    act(() => {
+      useProjectStore.getState().updateNode(introId, { caseName: 'Caso sin destino aún' })
+    })
+
+    renderPlayer()
+
+    expect(
+      screen.getByText(/todavía no tiene una continuación configurada/i),
+    ).toBeInTheDocument()
+    expect(screen.queryByText('Caso sin destino aún')).not.toBeInTheDocument()
   })
 })

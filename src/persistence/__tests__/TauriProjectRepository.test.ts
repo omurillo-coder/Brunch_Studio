@@ -47,6 +47,9 @@ describe('TauriProjectRepository.createProject', () => {
 
 describe('TauriProjectRepository.openProject', () => {
   it('invoca open_branch_project con la ruta y valida el JSON devuelto con Zod', async () => {
+    // `createProject` (dominio, de bajo nivel) no siembra ninguna diapositiva
+    // de Inicio — abrir el documento la sintetiza (`ensureIntroNode`, parte
+    // de la migración), así que el grafo gana ese nodo respecto al original.
     const document = createProject('Mi escenario')
     let receivedCmd = ''
     let receivedPayload: unknown
@@ -62,7 +65,12 @@ describe('TauriProjectRepository.openProject', () => {
 
     expect(receivedCmd).toBe('open_branch_project')
     expect(receivedPayload).toEqual({ path: '/tmp/proyecto.brunch' })
-    expect(opened).toEqual(document)
+    expect(opened.metadata).toEqual(document.metadata)
+    expect(opened.graph.nodes).toHaveLength(document.graph.nodes.length + 1)
+    const intro = opened.graph.nodes.find((node) => node.type === 'intro')
+    expect(intro).toBeDefined()
+    expect(opened.graph.startNodeId).toBe(intro?.id)
+    expect(intro?.type === 'intro' ? intro.targetNodeId : undefined).toBe(document.graph.startNodeId)
   })
 
   it('rechaza si el JSON devuelto no cumple ProjectDocumentSchema', async () => {
@@ -113,9 +121,18 @@ describe('TauriProjectRepository.openProject', () => {
     const repo = new TauriProjectRepository()
     const opened = await repo.openProject('/tmp/antiguo.brunch')
 
-    expect(opened.graph.startNodeId).toBe('22222222-2222-4222-8222-222222222222')
-    expect(opened.graph.nodes).toHaveLength(1)
-    expect(opened.graph.nodes[0]?.type).toBe('slide')
+    // El nodo `content` migrado a `slide` sigue teniendo el id de siempre;
+    // lo nuevo es que ya no es él quien arranca el recorrido, sino un nodo
+    // `intro` sintetizado (id fresco, no determinista) cuyo destino es él.
+    expect(opened.graph.nodes).toHaveLength(2)
+    const slide = opened.graph.nodes.find((node) => node.id === '22222222-2222-4222-8222-222222222222')
+    expect(slide?.type).toBe('slide')
+    const intro = opened.graph.nodes.find((node) => node.type === 'intro')
+    expect(intro).toBeDefined()
+    expect(opened.graph.startNodeId).toBe(intro?.id)
+    expect(intro?.type === 'intro' ? intro.targetNodeId : undefined).toBe(
+      '22222222-2222-4222-8222-222222222222',
+    )
   })
 
   it('propaga un PersistenceCommandError con kind NotFound', async () => {

@@ -2,10 +2,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { buildHtmlBundle } from '../htmlBundle'
 import { BUNDLE_ELEMENT_ID } from '../exportedPlayerScript'
 import type { ExportAssetMap } from '../exportAssets'
+import { CICLOS } from '../../domain'
 import type {
   ContentBlock,
   DecisionResponse,
   FinalNode,
+  IntroNode,
   ProjectDocument,
   SlideNode,
   VariableDef,
@@ -892,5 +894,197 @@ describe('buildHtmlBundle — comportamiento del HTML generado: variables/condic
       ...document.querySelectorAll<HTMLButtonElement>('#brunch-root .optionButton'),
     ].map((button) => button.textContent)
     expect(optionTexts).toEqual(['Activar', 'Omitir'])
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Diapositiva de Inicio (nodo `intro`, milestone "Diapositiva de Inicio",
+// fase 3)
+// ---------------------------------------------------------------------------
+
+const INTRO_ID = 'aaaaaaaa-0000-4000-8000-000000000001'
+const INTRO_SLIDE_ID = 'aaaaaaaa-0000-4000-8000-000000000002'
+const INTRO_FINAL_ID = 'aaaaaaaa-0000-4000-8000-000000000003'
+
+/**
+ * Proyecto mínimo con una portada (`intro`) completa como `startNodeId`,
+ * conectada a una diapositiva "de continuar" trivial (sin contenido, sin
+ * `continueLabel` propio) que lleva a un Final. `cicloId`/`asignaturaId` son
+ * del catálogo real (`CICLOS`, primer ciclo/primera asignatura), coherentes
+ * entre sí, para poder comprobar la resolución a nombres legibles.
+ * `overrides` se aplica sobre el nodo `intro` para los tests de portada
+ * incompleta/sin destino.
+ */
+function introProject(overrides: Partial<IntroNode> = {}): ProjectDocument {
+  const ciclo = CICLOS[0]!
+  const asignatura = ciclo.asignaturas[0]!
+
+  const intro: IntroNode = {
+    id: INTRO_ID,
+    number: 1,
+    type: 'intro',
+    position: { x: 0, y: 0 },
+    title: '',
+    cicloId: ciclo.id,
+    asignaturaId: asignatura.id,
+    caseName: 'Caso de exportación',
+    targetNodeId: INTRO_SLIDE_ID,
+    ...overrides,
+  }
+
+  const slide: SlideNode = {
+    id: INTRO_SLIDE_ID,
+    number: 2,
+    type: 'slide',
+    position: { x: 200, y: 0 },
+    title: 'Primera diapositiva',
+    targetNodeId: INTRO_FINAL_ID,
+    continueLabel: undefined,
+    responses: [],
+    content: [],
+  }
+
+  const final: FinalNode = {
+    id: INTRO_FINAL_ID,
+    number: 3,
+    type: 'final',
+    position: { x: 400, y: 0 },
+    title: 'Fin',
+    body: '',
+  }
+
+  return {
+    schemaVersion: 1,
+    metadata: {
+      id: '99999999-9999-4999-8999-999999999995',
+      name: 'Proyecto con portada',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    },
+    settings: {},
+    variables: [],
+    graph: { nodes: [intro, slide, final], startNodeId: INTRO_ID },
+    editor: { viewport: { x: 0, y: 0, zoom: 1 } },
+  }
+}
+
+/** Extrae `{ introCicloName, introAsignaturaName }` del JSON embebido en el
+ *  HTML generado, sin pasar por jsdom. */
+function embeddedIntroNames(html: string): {
+  introCicloName: string | null
+  introAsignaturaName: string | null
+} {
+  const marker = `<script type="application/json" id="${BUNDLE_ELEMENT_ID}">`
+  const start = html.indexOf(marker) + marker.length
+  const end = html.indexOf('</script>', start)
+  return JSON.parse(html.slice(start, end)) as {
+    introCicloName: string | null
+    introAsignaturaName: string | null
+  }
+}
+
+describe('buildHtmlBundle — diapositiva de Inicio: cicloId/asignaturaId resueltos en tiempo de exportación', () => {
+  it('resuelve cicloId/asignaturaId a sus nombres legibles y los embebe ya resueltos en el bundle', () => {
+    const ciclo = CICLOS[0]!
+    const asignatura = ciclo.asignaturas[0]!
+
+    const names = embeddedIntroNames(buildHtmlBundle(introProject(), {}))
+
+    expect(names.introCicloName).toBe(ciclo.name)
+    expect(names.introAsignaturaName).toBe(asignatura.name)
+  })
+
+  it('sin nodo intro en el proyecto, introCicloName/introAsignaturaName son null', () => {
+    const names = embeddedIntroNames(buildHtmlBundle(sampleProject(), sampleAssets))
+
+    expect(names.introCicloName).toBeNull()
+    expect(names.introAsignaturaName).toBeNull()
+  })
+
+  it('con cicloId/asignaturaId sin elegir, resuelve a null sin lanzar', () => {
+    const names = embeddedIntroNames(
+      buildHtmlBundle(introProject({ cicloId: undefined, asignaturaId: undefined }), {}),
+    )
+
+    expect(names.introCicloName).toBeNull()
+    expect(names.introAsignaturaName).toBeNull()
+  })
+
+  it('el catálogo completo (CICLOS) no viaja embebido en el HTML exportado', () => {
+    // Solo dos nombres resueltos, nunca el catálogo entero: comprobado con
+    // el nombre de un ciclo/asignatura que NO es el elegido en el proyecto
+    // de prueba (ver `introProject`, que usa siempre CICLOS[0]).
+    const otroCiclo = CICLOS[1]
+    if (!otroCiclo) throw new Error('El catálogo necesita al menos dos ciclos para este test')
+
+    const html = buildHtmlBundle(introProject(), {})
+
+    expect(html).not.toContain(otroCiclo.name)
+  })
+})
+
+describe('buildHtmlBundle — diapositiva de Inicio: comportamiento del HTML generado (jsdom)', () => {
+  beforeEach(() => {
+    document.body.innerHTML = ''
+  })
+
+  it('arranca pintando la portada: contexto (ciclo · asignatura), caseName como título y "Continuar"', () => {
+    const ciclo = CICLOS[0]!
+    const asignatura = ciclo.asignaturas[0]!
+
+    runExportedBundle(buildHtmlBundle(introProject(), {}))
+
+    const card = currentCard()
+    expect(card.querySelector('.introContext')?.textContent).toBe(
+      `${ciclo.name} · ${asignatura.name}`,
+    )
+    expect(card.querySelector('.title')?.textContent).toBe('Caso de exportación')
+    expect(card.querySelector('.primaryButton')?.textContent).toBe('Continuar')
+  })
+
+  it('pulsar "Continuar" en la portada avanza a la primera diapositiva narrativa real', () => {
+    runExportedBundle(buildHtmlBundle(introProject(), {}))
+    clickButton('Continuar')
+
+    // Ya no es la portada (sin contexto de ciclo/asignatura): es la
+    // diapositiva "de continuar" enlazada, sin contenido propio, que pinta
+    // su texto de repuesto.
+    const card = currentCard()
+    expect(card.querySelector('.introContext')).toBeNull()
+    expect(card.textContent).toContain('Esta diapositiva todavía no tiene contenido.')
+  })
+
+  it('con la portada incompleta (sin ciclo/asignatura/caseName) no rompe el HTML exportado: omite lo que falta', () => {
+    runExportedBundle(
+      buildHtmlBundle(
+        introProject({ cicloId: undefined, asignaturaId: undefined, caseName: '' }),
+        {},
+      ),
+    )
+
+    const card = currentCard()
+    expect(card.querySelector('.introContext')).toBeNull()
+    expect(card.querySelector('.title')).toBeNull()
+    // El botón de continuar sigue ahí, aunque no haya nada más que pintar.
+    expect(card.querySelector('.primaryButton')?.textContent).toBe('Continuar')
+  })
+
+  it('sin targetNodeId, la portada exportada cae en el mismo aviso de "sin continuación" que el resto del runtime', () => {
+    runExportedBundle(buildHtmlBundle(introProject({ targetNodeId: undefined }), {}))
+
+    expect(currentCard().textContent).toContain(
+      'Esta parte de la experiencia no tiene una continuación configurada.',
+    )
+    // Y no queda ningún resto de portada (ni contexto ni caseName).
+    expect(currentCard().querySelector('.introContext')).toBeNull()
+    expect(currentCard().textContent).not.toContain('Caso de exportación')
+  })
+
+  it('el título del nodo intro (siempre vacío, referencia interna) no aparece en ningún punto', () => {
+    const html = buildHtmlBundle(introProject({ title: 'Nota interna de la portada' }), {})
+
+    // `stripEditorOnlyFields` vacía el título de TODOS los nodos, incluido
+    // el `intro` — mismo criterio que el resto del documento.
+    expect(html).not.toContain('Nota interna de la portada')
   })
 })

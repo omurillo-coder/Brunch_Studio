@@ -71,6 +71,15 @@
      éste siguen leyéndose con holgura — no hace falta un token de texto
      aparte. */
   --bs-color-final-bg: #e7f0fc;
+  /* Fondo distintivo de la tarjeta del nodo `intro` ("Inicio", milestone
+     "Diapositiva de Inicio") en el lienzo: verde clarito, mismo criterio de
+     diseño que `--bs-color-final-bg` (fondo pastel sobrio, sin resultar
+     chillón) y pensado — como ya anticipaba el comentario de ese token —
+     para convivir en el mismo lienzo con el azul del `final` sin competir
+     visualmente: misma luminosidad/saturación que `--bs-color-final-bg`,
+     tono distinto. Contraste: `--bs-color-text` (#1b1b1f) sobre este verde
+     da 15.1:1 (AAA de sobra, igual de riguroso que el azul de `final`). */
+  --bs-color-intro-bg: #e3f5e8;
 
   /* Espaciado */
   --bs-space-1: 4px;
@@ -136,6 +145,10 @@
        claro sobre fondo oscuro deslumbraría). Contraste:
        `--bs-color-text` (#ededef) sobre este azul da 12.2:1 (AAA). */
     --bs-color-final-bg: #1d2b3f;
+    /* Mismo verde clarito de `intro` pero oscurecido para fondo oscuro
+       (mismo criterio que `--bs-color-final-bg` arriba). Contraste:
+       `--bs-color-text` (#ededef) sobre este verde da 12.2:1 (AAA). */
+    --bs-color-intro-bg: #16301f;
     --bs-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
   }
 }

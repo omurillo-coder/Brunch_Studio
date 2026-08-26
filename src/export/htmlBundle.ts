@@ -1,5 +1,5 @@
 import { generateHTML } from '@tiptap/core'
-import { DEFAULT_CONTINUE_LABEL, RESPONSE_LETTERS } from '../domain'
+import { CICLOS, DEFAULT_CONTINUE_LABEL, RESPONSE_LETTERS } from '../domain'
 import type { ProjectDocument } from '../domain'
 import { RICH_TEXT_EXTENSIONS, parseRichBody } from '../editor/richText/richTextContent'
 import type { ExportAssetMap } from './exportAssets'
@@ -84,6 +84,16 @@ interface ExportBundle {
    *  nunca se muestra; ver `RESPONSE_LETTERS` en el dominio). */
   responseLetters: string[]
   texts: ExportedTexts
+  /**
+   * Nombres legibles de `cicloId`/`asignaturaId` del nodo `intro` (portada),
+   * ya resueltos contra `CICLOS` (`src/domain/catalog.ts`) EN TIEMPO DE
+   * EXPORTACIÓN — ver `resolveIntroCatalogNames` más abajo para por qué se
+   * resuelven aquí y no en el runtime JS vanilla embebido. `null` si no hay
+   * nodo `intro`, o si el campo correspondiente no está elegido, o si el id
+   * ya no existe en el catálogo.
+   */
+  introCicloName: string | null
+  introAsignaturaName: string | null
 }
 
 /** Escapa texto para insertarlo como contenido/atributo de HTML. */
@@ -150,6 +160,13 @@ function stripEditorOnlyFields(project: ProjectDocument): ProjectDocument {
 function renderNodeBodies(project: ProjectDocument): Record<string, string> {
   const bodyHtml: Record<string, string> = {}
   for (const node of project.graph.nodes) {
+    if (node.type === 'intro') {
+      // El nodo `intro` (portada) no tiene ningún texto enriquecido que
+      // pre-renderizar: `caseName` es texto plano (viaja tal cual en el
+      // `project` embebido) y `cicloId`/`asignaturaId` se resuelven aparte,
+      // ver `resolveIntroCatalogNames`.
+      continue
+    }
     if (node.type === 'final') {
       if (!node.body.trim()) continue
       bodyHtml[node.id] = generateHTML(parseRichBody(node.body), RICH_TEXT_EXTENSIONS)
@@ -162,6 +179,48 @@ function renderNodeBodies(project: ProjectDocument): Record<string, string> {
     }
   }
   return bodyHtml
+}
+
+/**
+ * Resuelve `cicloId`/`asignaturaId` del nodo `intro` del proyecto (si existe
+ * y están elegidos) a sus nombres legibles, vía el catálogo `CICLOS`
+ * (`src/domain/catalog.ts`).
+ *
+ * Se resuelve AQUÍ, en tiempo de exportación (dentro de la app, con acceso
+ * normal a un módulo TS), y no dentro de `exportedPlayerScript.ts`: ese
+ * runtime es JS vanilla embebido en un único `<script>` clásico sin módulos
+ * (ver cabecera de ese archivo) y no puede hacer `import` de `catalog.ts`;
+ * la alternativa —serializar el catálogo entero (374 asignaturas) dentro de
+ * CADA HTML/SCORM exportado solo para resolver dos ids— sería mucho más
+ * pesado y frágil que resolverlos una única vez aquí y embeber ya el
+ * resultado (dos strings, o `null`) en el JSON del bundle. `PlayerScreen.tsx`
+ * (dentro de la app) no tiene esta restricción: importa `CICLOS` directamente
+ * y resuelve en el momento de pintar.
+ *
+ * Tolerante, igual que `asignaturaBelongsToCiclo`
+ * (`src/domain/introValidation.ts`): un id que ya no está en el catálogo, o
+ * que aún no se ha elegido, resuelve a `null` sin lanzar — un proyecto puede
+ * "probarse"/exportarse con la portada incompleta antes de que
+ * `validateIntroForExport` bloquee la exportación real (ver
+ * `useHtmlExport`/`useScormExport`).
+ */
+function resolveIntroCatalogNames(project: ProjectDocument): {
+  cicloName: string | null
+  asignaturaName: string | null
+} {
+  const intro = project.graph.nodes.find((node) => node.type === 'intro')
+  if (!intro) return { cicloName: null, asignaturaName: null }
+
+  const ciclo = intro.cicloId ? CICLOS.find((candidate) => candidate.id === intro.cicloId) : undefined
+  const asignatura =
+    ciclo && intro.asignaturaId
+      ? ciclo.asignaturas.find((candidate) => candidate.id === intro.asignaturaId)
+      : undefined
+
+  return {
+    cicloName: ciclo?.name ?? null,
+    asignaturaName: asignatura?.name ?? null,
+  }
 }
 
 /** `assetId` -> `data:` URI, solo para los assets que se pudieron leer. */
@@ -187,12 +246,15 @@ function buildAssetUris(assets: ExportAssetMap): Record<string, string> {
  * permite comparar exportaciones y hace los tests estables.
  */
 export function buildHtmlBundle(project: ProjectDocument, assets: ExportAssetMap): string {
+  const introNames = resolveIntroCatalogNames(project)
   const bundle: ExportBundle = {
     project: stripEditorOnlyFields(project),
     bodyHtml: renderNodeBodies(project),
     assetUris: buildAssetUris(assets),
     responseLetters: [...RESPONSE_LETTERS],
     texts: EXPORTED_TEXTS,
+    introCicloName: introNames.cicloName,
+    introAsignaturaName: introNames.asignaturaName,
   }
 
   const title = project.metadata.name.trim() || 'Experiencia interactiva'

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useAppServices } from '../app/AppServicesContext'
 import { useProject } from '../store'
+import { validateIntroForExport } from '../domain'
 import { resolveExportAssets } from './exportAssets'
 import { buildHtmlBundle } from './htmlBundle'
 
@@ -37,6 +38,19 @@ function incompleteAssetsMessage(failedCount: number): string {
     : `Experiencia exportada, pero ${failedCount} imágenes o audios no se han podido incluir.`
 }
 
+/**
+ * Mensaje de bloqueo cuando la diapositiva de Inicio (portada, nodo `intro`)
+ * está incompleta: une en una sola línea legible los textos que devuelve
+ * `validateIntroForExport` (`src/domain/introValidation.ts`), uno por cada
+ * dato que falta o no es coherente. Reutiliza el MISMO campo `message` que ya
+ * usa este hook para el resto de errores (`status: 'error'`) — `Topbar.tsx`
+ * ya lo pinta con `role="alert"` sin ningún cambio, así que no hace falta
+ * ningún mecanismo nuevo.
+ */
+function incompleteIntroMessage(issues: string[]): string {
+  return `No se puede exportar: ${issues.join('; ')}.`
+}
+
 export function useHtmlExport(filePath: string): HtmlExportState {
   const project = useProject()
   const { pickExportHtmlPath, assetRepository, htmlBundleWriter } = useAppServices()
@@ -47,6 +61,16 @@ export function useHtmlExport(filePath: string): HtmlExportState {
     setStatus('exporting')
     setMessage(null)
     try {
+      // Bloquea ANTES de abrir el selector de guardado (y de leer assets o
+      // generar nada): una portada incompleta no debe llegar a producir
+      // ningún archivo. Ver `validateIntroForExport`.
+      const introIssues = validateIntroForExport(project)
+      if (introIssues.length > 0) {
+        setStatus('error')
+        setMessage(incompleteIntroMessage(introIssues))
+        return
+      }
+
       const path = await pickExportHtmlPath(project.metadata.name)
       if (!path) {
         // Cancelado por el usuario: sin error visible y sin mensaje.

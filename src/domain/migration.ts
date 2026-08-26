@@ -10,7 +10,7 @@ import {
   VariableConditionSchema,
   VariableDefSchema,
 } from './schemas'
-import type { ContentBlock, FinalNode, Node, ProjectDocument, SlideNode } from './schemas'
+import type { ContentBlock, FinalNode, IntroNode, Node, ProjectDocument, SlideNode } from './schemas'
 
 /**
  * ---------------------------------------------------------------------------
@@ -21,6 +21,19 @@ import type { ContentBlock, FinalNode, Node, ProjectDocument, SlideNode } from '
  * formas por las que ha pasado `ProjectDocument` a lo largo de la vida de la
  * app, y las encadena hasta la forma actual:
  *
+ * 0. Milestone "Diapositiva de Inicio" (`ensureIntroNode`, ver más abajo,
+ *    junto al punto de entrada): a diferencia de las demás formas de esta
+ *    lista, NO tiene su propio esquema Zod de reconocimiento, porque no
+ *    hace falta uno — el nodo `intro` es opcional a nivel de schema (ver
+ *    `IntroNodeSchema`/`NodeSchema` en `src/domain/schemas.ts`), así que
+ *    CUALQUIER documento sin ningún nodo `intro` (que incluye tanto un
+ *    `.brunch` guardado justo antes de este milestone, forma 1 de esta
+ *    lista, como cualquiera de las formas 2-4 tras migrar) ya valida
+ *    igualmente contra `ProjectDocumentSchema`. `ensureIntroNode` se aplica
+ *    por eso como paso FINAL incondicional, después de CUALQUIERA de las
+ *    ramas de `parseOrMigrateProjectDocument` (incluida la de éxito
+ *    inmediato contra la forma actual) — sintetiza un `intro` si no hay
+ *    ninguno, y no toca nada si ya lo hay.
  * 1. Forma ACTUAL (`ProjectDocumentSchema`): `SlideNode.content` — bloques de
  *    texto/imagen/audio ordenables.
  * 2. Forma "pre-bloques-de-contenido" (`PreContentBlocksProjectDocumentSchema`,
@@ -547,6 +560,85 @@ function migrateSingularImageDocument(
 }
 
 // ---------------------------------------------------------------------------
+// Milestone "Diapositiva de Inicio": sintetiza el nodo `intro` que falte
+// ---------------------------------------------------------------------------
+//
+// Ver el punto 0 de la cabecera del archivo para por qué este paso NO tiene
+// su propio esquema Zod de reconocimiento: cualquier documento sin `intro`
+// ya es válido contra `ProjectDocumentSchema` tal cual (el campo es opcional
+// a nivel de schema), así que no hace falta "reconocer" nada aparte de mirar
+// si `graph.nodes` ya contiene un nodo `intro`.
+
+/**
+ * Añade el nodo `intro` obligatorio a un `ProjectDocument` YA VALIDADO
+ * contra `ProjectDocumentSchema` (por `parseOrMigrateProjectDocument`, bien
+ * directamente, bien tras alguna de las migraciones de forma) que todavía no
+ * tenga ninguno — el caso de CUALQUIER `.brunch` guardado antes del
+ * milestone "Diapositiva de Inicio", sea cual sea su forma de origen. Si el
+ * documento ya tiene un nodo `intro` (cualquier `.brunch` guardado después
+ * de este milestone), lo devuelve sin tocar.
+ *
+ * Transformación, cuando hace falta sintetizar uno: crea un nodo `intro`
+ * nuevo (id nuevo vía `createId()`, `number` = uno más que el máximo
+ * `number` existente en el documento, para no chocar con ningún nodo real),
+ * con `cicloId`/`asignaturaId` ausentes y `caseName` vacío (portada
+ * incompleta: el diseñador la rellenará desde el editor en la fase de UI),
+ * `targetNodeId` = el `startNodeId` ANTIGUO del documento (el `intro` pasa a
+ * ser un paso previo al que antes era el inicio real, nunca lo sustituye
+ * narrativamente) y posición a la izquierda de ese antiguo inicio con un
+ * offset fijo de 260px en X (mismo valor, mismo criterio, que
+ * `seedIntroNode` en `src/domain/templates.ts` usa al construir una
+ * plantilla desde cero — no pretende ser una disposición final perfecta, el
+ * diseñador puede moverlo). `graph.startNodeId` pasa a apuntar al `intro`
+ * nuevo.
+ *
+ * Vuelve a validar el resultado contra `ProjectDocumentSchema` antes de
+ * devolverlo (mismo criterio paranoico que el resto de este archivo: no
+ * confiar en la transformación a ciegas) y lanza `ProjectMigrationError` si,
+ * por lo que sea, no lo hiciera.
+ */
+function ensureIntroNode(doc: ProjectDocument): ProjectDocument {
+  if (doc.graph.nodes.some((node) => node.type === 'intro')) {
+    return doc
+  }
+
+  const previousStartId = doc.graph.startNodeId
+  const previousStart = doc.graph.nodes.find((node) => node.id === previousStartId)
+  const maxNumber = doc.graph.nodes.reduce((max, node) => Math.max(max, node.number), 0)
+
+  const introNode: IntroNode = {
+    id: createId(),
+    number: maxNumber + 1,
+    position: previousStart
+      ? { x: previousStart.position.x - 260, y: previousStart.position.y }
+      : { x: 0, y: 0 },
+    title: '',
+    type: 'intro',
+    cicloId: undefined,
+    asignaturaId: undefined,
+    caseName: '',
+    targetNodeId: previousStartId,
+  }
+
+  const withIntro: ProjectDocument = {
+    ...doc,
+    graph: {
+      nodes: [introNode, ...doc.graph.nodes],
+      startNodeId: introNode.id,
+    },
+  }
+
+  const revalidated = ProjectDocumentSchema.safeParse(withIntro)
+  if (!revalidated.success) {
+    throw new ProjectMigrationError(
+      'El proyecto no tenía diapositiva de Inicio y el resultado de sintetizar una no es válido.',
+      { cause: revalidated.error },
+    )
+  }
+  return revalidated.data
+}
+
+// ---------------------------------------------------------------------------
 // Punto de entrada
 // ---------------------------------------------------------------------------
 
@@ -574,11 +666,19 @@ function migrateSingularImageDocument(
  * documento no es reconocible como ninguna de las cuatro formas, lanza
  * `ProjectMigrationError` con un mensaje claro (nunca se reintenta en
  * silencio con datos corruptos).
+ *
+ * PASO FINAL, incondicional y común a las cinco ramas (incluida la de éxito
+ * inmediato): `ensureIntroNode` (ver arriba) sintetiza el nodo `intro`
+ * obligatorio (milestone "Diapositiva de Inicio") si el documento —
+ * cualquiera que sea su forma de origen — todavía no tiene ninguno. Es lo
+ * que permite que un documento del formato ANTIGUO (forma 4) encadene TODAS
+ * las migraciones seguidas hasta llegar a tener su `intro`, en una sola
+ * llamada a esta función.
  */
 export function parseOrMigrateProjectDocument(raw: unknown): ProjectDocument {
   const asNew = ProjectDocumentSchema.safeParse(raw)
   if (asNew.success) {
-    return asNew.data
+    return ensureIntroNode(asNew.data)
   }
 
   const asPreContentBlocks = PreContentBlocksProjectDocumentSchema.safeParse(raw)
@@ -591,7 +691,7 @@ export function parseOrMigrateProjectDocument(raw: unknown): ProjectDocument {
         { cause: revalidated.error },
       )
     }
-    return revalidated.data
+    return ensureIntroNode(revalidated.data)
   }
 
   const asSingularImage = SingularImageProjectDocumentSchema.safeParse(raw)
@@ -605,7 +705,7 @@ export function parseOrMigrateProjectDocument(raw: unknown): ProjectDocument {
         { cause: revalidated.error },
       )
     }
-    return revalidated.data
+    return ensureIntroNode(revalidated.data)
   }
 
   const asLegacy = LegacyProjectDocumentSchema.safeParse(raw)
@@ -626,5 +726,5 @@ export function parseOrMigrateProjectDocument(raw: unknown): ProjectDocument {
     )
   }
 
-  return revalidated.data
+  return ensureIntroNode(revalidated.data)
 }

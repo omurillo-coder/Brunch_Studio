@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useAppServices } from '../app/AppServicesContext'
 import { useProject } from '../store'
+import { validateIntroForExport } from '../domain'
 import { resolveExportAssets } from './exportAssets'
 import { buildHtmlBundle } from './htmlBundle'
 import { buildScormManifest } from './scormManifest'
@@ -42,6 +43,14 @@ function incompleteAssetsMessage(failedCount: number): string {
     : `Paquete SCORM exportado, pero ${failedCount} imágenes o audios no se han podido incluir.`
 }
 
+/** Mismo criterio que `useHtmlExport`: une los textos de
+ *  `validateIntroForExport` (`src/domain/introValidation.ts`) en una sola
+ *  línea legible, reutilizando el campo `message`/`status: 'error'` que
+ *  `Topbar.tsx` ya pinta sin ningún cambio. */
+function incompleteIntroMessage(issues: string[]): string {
+  return `No se puede exportar: ${issues.join('; ')}.`
+}
+
 export function useScormExport(filePath: string): ScormExportState {
   const project = useProject()
   const { pickExportScormPath, assetRepository, scormPackageWriter } = useAppServices()
@@ -52,6 +61,15 @@ export function useScormExport(filePath: string): ScormExportState {
     setStatus('exporting')
     setMessage(null)
     try {
+      // Mismo criterio que `useHtmlExport`: bloquea ANTES de abrir el
+      // selector de guardado y de generar nada.
+      const introIssues = validateIntroForExport(project)
+      if (introIssues.length > 0) {
+        setStatus('error')
+        setMessage(incompleteIntroMessage(introIssues))
+        return
+      }
+
       const path = await pickExportScormPath(project.metadata.name)
       if (!path) {
         // Cancelado por el usuario: sin error visible y sin mensaje.

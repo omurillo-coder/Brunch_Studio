@@ -1,4 +1,4 @@
-import { createProject, createConnectedNode, updateNode } from './project'
+import { createProject, createConnectedNode, createNode, updateNode } from './project'
 import { connect } from './graph'
 import { addResponse, updateResponse } from './responses'
 import { updateTextBlockBody } from './content'
@@ -26,6 +26,19 @@ import type { ProjectDocument } from './schemas'
  * Añadir una plantilla nueva en el futuro no requiere tocar la UI (el
  * selector de `HomeScreen` recorre `PROJECT_TEMPLATES`): basta con escribir
  * la función `build` y añadir una entrada al array.
+ *
+ * Milestone "Diapositiva de Inicio": LAS TRES plantillas (incluida "En
+ * blanco", que hasta ahora era un simple alias de `createProject`) terminan
+ * su `build` con `seedIntroNode` (ver más abajo), que añade la portada
+ * obligatoria (nodo `intro`) y la conecta a lo que hasta entonces era el
+ * primer nodo/inicio de la plantilla. Es el ÚNICO cambio de las tres — el
+ * resto de nodos y conexiones de cada plantilla se construye exactamente
+ * igual que antes de este milestone, usando `project.graph.startNodeId`
+ * "de siempre" (una `SlideNode`) como ancla, y solo al final se antepone la
+ * portada. `createProject` en sí NO se toca (ver su propio comentario en
+ * `src/domain/project.ts`): sigue sin `intro`, deliberadamente, para no
+ * afectar a quien la usa como bloque de construcción de bajo nivel fuera de
+ * estas plantillas.
  */
 export interface ProjectTemplate {
   /** Identificador estable, usado como `value` del selector en la UI. */
@@ -93,12 +106,47 @@ function updateSlideTitleAndBody(
 }
 
 /**
- * "En blanco": el comportamiento actual exacto de `createProject`, sin
- * ningún paso adicional. Debe ser indistinguible (salvo ids/fechas) de lo
- * que ya existía antes de las plantillas.
+ * Añade la diapositiva de Inicio (nodo `intro`, obligatoria y única en todo
+ * proyecto, ver `IntroNodeSchema` en `src/domain/schemas.ts`) a un
+ * `ProjectDocument` ya construido, apuntándola al nodo que hasta ahora era
+ * el punto de partida (`project.graph.startNodeId`) y desplazando el inicio
+ * del proyecto para que sea la propia portada recién creada.
+ *
+ * Aplicado como ÚLTIMO paso de las tres plantillas: el resto de cada una se
+ * construye exactamente igual que antes de existir el nodo `intro`, y solo
+ * al final se antepone la portada — así el código de cada plantilla no
+ * necesita saber nada sobre `intro`, ni antes ni durante su construcción.
+ *
+ * `createNode(..., 'intro', ...)` ya deja `graph.startNodeId` apuntando al
+ * nodo nuevo (ver comentario de esa función en `src/domain/project.ts`),
+ * así que aquí solo hace falta cablear su `targetNodeId` hacia el antiguo
+ * inicio con un `connect` normal (el mismo `connect` genérico "sin
+ * responseId", generalizado para aceptar un `intro` como origen).
+ *
+ * Posición del nodo `intro`: a la izquierda del que era el inicio, con un
+ * offset fijo de 260px en X (mismo criterio, y mismo valor, que usa
+ * `src/domain/migration.ts` al sintetizar un `intro` para un documento
+ * antiguo) — no pretende ser una disposición final perfecta, el diseñador
+ * puede moverlo desde el lienzo.
+ */
+function seedIntroNode(project: ProjectDocument): ProjectDocument {
+  const previousStartId = project.graph.startNodeId
+  const previousStart = project.graph.nodes.find((node) => node.id === previousStartId)
+  const position = previousStart
+    ? { x: previousStart.position.x - 260, y: previousStart.position.y }
+    : { x: -260, y: 0 }
+
+  const withIntro = createNode(project, 'intro', position)
+  return connect(withIntro, withIntro.graph.startNodeId, previousStartId)
+}
+
+/**
+ * "En blanco": el comportamiento de `createProject`, más la diapositiva de
+ * Inicio obligatoria (ver `seedIntroNode`) apuntando a la única diapositiva
+ * que crea `createProject`.
  */
 function buildBlankTemplate(projectName: string): ProjectDocument {
-  return createProject(projectName)
+  return seedIntroNode(createProject(projectName))
 }
 
 /**
@@ -148,7 +196,7 @@ function buildSimpleDecisionTemplate(projectName: string): ProjectDocument {
     body: 'Has llegado a un final alternativo del escenario.',
   })
 
-  return project
+  return seedIntroNode(project)
 }
 
 /**
@@ -205,7 +253,7 @@ function buildBranchWithReunionTemplate(projectName: string): ProjectDocument {
     body: 'Has completado el recorrido de ejemplo.',
   })
 
-  return project
+  return seedIntroNode(project)
 }
 
 /**

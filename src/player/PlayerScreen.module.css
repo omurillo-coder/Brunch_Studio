@@ -272,3 +272,17 @@
 .muted {
   color: var(--bs-color-text-muted);
 }
+
+/* Contexto secundario de la portada (nodo `intro`): nombre de ciclo +
+   asignatura, por encima de `caseName` (`.title`, el elemento realmente
+   destacado de la tarjeta) — mismo tono apagado que `.exitMessage`/metadatos
+   secundarios del resto de la app, en mayúsculas y con tracking para leerse
+   como una etiqueta de contexto, no como contenido narrativo. */
+.introContext {
+  margin: 0;
+  font-size: var(--bs-font-size-sm);
+  font-weight: 600;
+  color: var(--bs-color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}

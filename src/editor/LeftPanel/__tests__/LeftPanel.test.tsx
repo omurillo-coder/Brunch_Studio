@@ -4,6 +4,7 @@ import { LeftPanel } from '../LeftPanel'
 import { useProjectStore } from '../../../store'
 import { resetProjectStore } from '../../../store/testHelpers'
 import { serializeRichBody } from '../../richText/richTextContent'
+import { CICLOS } from '../../../domain'
 
 beforeEach(() => {
   resetProjectStore()
@@ -28,9 +29,10 @@ describe('LeftPanel', () => {
     expect(useProjectStore.getState().selection.selectedNodeIds).toEqual([created.id])
   })
 
-  it('solo ofrece dos botones de creación: Diapositiva y Final', () => {
+  it('ofrece tres botones de creación: Inicio, Diapositiva y Final', () => {
     render(<LeftPanel />)
 
+    expect(screen.getByText('+ Inicio')).toBeInTheDocument()
     expect(screen.getByText('+ Diapositiva')).toBeInTheDocument()
     expect(screen.getByText('+ Final')).toBeInTheDocument()
     // El botón de "Decisión" desaparece: las respuestas se añaden desde el
@@ -51,11 +53,32 @@ describe('LeftPanel', () => {
     expect(useProjectStore.getState().selection.selectedNodeIds).toEqual([created.id])
   })
 
-  it('no ofrece ningún control para crear un nodo de Inicio (ya no es un tipo de nodo)', () => {
+  it('"+ Inicio" crea un nodo de tipo intro y lo selecciona cuando el proyecto todavía no tiene ninguno', () => {
     render(<LeftPanel />)
+    const before = useProjectStore.getState().project.graph.nodes.length
 
-    expect(screen.queryByText('+ Inicio')).not.toBeInTheDocument()
-    expect(screen.queryByText(/^\+\s*Inicio$/)).not.toBeInTheDocument()
+    const button = screen.getByText('+ Inicio').closest('button')
+    expect(button).not.toBeNull()
+    expect(button).not.toBeDisabled()
+
+    fireEvent.click(screen.getByText('+ Inicio'))
+
+    expect(useProjectStore.getState().project.graph.nodes.length).toBe(before + 1)
+    const created = lastNode()
+    expect(created.type).toBe('intro')
+    expect(useProjectStore.getState().selection.selectedNodeIds).toEqual([created.id])
+  })
+
+  it('"+ Inicio" se deshabilita en cuanto el proyecto ya tiene una diapositiva de Inicio', () => {
+    render(<LeftPanel />)
+    act(() => {
+      useProjectStore.getState().createNode('intro', { x: 0, y: 0 })
+    })
+
+    const button = screen.getByText('+ Inicio').closest('button')
+    expect(button).not.toBeNull()
+    expect(button).toBeDisabled()
+    expect(button).toHaveAttribute('title', 'Ya existe la diapositiva de Inicio')
   })
 
   it('la lista muestra etiquetas en español y ningún UUID visible', () => {
@@ -249,5 +272,58 @@ describe('LeftPanel — buscador del proyecto (fase 8)', () => {
 
     expect(useProjectStore.getState().selection.selectedNodeIds).toEqual([created.id])
     expect(useProjectStore.getState().ui.focusRequestNodeId).toBe(created.id)
+  })
+
+  it('filtra un nodo `intro` por su nombre de caso práctico (caseName)', () => {
+    render(<LeftPanel />)
+    act(() => {
+      useProjectStore.getState().createNode('intro', { x: 0, y: 0 })
+    })
+    const intro = lastNode()
+    act(() => {
+      useProjectStore.getState().updateNode(intro.id, { caseName: 'Simulación de urgencias' })
+      useProjectStore.getState().createNode('slide', { x: 0, y: 0 }, { title: 'Sin relación' })
+    })
+
+    fireEvent.change(searchInput(), { target: { value: 'urgencias' } })
+
+    // La lista no pinta el `caseName` directamente (eso es cosa de la
+    // tarjeta del lienzo, ver `adapter.ts`), pero el filtro debe conservar
+    // la fila del `intro` (identificada por su número visible) y descartar
+    // la diapositiva sin relación.
+    expect(screen.getByText(intro.number.toString())).toBeInTheDocument()
+    expect(screen.queryByText('Sin relación')).not.toBeInTheDocument()
+  })
+
+  it('filtra un nodo `intro` por el NOMBRE del ciclo/asignatura elegidos, no por su id', () => {
+    render(<LeftPanel />)
+    const ciclo = CICLOS[0]
+    if (!ciclo) throw new Error('El catálogo de ciclos está vacío')
+    const asignatura = ciclo.asignaturas[0]
+    if (!asignatura) throw new Error('El ciclo de prueba no tiene asignaturas')
+
+    act(() => {
+      useProjectStore.getState().createNode('intro', { x: 0, y: 0 })
+    })
+    const intro = lastNode()
+    act(() => {
+      useProjectStore.getState().updateNode(intro.id, {
+        cicloId: ciclo.id,
+        asignaturaId: asignatura.id,
+      })
+      useProjectStore.getState().createNode('slide', { x: 0, y: 0 }, { title: 'Sin relación' })
+    })
+
+    // Búsqueda por el NOMBRE del ciclo (nunca su id/slug interno).
+    fireEvent.change(searchInput(), { target: { value: ciclo.name.toLowerCase() } })
+    expect(screen.getByText(intro.number.toString())).toBeInTheDocument()
+    expect(screen.queryByText('Sin relación')).not.toBeInTheDocument()
+    // El id/slug interno del ciclo no debería aparecer nunca en pantalla.
+    expect(screen.queryByText(ciclo.id)).not.toBeInTheDocument()
+
+    // Búsqueda por el NOMBRE de la asignatura.
+    fireEvent.change(searchInput(), { target: { value: asignatura.name.toLowerCase() } })
+    expect(screen.getByText(intro.number.toString())).toBeInTheDocument()
+    expect(screen.queryByText('Sin relación')).not.toBeInTheDocument()
   })
 })

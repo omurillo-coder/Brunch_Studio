@@ -135,6 +135,19 @@ body {
   color: var(--bs-color-text);
 }
 
+/* Contexto secundario de la portada (nodo \`intro\`): ciclo + asignatura, por
+   encima de \`caseName\` (\`.title\`). Traducción literal de \`.introContext\` en
+   \`src/player/PlayerScreen.module.css\` — ver \`buildCard\`, rama \`'intro'\`, en
+   \`exportedPlayerScript.ts\`. */
+.introContext {
+  margin: 0;
+  font-size: var(--bs-font-size-sm);
+  font-weight: 600;
+  color: var(--bs-color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
 .body {
   margin: 0;
   font-size: var(--bs-font-size-md);

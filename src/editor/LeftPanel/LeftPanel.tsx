@@ -1,15 +1,22 @@
 import { useMemo, useState } from 'react'
 import { useProject, useProjectStore, useSelectedNodeIds, useViewportCenter } from '../../store'
+import { CICLOS } from '../../domain'
 import type { Node, NodePosition, NodeType } from '../../domain'
 import { NODE_TYPE_LABEL, START_NODE_LABEL } from '../Canvas/nodes/nodeTypes'
 import { extractPlainText, parseRichBody } from '../richText/richTextContent'
 import styles from './LeftPanel.module.css'
 
 /**
- * Tipos que se pueden crear desde este panel: los dos que existen en el
- * modelo. Ya no hay un botón de "Decisión" separado — una Diapositiva nace
+ * Tipos "normales" que se pueden crear desde este panel, sin límite de
+ * cantidad. Ya no hay un botón de "Decisión" separado — una Diapositiva nace
  * en modo "de continuar" y se convierte en decisión al añadirle respuestas
  * desde el Inspector.
+ *
+ * El botón "+ Inicio" (nodo `intro`, milestone "Diapositiva de Inicio") NO
+ * vive en esta lista: a diferencia de `slide`/`final`, solo puede existir
+ * COMO MUCHO UNO por proyecto (ver `IntroNodeSchema`), así que se pinta
+ * aparte con su propia lógica de deshabilitado — ver `handleCreate`/JSX más
+ * abajo.
  */
 const CREATABLE_TYPES: NodeType[] = ['slide', 'final']
 
@@ -52,10 +59,32 @@ function nextCascadePosition(existingNodeCount: number): NodePosition {
  * varios bloques de texto intercalados con imagen/audio (`SlideNode.content`)
  * — se comprueba cada uno de los bloques `type: 'text'`, en cualquier orden,
  * no solo el primero.
+ *
+ * Milestone "Diapositiva de Inicio": un nodo `intro` no tiene título de la
+ * misma forma "narrativa" que el resto (su `title` es solo la "Referencia"
+ * interna, igual que cualquier otro nodo, ya cubierta arriba), así que
+ * además se comprueba su `caseName` y los NOMBRES de ciclo/asignatura
+ * elegidos — nunca sus ids (`cicloId`/`asignaturaId` son slugs/códigos
+ * internos, no texto que el usuario reconocería al buscar) — resueltos
+ * contra el catálogo `CICLOS`.
  */
 function nodeMatchesQuery(node: Node, query: string): boolean {
   if (node.title.toLowerCase().includes(query)) {
     return true
+  }
+  if (node.type === 'intro') {
+    if (node.caseName.toLowerCase().includes(query)) {
+      return true
+    }
+    const ciclo = node.cicloId ? CICLOS.find((candidate) => candidate.id === node.cicloId) : undefined
+    if (ciclo && ciclo.name.toLowerCase().includes(query)) {
+      return true
+    }
+    const asignatura =
+      ciclo && node.asignaturaId
+        ? ciclo.asignaturas.find((candidate) => candidate.id === node.asignaturaId)
+        : undefined
+    return asignatura ? asignatura.name.toLowerCase().includes(query) : false
   }
   if (node.type === 'final') {
     if (extractPlainText(parseRichBody(node.body)).toLowerCase().includes(query)) {
@@ -89,6 +118,16 @@ export function LeftPanel() {
   const [searchQuery, setSearchQuery] = useState('')
   const normalizedQuery = searchQuery.trim().toLowerCase()
 
+  // Botón "+ Inicio" (Tarea 1, milestone "Diapositiva de Inicio"): existe
+  // siempre por consistencia visual con los otros dos botones y como red de
+  // seguridad para un documento que, por lo que sea, no tuviera todavía su
+  // portada (`createProject` de bajo nivel no la siembra; las plantillas de
+  // `HomeScreen` sí, así que en la práctica este botón casi siempre estará
+  // deshabilitado) — pero se deshabilita en cuanto el proyecto YA tiene un
+  // nodo `intro`, que el propio dominio (`createNode`) rechazaría crear dos
+  // veces de todos modos.
+  const hasIntro = project.graph.nodes.some((node) => node.type === 'intro')
+
   // Filtra la lista ya existente; no toca `focusNode`/selección, así que
   // hacer clic en un resultado filtrado centra el lienzo exactamente igual
   // que ya hacía antes de este buscador.
@@ -119,6 +158,15 @@ export function LeftPanel() {
   return (
     <aside className={styles.panel}>
       <div className={styles.addSection}>
+        <button
+          type="button"
+          className={styles.addButton}
+          onClick={() => handleCreate('intro')}
+          disabled={hasIntro}
+          title={hasIntro ? 'Ya existe la diapositiva de Inicio' : undefined}
+        >
+          + {NODE_TYPE_LABEL.intro}
+        </button>
         {CREATABLE_TYPES.map((type) => (
           <button
             key={type}
@@ -163,9 +211,14 @@ export function LeftPanel() {
               <span className={styles.nodeType}>{NODE_TYPE_LABEL[node.type]}</span>
               {/* Marca discreta del punto de partida del recorrido. Mismo
                   criterio (y misma etiqueta) que en la tarjeta del lienzo:
-                  el inicio ya no es un nodo aparte, así que hay que poder
-                  distinguirlo de un vistazo entre las demás diapositivas. */}
-              {node.id === project.graph.startNodeId && (
+                  el inicio ya no es siempre un nodo aparte (documentos sin
+                  `intro` todavía), así que hay que poder distinguirlo de un
+                  vistazo entre las demás diapositivas. Se omite para un nodo
+                  `intro` (siempre es `startNodeId` cuando existe, ver
+                  `IntroNodeSchema`): su propia etiqueta de tipo ya dice
+                  "Inicio", repetirlo sería redundante — mismo criterio que
+                  `Header` en `nodeTypes.tsx`. */}
+              {node.id === project.graph.startNodeId && node.type !== 'intro' && (
                 <span className={styles.nodeStartMark} title="Diapositiva de inicio">
                   {START_NODE_LABEL}
                 </span>

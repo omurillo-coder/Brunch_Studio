@@ -1,6 +1,13 @@
 import type { Edge as XyEdge, Node as XyNode } from '@xyflow/react'
-import { deriveEdges, RESPONSE_LETTERS } from '../../domain'
-import type { DecisionResponse, Edge as DomainEdge, Node as DomainNode, NodeType, ProjectDocument } from '../../domain'
+import { CICLOS, deriveEdges, RESPONSE_LETTERS } from '../../domain'
+import type {
+  DecisionResponse,
+  Edge as DomainEdge,
+  IntroNode,
+  Node as DomainNode,
+  NodeType,
+  ProjectDocument,
+} from '../../domain'
 import { extractPlainText, parseRichBody } from '../richText/richTextContent'
 import { IN_HANDLE_ID, OUT_HANDLE_ID, parseResponseHandleId, responseHandleId } from './handles'
 import { BRUNCH_EDGE_TYPE } from './edges/edgeTypes'
@@ -68,11 +75,15 @@ interface BaseCanvasNodeData {
 /** Datos que lleva cada nodo de `@xyflow/react` en su campo `data`. */
 export interface CanvasNodeData extends BaseCanvasNodeData, Record<string, unknown> {
   /**
-   * `true` cuando esta diapositiva no tiene NINGUNA arista saliente en
-   * `deriveEdges(project)` — ni el destino de "Continuar", ni el de
-   * ninguna respuesta. Siempre `false` para nodos `final` (no tienen
-   * salida por diseño; que no la tengan no es un aviso, es lo esperado).
-   * Alimenta el borde de aviso del nodo (ver `NodeCard.module.css`).
+   * `true` cuando este nodo no tiene NINGUNA arista saliente en
+   * `deriveEdges(project)` — ni el destino de "Continuar" (o el único
+   * destino de un `intro`), ni el de ninguna respuesta. Siempre `false`
+   * para nodos `final` (no tienen salida por diseño; que no la tengan no es
+   * un aviso, es lo esperado). Se calcula igual para `slide` e `intro`
+   * (milestone "Diapositiva de Inicio"): un `intro` sin `targetNodeId` deja
+   * al alumno sin poder avanzar tras la portada, exactamente el mismo
+   * problema que una diapositiva "de continuar" sin destino — mismo aviso
+   * visual, ver `nodeIdsWithOutgoingEdge`/`NoOutgoingBadge`.
    */
   hasNoOutgoing: boolean
   /**
@@ -178,8 +189,13 @@ function bodyPreviewFor(source: string): string | undefined {
  *   bloques de imagen/audio no aportan texto), unidos por un espacio. Con un
  *   único bloque de texto (el caso más común) el resultado es idéntico al
  *   `body` único de antes.
+ *
+ * Recibe únicamente `SlideNode | FinalNode`: un nodo `intro` no tiene ni
+ * `content` ni `body` (ver `IntroNodeSchema`) y usa su propio resumen,
+ * `introSummaryFor` más abajo — `toNodeData` decide cuál de las dos llamar
+ * antes de llegar aquí, así que esta función nunca necesita saber de `intro`.
  */
-function textPreviewSourceFor(node: DomainNode): string {
+function textPreviewSourceFor(node: Exclude<DomainNode, IntroNode>): string {
   if (node.type === 'final') {
     return extractPlainText(parseRichBody(node.body))
   }
@@ -190,6 +206,32 @@ function textPreviewSourceFor(node: DomainNode): string {
     .join(' ')
 }
 
+/**
+ * Resumen legible de la diapositiva de Inicio (tarea 3, milestone
+ * "Diapositiva de Inicio"), pintado en su tarjeta del lienzo a través del
+ * mismo campo `bodyPreview` que ya usan `slide`/`final` (ver `BodyPreview`
+ * en `nodeTypes.tsx`, agnóstica del tipo de nodo).
+ *
+ * `cicloId`/`asignaturaId` son ids internos (slugs/códigos), NUNCA texto
+ * legible por sí mismos — se resuelven a sus NOMBRES buscando en `CICLOS`
+ * (`src/domain/catalog.ts`). Si la portada está incompleta (falta ciclo,
+ * asignatura, o el nombre del caso está vacío) se devuelve un aviso sutil en
+ * vez de un resumen a medias con huecos — nunca un id crudo visible.
+ */
+function introSummaryFor(node: IntroNode): string {
+  const ciclo = node.cicloId ? CICLOS.find((candidate) => candidate.id === node.cicloId) : undefined
+  const asignatura =
+    ciclo && node.asignaturaId
+      ? ciclo.asignaturas.find((candidate) => candidate.id === node.asignaturaId)
+      : undefined
+  const caseName = node.caseName.trim()
+
+  if (ciclo && asignatura && caseName) {
+    return `${ciclo.name} · ${asignatura.name} — ${caseName}`
+  }
+  return '(pendiente de completar)'
+}
+
 function toNodeData(node: DomainNode, startNodeId: string): BaseCanvasNodeData {
   const trimmedNote = node.internalNote?.trim()
   const base: BaseCanvasNodeData = {
@@ -198,7 +240,8 @@ function toNodeData(node: DomainNode, startNodeId: string): BaseCanvasNodeData {
     title: node.title,
     isStart: node.id === startNodeId,
     internalNote: trimmedNote ? trimmedNote : undefined,
-    bodyPreview: bodyPreviewFor(textPreviewSourceFor(node)),
+    bodyPreview:
+      node.type === 'intro' ? introSummaryFor(node) : bodyPreviewFor(textPreviewSourceFor(node)),
   }
   if (node.type === 'slide') {
     base.responses = sortByLetter(node.responses).map((response) => ({
@@ -241,7 +284,8 @@ export function toFlowNodes(
       selected: isSelected,
       data: {
         ...toNodeData(node, project.graph.startNodeId),
-        hasNoOutgoing: node.type === 'slide' && !nodesWithOutgoing.has(node.id),
+        hasNoOutgoing:
+          (node.type === 'slide' || node.type === 'intro') && !nodesWithOutgoing.has(node.id),
         isHighlighted,
         isDimmed: hasSelection && !isSelected && !isHighlighted,
       },
