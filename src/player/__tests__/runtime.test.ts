@@ -555,6 +555,90 @@ describe('runtime del Player: enrutado condicional de una diapositiva "de contin
     expect(getView(project, state).kind).toBe('dead-end')
     expect(advance(project, state)).toEqual(state)
   })
+
+  /**
+   * Reproducción EXACTA del reporte de bug: "si pongo una diapositiva con el
+   * enrutado condicional [...] si en la pregunta anterior consigues ese +1 se
+   * ve la diapositiva, pero cuando no lo tienes, no pasa a la siguiente,
+   * aparece 'Esta diapositiva no tiene una continuación configurada...'".
+   *
+   * A diferencia de `buildConditionalContinueGraph` (que fuerza la condición
+   * forzando `initialValue`), este grafo reproduce el recorrido COMPLETO tal
+   * como lo describe el usuario: una diapositiva de DECISIÓN previa con dos
+   * respuestas —una con un efecto `increment +1` sobre una variable numérica,
+   * otra sin ningún efecto— que alimenta la diapositiva "de continuar" con
+   * `condition` (`>=` 1) + `targetNodeId` (rama verdadera) +
+   * `elseTargetNodeId` (rama falsa) EXPLÍCITAMENTE configurados ambos.
+   *
+   * Diagnóstico (Tarea 1): con `elseTargetNodeId` configurado de verdad
+   * (como aquí), AMBAS ramas navegan correctamente — no hay ningún dead-end
+   * en la rama falsa. El motor (dominio `resolveSlideTarget`/
+   * `evaluateCondition` + `Player.runtime`) funciona como está documentado.
+   * El dead-end que describe el reporte solo se reproduce si
+   * `elseTargetNodeId` NO se llegó a configurar (ver el test de arriba, "sin
+   * elseTargetNodeId..."), que es el mismo dead-end esperado de cualquier
+   * diapositiva sin destino — no un bug de motor. La causa real es de
+   * claridad de UI (ver aviso amarillo añadido en
+   * `ConditionalRoutingSection`, `src/editor/Inspector/Inspector.tsx`).
+   */
+  it('recorrido completo del reporte de bug: decisión (+1 en una respuesta) -> continuar con condición -> AMBAS ramas navegan (no dead-end)', () => {
+    let project = createProject('P')
+    project = addVariable(project, { name: 'puntos', type: 'number', initialValue: 0 })
+    const counter = project.variables[0] as VariableDef
+
+    // decisionId = diapositiva de inicio (la "pregunta anterior" del reporte).
+    const decisionId = project.graph.startNodeId
+    project = createNode(project, 'slide', { x: 200, y: 0 }) // routerId ("de continuar")
+    project = createNode(project, 'final', { x: 400, y: -50 }) // rama verdadera
+    project = createNode(project, 'final', { x: 400, y: 50 }) // rama falsa ("si no")
+
+    const routerId = idsOf(project, 'slide').find((id) => id !== decisionId) as string
+    const [finalTrueId, finalFalseId] = idsOf(project, 'final') as [string, string]
+
+    project = addResponse(project, decisionId) // A: "consigues el +1"
+    project = addResponse(project, decisionId) // B: sin efecto
+    const responseA = responsesOf(project, decisionId).find((r) => r.letter === 'A')
+    const responseB = responsesOf(project, decisionId).find((r) => r.letter === 'B')
+    if (!responseA || !responseB) throw new Error('setup inválido')
+
+    project = connect(project, decisionId, routerId, responseA.id)
+    project = connect(project, decisionId, routerId, responseB.id)
+    project = updateResponse(project, decisionId, responseA.id, {
+      effects: [{ variableId: counter.id, operation: 'increment', value: 1 }],
+    })
+
+    // Router: targetNodeId (verdadera) vía connect, elseTargetNodeId (falsa)
+    // vía updateNode — EXACTAMENTE como hace el Inspector real (Tarea 1:
+    // comprobar que ambos caminos de persistencia coexisten sin pisarse).
+    project = connect(project, routerId, finalTrueId)
+    project = updateNode(project, routerId, {
+      condition: { variableId: counter.id, operator: '>=', value: 1 },
+      elseTargetNodeId: finalFalseId,
+    })
+
+    // --- Rama VERDADERA: elige A (consigue el +1) ---
+    let stateTrue = getInitialState(project)
+    expect(getView(project, stateTrue).kind).toBe('decision')
+    stateTrue = choose(project, stateTrue, responseA.id)
+    expect(stateTrue.currentNodeId).toBe(routerId)
+    expect(stateTrue.variables[counter.id]).toBe(1)
+    expect(getView(project, stateTrue).kind).toBe('continue') // NO dead-end
+    stateTrue = advance(project, stateTrue)
+    expect(stateTrue.currentNodeId).toBe(finalTrueId)
+
+    // --- Rama FALSA: elige B (sin efecto, counter sigue en 0) ---
+    let stateFalse = getInitialState(project)
+    stateFalse = choose(project, stateFalse, responseB.id)
+    expect(stateFalse.currentNodeId).toBe(routerId)
+    expect(stateFalse.variables[counter.id]).toBe(0)
+    const viewFalse = getView(project, stateFalse)
+    // Esta es la aserción central del reporte: con elseTargetNodeId
+    // configurado, la rama falsa NO debe ser un dead-end.
+    expect(viewFalse.kind).toBe('continue')
+    stateFalse = advance(project, stateFalse)
+    expect(stateFalse.currentNodeId).toBe(finalFalseId)
+    expect(stateFalse.currentNodeId).not.toBeNull()
+  })
 })
 
 // ---------------------------------------------------------------------------

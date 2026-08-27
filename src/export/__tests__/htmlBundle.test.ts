@@ -898,6 +898,137 @@ describe('buildHtmlBundle — comportamiento del HTML generado: variables/condic
 })
 
 // ---------------------------------------------------------------------------
+// Reproducción exacta del reporte de bug (Tarea 1, ver también
+// `runtime.test.ts`): variable NUMÉRICA con efecto `increment +1` en una
+// respuesta de decisión, seguida de una diapositiva "de continuar" con
+// `condition` (`>=` 1) y AMBOS `targetNodeId`/`elseTargetNodeId`
+// configurados explícitamente. Ejecutado contra el bundle HTML exportado de
+// verdad (jsdom), no contra `runtime.ts` directamente, para comprobar que
+// `exportedPlayerScript.ts` traduce el mecanismo con el mismo resultado.
+// ---------------------------------------------------------------------------
+
+const BUG_DECISION_ID = 'bbbbbbbb-0000-4000-8000-000000000001'
+const BUG_ROUTER_ID = 'bbbbbbbb-0000-4000-8000-000000000002'
+const BUG_FINAL_TRUE_ID = 'bbbbbbbb-0000-4000-8000-000000000003'
+const BUG_FINAL_FALSE_ID = 'bbbbbbbb-0000-4000-8000-000000000004'
+const BUG_RESPONSE_GET_POINT_ID = 'bbbbbbbb-0000-4000-8000-000000000005'
+const BUG_RESPONSE_SKIP_ID = 'bbbbbbbb-0000-4000-8000-000000000006'
+const BUG_COUNTER_VAR_ID = 'bbbbbbbb-0000-4000-8000-000000000007'
+
+function bugReportProject(): ProjectDocument {
+  const counter: VariableDef = {
+    id: BUG_COUNTER_VAR_ID,
+    name: 'puntos',
+    type: 'number',
+    initialValue: 0,
+  }
+
+  const decision: SlideNode = {
+    id: BUG_DECISION_ID,
+    number: 1,
+    type: 'slide',
+    position: { x: 0, y: 0 },
+    title: 'Pregunta anterior',
+    targetNodeId: undefined,
+    continueLabel: undefined,
+    responses: [
+      makeResponse({
+        id: BUG_RESPONSE_GET_POINT_ID,
+        letter: 'A',
+        text: 'Consigue el +1',
+        targetNodeId: BUG_ROUTER_ID,
+        effects: [{ variableId: BUG_COUNTER_VAR_ID, operation: 'increment', value: 1 }],
+      }),
+      makeResponse({
+        id: BUG_RESPONSE_SKIP_ID,
+        letter: 'B',
+        text: 'No lo consigue',
+        targetNodeId: BUG_ROUTER_ID,
+      }),
+    ],
+    content: [textBlock(richBody('¿Consigues el punto?'))],
+  }
+
+  const router: SlideNode = {
+    id: BUG_ROUTER_ID,
+    number: 2,
+    type: 'slide',
+    position: { x: 300, y: 0 },
+    title: 'Enrutado condicional',
+    targetNodeId: BUG_FINAL_TRUE_ID,
+    elseTargetNodeId: BUG_FINAL_FALSE_ID,
+    condition: { variableId: BUG_COUNTER_VAR_ID, operator: '>=', value: 1 },
+    continueLabel: 'Ver resultado',
+    responses: [],
+    content: [textBlock(richBody('Calculando destino…'))],
+  }
+
+  const finalTrue: FinalNode = {
+    id: BUG_FINAL_TRUE_ID,
+    number: 3,
+    type: 'final',
+    position: { x: 600, y: -50 },
+    title: 'Final con el punto',
+    body: richBody('Llegaste con el punto.'),
+  }
+
+  const finalFalse: FinalNode = {
+    id: BUG_FINAL_FALSE_ID,
+    number: 4,
+    type: 'final',
+    position: { x: 600, y: 50 },
+    title: 'Final sin el punto',
+    body: richBody('Llegaste sin el punto.'),
+  }
+
+  return {
+    schemaVersion: 1,
+    metadata: {
+      id: '99999999-9999-4999-8999-999999999994',
+      name: 'Reporte de bug: enrutado condicional',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    },
+    settings: {},
+    variables: [counter],
+    graph: { nodes: [decision, router, finalTrue, finalFalse], startNodeId: BUG_DECISION_ID },
+    editor: { viewport: { x: 0, y: 0, zoom: 1 } },
+  }
+}
+
+describe('buildHtmlBundle — reproducción del reporte de bug: ambas ramas del enrutado condicional navegan', () => {
+  beforeEach(() => {
+    document.body.innerHTML = ''
+  })
+
+  it('rama VERDADERA (elige la respuesta con el +1): navega al Final correspondiente, sin dead-end', () => {
+    runExportedBundle(buildHtmlBundle(bugReportProject(), {}))
+    clickButton('Consigue el +1')
+    clickButton('Ver resultado')
+
+    const card = currentCard()
+    expect(card.textContent).not.toContain(
+      'Esta parte de la experiencia no tiene una continuación configurada.',
+    )
+    expect(card.querySelector('.body')?.textContent).toContain('Llegaste con el punto.')
+  })
+
+  it('rama FALSA (elige la respuesta SIN el +1): navega a elseTargetNodeId, NO aparece el aviso de dead-end', () => {
+    runExportedBundle(buildHtmlBundle(bugReportProject(), {}))
+    clickButton('No lo consigue')
+    clickButton('Ver resultado')
+
+    const card = currentCard()
+    // Aserción central del reporte de bug: con elseTargetNodeId configurado,
+    // la rama falsa NUNCA debe mostrar el aviso de "sin continuación".
+    expect(card.textContent).not.toContain(
+      'Esta parte de la experiencia no tiene una continuación configurada.',
+    )
+    expect(card.querySelector('.body')?.textContent).toContain('Llegaste sin el punto.')
+  })
+})
+
+// ---------------------------------------------------------------------------
 // Diapositiva de Inicio (nodo `intro`, milestone "Diapositiva de Inicio",
 // fase 3)
 // ---------------------------------------------------------------------------

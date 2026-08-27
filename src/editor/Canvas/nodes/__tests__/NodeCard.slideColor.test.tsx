@@ -23,10 +23,11 @@ const cardClass = styles.card as string
 const cardSlideYellowClass = styles.cardSlideYellow as string
 const cardSlidePurpleClass = styles.cardSlidePurple as string
 
-/** Las seis clases modificadoras de color, para comprobar que ninguna se
- *  cuela donde no debe (nodo sin color, `final`, `intro`) sin depender de
- *  ningún supuesto sobre el formato del nombre ofuscado que genera el
- *  plugin de CSS modules — se comparan una a una contra la lista real. */
+/** Las siete clases modificadoras de color (Tarea 3: séptimo color "red"),
+ *  para comprobar que ninguna se cuela donde no debe (nodo sin color,
+ *  `final`, `intro`) sin depender de ningún supuesto sobre el formato del
+ *  nombre ofuscado que genera el plugin de CSS modules — se comparan una a
+ *  una contra la lista real. */
 const ALL_SLIDE_COLOR_CLASSES = [
   styles.cardSlideYellow,
   styles.cardSlideOrange,
@@ -34,6 +35,7 @@ const ALL_SLIDE_COLOR_CLASSES = [
   styles.cardSlidePurple,
   styles.cardSlideCyan,
   styles.cardSlideGray,
+  styles.cardSlideRed,
 ] as string[]
 
 function hasAnySlideColorClass(element: Element | null): boolean {
@@ -86,6 +88,21 @@ describe('NodeCard — fondo de color de una diapositiva `slide`', () => {
     card = title.closest(`.${CSS.escape(cardClass)}`)
     expect(card?.classList.contains(cardSlidePurpleClass)).toBe(true)
     expect(card?.classList.contains(cardSlideYellowClass)).toBe(false)
+  })
+
+  it('aplica la clase del séptimo color ("red", Tarea 3) igual que el resto de la paleta', async () => {
+    useProjectStore.getState().createNode('slide', { x: 100, y: 0 }, { title: 'Roja' })
+    const id = useProjectStore
+      .getState()
+      .project.graph.nodes.find((n) => n.type === 'slide' && n.title === 'Roja')?.id
+    if (!id) throw new Error('setup inválido')
+    useProjectStore.getState().updateNode(id, { color: 'red' })
+
+    render(<Canvas />)
+
+    const title = await screen.findByText('Roja')
+    const card = title.closest(`.${CSS.escape(cardClass)}`)
+    expect(card?.classList.contains(styles.cardSlideRed as string)).toBe(true)
   })
 
   it('`final`/`intro` nunca llevan ninguna clase de color de diapositiva, aunque exista una `slide` coloreada', async () => {

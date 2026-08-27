@@ -65,6 +65,7 @@ const SLIDE_COLOR_CARD_CLASS: Record<SlideColor, string | undefined> = {
   purple: styles.cardSlidePurple,
   cyan: styles.cardSlideCyan,
   gray: styles.cardSlideGray,
+  red: styles.cardSlideRed,
 }
 
 /** Combina las clases modificadoras de `.card` según el resaltado calculado

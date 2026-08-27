@@ -501,6 +501,16 @@ export function Canvas() {
         onBeforeDelete={handleBeforeDelete}
         onNodesDelete={handleNodesDelete}
         deleteKeyCode={['Backspace', 'Delete']}
+        // Por defecto, `@xyflow/react` usa Meta/Ctrl (según plataforma) para
+        // ir añadiendo nodos a la selección con clic — pero Mayús+arrastrar
+        // ya es, por defecto también, el gesto para la caja de selección
+        // (`selectionKeyCode`, sin tocar). Se fija Mayús aquí TAMBIÉN para
+        // el clic individual: ambos gestos (clic y arrastre) conviven sin
+        // conflicto porque se distinguen por dónde se origina el gesto (un
+        // nodo vs. el lienzo vacío), no por qué tecla se usa — y así el
+        // usuario solo necesita recordar una tecla para "seleccionar varias
+        // diapositivas", sea con clic o con arrastre.
+        multiSelectionKeyCode="Shift"
         minZoom={0.1}
         maxZoom={2}
       >

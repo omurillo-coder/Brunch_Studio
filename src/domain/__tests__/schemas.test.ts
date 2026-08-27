@@ -270,18 +270,18 @@ describe('SlideColorSchema / SlideNodeSchema.color (paleta cerrada de color)', (
     content: [],
   }
 
-  it('SLIDE_COLORS tiene exactamente los seis nombres de la paleta', () => {
-    expect(SLIDE_COLORS).toEqual(['yellow', 'orange', 'pink', 'purple', 'cyan', 'gray'])
+  it('SLIDE_COLORS tiene exactamente los siete nombres de la paleta (Tarea 3: séptimo color "red")', () => {
+    expect(SLIDE_COLORS).toEqual(['yellow', 'orange', 'pink', 'purple', 'cyan', 'gray', 'red'])
   })
 
-  it('SlideColorSchema acepta cada uno de los seis nombres de SLIDE_COLORS', () => {
+  it('SlideColorSchema acepta cada uno de los siete nombres de SLIDE_COLORS', () => {
     for (const color of SLIDE_COLORS) {
       expect(SlideColorSchema.safeParse(color).success).toBe(true)
     }
   })
 
   it('SlideColorSchema rechaza un nombre fuera de la paleta', () => {
-    expect(SlideColorSchema.safeParse('red').success).toBe(false)
+    expect(SlideColorSchema.safeParse('turquoise').success).toBe(false)
     expect(SlideColorSchema.safeParse('').success).toBe(false)
   })
 

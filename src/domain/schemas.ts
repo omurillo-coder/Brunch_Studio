@@ -380,10 +380,15 @@ export const IntroNodeSchema = z.object({
  * `--bs-color-slide-<nombre>-bg` con su propia variante de modo oscuro, mismo
  * patrón que `--bs-color-final-bg`/`--bs-color-intro-bg` (ver `tokens.css`
  * para los valores hexadecimales exactos y el contraste de texto calculado
- * en cada uno). Seis colores sobrios elegidos para ser bien diferenciables
- * entre sí y respecto al azul de `final`/verde de `intro`.
+ * en cada uno). Siete colores vivos (Tarea 3: paleta más saturada que la
+ * pastel original, más el séptimo `red`) elegidos para ser bien
+ * diferenciables entre sí y respecto al azul de `final`/verde de `intro`.
+ * `red` es deliberadamente un tono distinto (coral/ladrillo, tirando a
+ * naranja-rojizo) del `--bs-color-danger` ya usado para acciones
+ * destructivas — ver comentario de `--bs-color-slide-red-bg` en
+ * `tokens.css` para el detalle de esa distinción.
  */
-export const SLIDE_COLORS = ['yellow', 'orange', 'pink', 'purple', 'cyan', 'gray'] as const
+export const SLIDE_COLORS = ['yellow', 'orange', 'pink', 'purple', 'cyan', 'gray', 'red'] as const
 export const SlideColorSchema = z.enum(SLIDE_COLORS)
 
 /**

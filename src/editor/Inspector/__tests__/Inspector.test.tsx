@@ -1430,12 +1430,12 @@ describe('Inspector — enrutado condicional de una diapositiva "de continuar" (
     })
     render(<Inspector filePath={TEST_FILE_PATH} />)
 
-    expect(screen.getByText('Enrutado condicional')).toBeInTheDocument()
+    expect(screen.getByText('Condición de aparición')).toBeInTheDocument()
     expect(
       screen.getByText(/Todavía no hay variables en el proyecto/),
     ).toBeInTheDocument()
     expect(
-      screen.queryByRole('button', { name: '+ Activar enrutado condicional' }),
+      screen.queryByRole('button', { name: '+ Activar condición de aparición' }),
     ).not.toBeInTheDocument()
   })
 
@@ -1450,7 +1450,7 @@ describe('Inspector — enrutado condicional de una diapositiva "de continuar" (
 
     render(<Inspector filePath={TEST_FILE_PATH} />)
 
-    fireEvent.click(screen.getByRole('button', { name: '+ Activar enrutado condicional' }))
+    fireEvent.click(screen.getByRole('button', { name: '+ Activar condición de aparición' }))
 
     expect(slideNode(startNodeId()).condition).toEqual({
       variableId: expect.any(String),
@@ -1463,13 +1463,45 @@ describe('Inspector — enrutado condicional de una diapositiva "de continuar" (
     fireEvent.change(elseSelect, { target: { value: finalId } })
     expect(slideNode(startNodeId()).elseTargetNodeId).toBe(finalId)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Desactivar enrutado condicional' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Desactivar condición de aparición' }))
 
     const node = slideNode(startNodeId())
     expect(node.condition).toBeUndefined()
     expect(node.elseTargetNodeId).toBeUndefined()
     // Vuelve al estado "sin activar".
-    expect(screen.getByRole('button', { name: '+ Activar enrutado condicional' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '+ Activar condición de aparición' })).toBeInTheDocument()
+  })
+
+  it('sin "Destino si no" configurado muestra el aviso; configurarlo lo hace desaparecer (Tarea 1: causa real del reporte de bug)', () => {
+    act(() => {
+      useProjectStore.getState().addVariable({ name: 'Puntos', type: 'number', initialValue: 0 })
+      useProjectStore.getState().createNode('final', { x: 100, y: 0 }, { title: 'Final si no' })
+      useProjectStore.getState().selectNode(startNodeId())
+    })
+    const finalId = useProjectStore.getState().project.graph.nodes.find((n) => n.type === 'final')?.id
+    if (!finalId) throw new Error('setup inválido')
+
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    // Antes de activar la condición, el aviso no debe aparecer (todavía no
+    // hay ninguna rama "si no" que pueda quedar sin configurar).
+    expect(screen.queryByText(/Sin destino "si no" configurado/)).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '+ Activar condición de aparición' }))
+
+    // Justo tras activar, elseTargetNodeId todavía no está configurado: el
+    // aviso debe aparecer.
+    expect(screen.getByText(/Sin destino "si no" configurado/)).toBeInTheDocument()
+
+    const elseSelect = screen.getByLabelText('Destino "si no"') as HTMLSelectElement
+    fireEvent.change(elseSelect, { target: { value: finalId } })
+
+    // Configurado el destino "si no", el aviso desaparece.
+    expect(screen.queryByText(/Sin destino "si no" configurado/)).not.toBeInTheDocument()
+
+    // Y si se vuelve a quitar (selecciona "— Sin destino —"), reaparece.
+    fireEvent.change(elseSelect, { target: { value: '__none__' } })
+    expect(screen.getByText(/Sin destino "si no" configurado/)).toBeInTheDocument()
   })
 
   it('el enrutado condicional no aparece cuando la diapositiva tiene respuestas (modo decisión)', () => {
@@ -1482,7 +1514,7 @@ describe('Inspector — enrutado condicional de una diapositiva "de continuar" (
     })
     render(<Inspector filePath={TEST_FILE_PATH} />)
 
-    expect(screen.queryByText('Enrutado condicional')).not.toBeInTheDocument()
+    expect(screen.queryByText('Condición de aparición')).not.toBeInTheDocument()
   })
 })
 
@@ -1772,6 +1804,7 @@ describe('Inspector — color de una diapositiva (paleta cerrada)', () => {
     expect(screen.getByLabelText('Morado')).toBeInTheDocument()
     expect(screen.getByLabelText('Cian')).toBeInTheDocument()
     expect(screen.getByLabelText('Gris')).toBeInTheDocument()
+    expect(screen.getByLabelText('Rojo')).toBeInTheDocument()
   })
 
   it('hacer clic en una pastilla llama a updateNode con ese color; "Sin color" llama con null', () => {
@@ -1838,5 +1871,65 @@ describe('Inspector — color de una diapositiva (paleta cerrada)', () => {
 
     expect(screen.queryByText('Color')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Sin color')).not.toBeInTheDocument()
+  })
+})
+
+describe('Inspector — reorganización del Inspector (Tarea 4): Color arriba del todo, agrupado con Referencia/Contenido/Nota interna', () => {
+  it('para una diapositiva `slide`, "Color" aparece ANTES que "Referencia" en el DOM', () => {
+    const id = startNodeId()
+    act(() => {
+      useProjectStore.getState().selectNode(id)
+    })
+    const { container } = render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    const colorLabel = screen.getByText('Color')
+    const referenceLabel = screen.getByText('Referencia')
+    // DOCUMENT_POSITION_FOLLOWING (4): colorLabel precede a referenceLabel.
+    // eslint-disable-next-line no-bitwise
+    expect(colorLabel.compareDocumentPosition(referenceLabel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(container).toBeTruthy()
+  })
+
+  it('Color + Referencia + Contenido + Nota interna comparten el mismo contenedor agrupado (.metaGroup)', () => {
+    const id = startNodeId()
+    act(() => {
+      useProjectStore.getState().selectNode(id)
+    })
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    const metaGroup = screen.getByText('Color').closest(`.${CSS.escape(styles.metaGroup as string)}`)
+    expect(metaGroup).not.toBeNull()
+    expect(within(metaGroup as HTMLElement).getByText('Referencia')).toBeInTheDocument()
+    expect(within(metaGroup as HTMLElement).getByText('Contenido')).toBeInTheDocument()
+    expect(within(metaGroup as HTMLElement).getByText(/Nota interna/)).toBeInTheDocument()
+  })
+
+  it('el resto de la sección (destino de continuar, conexiones) queda FUERA del bloque agrupado', () => {
+    const id = startNodeId()
+    act(() => {
+      useProjectStore.getState().selectNode(id)
+    })
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    const metaGroup = screen.getByText('Color').closest(`.${CSS.escape(styles.metaGroup as string)}`)
+    expect(metaGroup).not.toBeNull()
+    expect(within(metaGroup as HTMLElement).queryByText('Destino de continuar')).not.toBeInTheDocument()
+  })
+
+  it('para `final`/`intro` (sin sección Color) no se envuelve "Referencia" en el contenedor agrupado', () => {
+    act(() => {
+      useProjectStore.getState().createNode('final', { x: 100, y: 0 })
+    })
+    const finalId = useProjectStore
+      .getState()
+      .project.graph.nodes.find((n) => n.type === 'final')?.id
+    if (!finalId) throw new Error('setup inválido')
+    act(() => {
+      useProjectStore.getState().selectNode(finalId)
+    })
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    const referenceLabel = screen.getByText('Referencia')
+    expect(referenceLabel.closest(`.${CSS.escape(styles.metaGroup as string)}`)).toBeNull()
   })
 })

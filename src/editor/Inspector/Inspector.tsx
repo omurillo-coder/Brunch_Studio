@@ -113,6 +113,7 @@ const SLIDE_COLOR_LABEL: Record<SlideColor, string> = {
   purple: 'Morado',
   cyan: 'Cian',
   gray: 'Gris',
+  red: 'Rojo',
 }
 
 /** Mapa color de paleta -> clase CSS de la pastilla correspondiente
@@ -126,6 +127,7 @@ const SLIDE_COLOR_SWATCH_CLASS: Record<SlideColor, string | undefined> = {
   purple: styles.colorSwatchPurple,
   cyan: styles.colorSwatchCyan,
   gray: styles.colorSwatchGray,
+  red: styles.colorSwatchRed,
 }
 
 /**
@@ -1163,7 +1165,7 @@ function ConditionalRoutingSection({
 
   return (
     <div className={styles.conditionalRoutingSection}>
-      <h3 className={styles.responsesTitle}>Enrutado condicional</h3>
+      <h3 className={styles.responsesTitle}>Condición de aparición</h3>
       {!node.condition && variables.length === 0 && (
         <p className={styles.noVariablesNotice}>
           Todavía no hay variables en el proyecto. Créalas desde el panel "Variables" para poder
@@ -1172,7 +1174,7 @@ function ConditionalRoutingSection({
       )}
       {!node.condition && variables.length > 0 && (
         <button type="button" className={styles.addResponseButton} onClick={handleEnable}>
-          + Activar enrutado condicional
+          + Activar condición de aparición
         </button>
       )}
       {node.condition && (
@@ -1183,7 +1185,7 @@ function ConditionalRoutingSection({
             onChange={(next) => updateNode(node.id, { condition: next })}
             onRemove={handleDisable}
             idPrefix="inspector-continue-condition"
-            removeLabel="Desactivar enrutado condicional"
+            removeLabel="Desactivar condición de aparición"
           />
           <div>
             <label className={styles.label} htmlFor={elseTargetFieldId}>
@@ -1207,6 +1209,12 @@ function ConditionalRoutingSection({
               verdadera o no hay condición. Este destino "si no" solo se usa cuando la condición
               es falsa.
             </p>
+            {!node.elseTargetNodeId && (
+              <p className={styles.elseTargetWarning} role="alert">
+                ⚠ Sin destino "si no" configurado: cuando la condición no se cumpla, el recorrido
+                llegará a un punto sin continuación.
+              </p>
+            )}
           </div>
         </>
       )}
@@ -2074,58 +2082,85 @@ function NodeFields({
     }
   }
 
+  // "Referencia" es la etiqueta de UI del campo `title` del dominio (el
+  // nombre del campo en el modelo/schema no cambia, solo su texto visible —
+  // ver también `nodeOptionLabel` más arriba y los "Sin referencia" de
+  // `LeftPanel`/`nodeTypes.tsx`). `id`/`htmlFor` se dejan como estaban: son
+  // detalle interno del DOM, no texto visible. Extraído a una variable (en
+  // vez de repetir el JSX) porque Tarea 4 lo sitúa en dos posiciones
+  // distintas del árbol según el tipo de nodo (ver más abajo): dentro del
+  // grupo "sobre esta diapositiva en sí" para una `slide`, en su posición de
+  // siempre para `final`/`intro`.
+  const referenceField = (
+    <div>
+      <label className={styles.label} htmlFor="inspector-node-title">
+        Referencia
+      </label>
+      <input
+        id="inspector-node-title"
+        ref={titleInputRef}
+        className={styles.input}
+        type="text"
+        value={title}
+        // Mismo corrector nativo del sistema/navegador que `RichTextEditor`
+        // (fase 8), por consistencia — este campo no tiene su propio botón
+        // de activar/desactivar (solo el editor de contenido lo necesita).
+        spellCheck
+        lang="es"
+        onChange={(event) => setTitle(event.target.value)}
+        onBlur={commitPending}
+        onKeyDown={handleTitleKeyDown}
+      />
+    </div>
+  )
+
   return (
     <div className={styles.fields}>
-      <div>
-        {/* "Referencia" es la etiqueta de UI del campo `title` del dominio
-            (el nombre del campo en el modelo/schema no cambia, solo su
-            texto visible — ver también `nodeOptionLabel` más arriba y los
-            "Sin referencia" de `LeftPanel`/`nodeTypes.tsx`). `id`/`htmlFor`
-            se dejan como estaban: son detalle interno del DOM, no texto
-            visible. */}
-        <label className={styles.label} htmlFor="inspector-node-title">
-          Referencia
-        </label>
-        <input
-          id="inspector-node-title"
-          ref={titleInputRef}
-          className={styles.input}
-          type="text"
-          value={title}
-          // Mismo corrector nativo del sistema/navegador que `RichTextEditor`
-          // (fase 8), por consistencia — este campo no tiene su propio botón
-          // de activar/desactivar (solo el editor de contenido lo necesita).
-          spellCheck
-          lang="es"
-          onChange={(event) => setTitle(event.target.value)}
-          onBlur={commitPending}
-          onKeyDown={handleTitleKeyDown}
-        />
-      </div>
-      {node.type === 'slide' && <SlideColorSection node={node} />}
-      {node.type === 'final' && (
-        <div>
-          <span id="inspector-node-body-label" className={styles.label}>
-            Contenido
-          </span>
-          <RichTextEditor
-            body={node.body}
-            onCommit={(nextBody) => updateNode(node.id, { body: nextBody })}
-            ariaLabelledBy="inspector-node-body-label"
-          />
+      {node.type === 'slide' ? (
+        /* Tarea 4 (reorganización del Inspector): Color + Referencia +
+           Contenido (bloques) + Nota interna agrupados en un bloque
+           diferenciado ("sobre esta diapositiva en sí"), con Color arriba
+           del todo — antes que "Referencia" — y el orden relativo de
+           Referencia/Contenido/Nota interna intacto respecto al de siempre.
+           El resto de la sección (destino/respuestas/enrutado condicional/
+           conexiones) queda FUERA de este bloque, ver más abajo — mismo
+           contenedor con borde/fondo sutil (`.metaGroup`,
+           `Inspector.module.css`) que ya usa el resto de la app para
+           agrupar visualmente (p.ej. `VariablesPanel`). */
+        <div className={styles.metaGroup}>
+          <SlideColorSection node={node} />
+          {referenceField}
+          <ContentBlocksSection node={node} filePath={filePath} />
+          <InternalNoteField node={node} />
         </div>
+      ) : (
+        <>
+          {referenceField}
+          {node.type === 'final' && (
+            <div>
+              <span id="inspector-node-body-label" className={styles.label}>
+                Contenido
+              </span>
+              <RichTextEditor
+                body={node.body}
+                onCommit={(nextBody) => updateNode(node.id, { body: nextBody })}
+                ariaLabelledBy="inspector-node-body-label"
+              />
+            </div>
+          )}
+          {/* Diapositiva de Inicio (Tarea 2, milestone "Diapositiva de
+              Inicio"): ciclo/asignatura/nombre de caso/destino, ver
+              `IntroSection`. La "Referencia" (campo `title`) de arriba se
+              deja visible también para un `intro` — decisión deliberada, no
+              un olvido: es solo una nota interna más (nunca se exporta como
+              tal, ver su comentario más arriba) y mantenerla consistente en
+              los tres tipos de nodo no aporta confusión ni complejidad,
+              mientras que ocultarla sería una excepción sin beneficio
+              claro. */}
+          {node.type === 'intro' && <IntroSection node={node} allNodes={allNodes} />}
+          <InternalNoteField node={node} />
+        </>
       )}
-      {node.type === 'slide' && <ContentBlocksSection node={node} filePath={filePath} />}
-      {/* Diapositiva de Inicio (Tarea 2, milestone "Diapositiva de Inicio"):
-          ciclo/asignatura/nombre de caso/destino, ver `IntroSection`. La
-          "Referencia" (campo `title`) de arriba se deja visible también
-          para un `intro` — decisión deliberada, no un olvido: es solo una
-          nota interna más (nunca se exporta como tal, ver su comentario más
-          arriba) y mantenerla consistente en los tres tipos de nodo no
-          aporta confusión ni complejidad, mientras que ocultarla sería una
-          excepción sin beneficio claro. */}
-      {node.type === 'intro' && <IntroSection node={node} allNodes={allNodes} />}
-      <InternalNoteField node={node} />
       {node.type === 'slide' && (
         <>
           {node.responses.length === 0 && (

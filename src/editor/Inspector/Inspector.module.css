@@ -68,6 +68,25 @@
   gap: var(--bs-space-4);
 }
 
+/* Bloque "sobre esta diapositiva en sí" (Tarea 4 de reorganización del
+   Inspector): agrupa visualmente Color + Referencia + Contenido (bloques) +
+   Nota interna de una `slide`, diferenciándolo del resto de la sección
+   (destino/respuestas/enrutado condicional/conexiones, fuera de este
+   contenedor) — mismo trío borde sutil + fondo ligeramente distinto de
+   `--bs-color-surface` que ya usa el resto de la app para agrupar controles
+   relacionados (p.ej. `.chip`/`.variableCard` de `VariablesPanel.module.css`,
+   `.conditionEditor`/`.effectRow` de aquí mismo), solo que a la escala de un
+   bloque contenedor completo en vez de una fila individual. */
+.metaGroup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--bs-space-4);
+  padding: var(--bs-space-3);
+  border: 1px solid var(--bs-color-border);
+  border-radius: var(--bs-radius-md);
+  background: var(--bs-color-bg);
+}
+
 .label {
   display: block;
   margin-bottom: var(--bs-space-1);
@@ -204,6 +223,10 @@
 
 .colorSwatchGray {
   background: var(--bs-color-slide-gray-bg);
+}
+
+.colorSwatchRed {
+  background: var(--bs-color-slide-red-bg);
 }
 
 .responsesSection {
@@ -614,6 +637,27 @@
   border-radius: var(--bs-radius-sm);
   color: var(--bs-color-text-muted);
   font-size: var(--bs-font-size-sm);
+}
+
+/* Aviso "sin destino 'si no' configurado" de `ConditionalRoutingSection`
+   (Tarea 1 del reporte de bug "el enrutado condicional no funciona"): mismo
+   trío ámbar warning/warning-bg/warning-contrast que la insignia "sin
+   salida" del lienzo (`NodeCard.module.css`) y el badge de
+   `DiagnosticsPanel.module.css`, para que se lea como el mismo lenguaje
+   visual de aviso en toda la app. A diferencia de `.noVariablesNotice`
+   (informativo, borde discreto) este SÍ debe llamar la atención: sin este
+   destino configurado, la rama falsa de la condición cae en un dead-end en
+   el Player, que es precisamente el bug que reporta el usuario cuando en
+   realidad es una diapositiva a medio configurar. */
+.elseTargetWarning {
+  margin: 0;
+  padding: var(--bs-space-2);
+  border: 1px solid var(--bs-color-warning);
+  border-radius: var(--bs-radius-sm);
+  background: var(--bs-color-warning-bg);
+  color: var(--bs-color-warning-contrast);
+  font-size: var(--bs-font-size-sm);
+  font-weight: 500;
 }
 
 .helperText {

@@ -83,27 +83,47 @@
 
   /* Paleta cerrada de color de una diapositiva `slide` (nunca `intro`/
      `final`, que ya tienen su propio fondo fijo por tipo, azul/verde de
-     arriba): seis pastillas con nombre, mismo criterio de diseño que
-     `--bs-color-final-bg`/`--bs-color-intro-bg` (fondo pastel sobrio, sin
-     resultar chillón) y elegidas para ser bien diferenciables entre sí y
-     respecto a esas dos. Texto encima siempre `--bs-color-text`
-     (nunca un token de texto aparte, igual que `final`/`intro`), contraste
-     calculado con la misma fórmula WCAG que el resto de este archivo:
-     - Amarillo #fbf0c2: 15.00:1 (AAA)
-     - Naranja  #fbe0c8: 13.57:1 (AAA)
-     - Rosa     #fbdcec: 13.53:1 (AAA)
-     - Morado   #eadcf9: 13.17:1 (AAA)
-     - Cian     #d7f0ef: 14.39:1 (AAA)
-     - Gris cálido #ece7e1: 13.97:1 (AAA)
+     arriba): siete pastillas con nombre, mismo criterio de diseño de fondo
+     sobrio con texto SIEMPRE `--bs-color-text` encima (nunca un token de
+     texto aparte, igual que `final`/`intro`) que `--bs-color-final-bg`/
+     `--bs-color-intro-bg` de arriba — pero MÁS VIVA/SATURADA que la primera
+     versión pastel de esta paleta (Tarea 3 de un reporte de usuario: "los
+     veo demasiado pastel"). Reformulada en HSL subiendo saturación y bajando
+     luminosidad respecto a la versión pastel original, manteniendo SIEMPRE
+     contraste AAA (≥7:1) del texto negro encima — mismo rigor WCAG que la
+     versión anterior, con más margen de sobra intencionadamente descartado
+     (se podía saturar aún más y seguir en AA, pero se paró en el punto en
+     que ya se ve claramente "vivo" sin arriesgar legibilidad). Contraste
+     calculado con la misma fórmula WCAG que el resto de este archivo, texto
+     `--bs-color-text` (#1b1b1f):
+     - Amarillo #fbe074: 13.09:1 (AAA)
+     - Naranja  #fbb374: 9.65:1 (AAA)
+     - Rosa     #f589c1: 7.55:1 (AAA)
+     - Morado   #c59af4: 7.61:1 (AAA)
+     - Cian     #86eae6: 12.20:1 (AAA)
+     - Gris cálido #cdb598: 8.71:1 (AAA)
+     - Rojo (séptimo color, nuevo) #f59f84: 8.32:1 (AAA)
      Nombres del enum (`SLIDE_COLORS` en `src/domain/schemas.ts`): yellow,
-     orange, pink, purple, cyan, gray — mismos nombres que el sufijo de cada
-     token de aquí abajo. */
-  --bs-color-slide-yellow-bg: #fbf0c2;
-  --bs-color-slide-orange-bg: #fbe0c8;
-  --bs-color-slide-pink-bg: #fbdcec;
-  --bs-color-slide-purple-bg: #eadcf9;
-  --bs-color-slide-cyan-bg: #d7f0ef;
-  --bs-color-slide-gray-bg: #ece7e1;
+     orange, pink, purple, cyan, gray, red — mismos nombres que el sufijo de
+     cada token de aquí abajo.
+
+     El rojo nuevo es deliberadamente un tono DISTINTO (H≈14°, coral/
+     ladrillo tirando a naranja-rojizo) del rojo de `--bs-color-danger`
+     (H≈354°, carmesí/crimson) usado para acciones destructivas —
+     "eliminar", "Reintentar" — separados 20° en el círculo de tono, y
+     además con luminosidad/saturación/contexto de uso muy distintos
+     (`--bs-color-danger` es un rojo OSCURO y saturado que lleva SIEMPRE
+     texto blanco encima, en botones; este rojo es un fondo de tarjeta claro
+     con texto negro encima, igual que el resto de la paleta de `slide`), así
+     que no hay riesgo real de confundirlos aunque ambos se llamen
+     coloquialmente "rojo". */
+  --bs-color-slide-yellow-bg: #fbe074;
+  --bs-color-slide-orange-bg: #fbb374;
+  --bs-color-slide-pink-bg: #f589c1;
+  --bs-color-slide-purple-bg: #c59af4;
+  --bs-color-slide-cyan-bg: #86eae6;
+  --bs-color-slide-gray-bg: #cdb598;
+  --bs-color-slide-red-bg: #f59f84;
 
   /* Espaciado */
   --bs-space-1: 4px;
@@ -175,20 +195,27 @@
     --bs-color-intro-bg: #16301f;
     /* Misma paleta de color de diapositiva oscurecida para fondo oscuro
        (mismo criterio que `--bs-color-final-bg`/`--bs-color-intro-bg` de
-       arriba: tono aclarado en claro se oscurece manteniendo el matiz, texto
-       `--bs-color-text` #ededef encima). Contraste WCAG:
-       - Amarillo #3a3016: 11.13:1 (AAA)
-       - Naranja  #3d2814: 11.88:1 (AAA)
-       - Rosa     #3a1e2c: 12.81:1 (AAA)
-       - Morado   #2c1f3d: 13.11:1 (AAA)
-       - Cian     #123230: 11.78:1 (AAA)
-       - Gris cálido #332f2a: 11.36:1 (AAA) */
-    --bs-color-slide-yellow-bg: #3a3016;
-    --bs-color-slide-orange-bg: #3d2814;
-    --bs-color-slide-pink-bg: #3a1e2c;
-    --bs-color-slide-purple-bg: #2c1f3d;
-    --bs-color-slide-cyan-bg: #123230;
-    --bs-color-slide-gray-bg: #332f2a;
+       arriba: tono vivo en claro se oscurece manteniendo el matiz, texto
+       `--bs-color-text` #ededef encima) — reformulada igual que la versión
+       clara (Tarea 3) con algo más de saturación que la primera versión
+       pastel, para que la paleta oscura también se lea "viva" y no solo la
+       clara, siempre manteniendo AAA (≥7:1). Contraste WCAG:
+       - Amarillo #524514: 8.09:1 (AAA)
+       - Naranja  #523114: 9.93:1 (AAA)
+       - Rosa     #521434: 11.91:1 (AAA)
+       - Morado   #321452: 13.23:1 (AAA)
+       - Cian     #174f4d: 7.94:1 (AAA)
+       - Gris cálido #493a27: 9.37:1 (AAA)
+       - Rojo (séptimo color, nuevo) #522314: 11.16:1 (AAA) — mismo criterio
+         de distinción de `--bs-color-danger` que en claro: H≈14° aquí frente
+         a H≈352° de `--bs-color-danger` en oscuro. */
+    --bs-color-slide-yellow-bg: #524514;
+    --bs-color-slide-orange-bg: #523114;
+    --bs-color-slide-pink-bg: #521434;
+    --bs-color-slide-purple-bg: #321452;
+    --bs-color-slide-cyan-bg: #174f4d;
+    --bs-color-slide-gray-bg: #493a27;
+    --bs-color-slide-red-bg: #522314;
     --bs-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
   }
 }

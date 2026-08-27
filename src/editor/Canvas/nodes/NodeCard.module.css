@@ -78,7 +78,8 @@
    `SLIDE_COLORS` en `src/domain/schemas.ts`): mismo criterio que
    `.cardFinal`/`.cardIntro` — solo cambia el fondo, mismo texto
    `--bs-color-text` ya comprobado con contraste AAA sobre cada uno de estos
-   seis tonos en claro y en oscuro (ver `tokens.css`). Nunca se aplica a
+   siete tonos (Tarea 3: paleta viva + séptimo color rojo) en claro y en
+   oscuro (ver `tokens.css`). Nunca se aplica a
    `intro`/`final` (que tienen su propio fondo fijo por tipo, arriba) ni se
    combina con `.cardFinal`/`.cardIntro`: `cardClassName` en `nodeTypes.tsx`
    solo añade una de estas clases cuando `data.nodeType === 'slide'`. El
@@ -108,6 +109,10 @@
 
 .cardSlideGray {
   background: var(--bs-color-slide-gray-bg);
+}
+
+.cardSlideRed {
+  background: var(--bs-color-slide-red-bg);
 }
 
 /* Insignia de aviso (punto 1): un indicador pequeño y barato, no un icono
