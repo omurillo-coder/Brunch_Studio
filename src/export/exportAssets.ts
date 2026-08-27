@@ -37,10 +37,11 @@ export interface ResolveExportAssetsResult {
 }
 
 /**
- * Todos los `assetId` (imagen y audio) referenciados por el documento, sin
- * duplicados y en orden estable de aparición: primero los bloques de imagen/
- * audio de `SlideNode.content` (en el orden exacto del array, milestone
- * "Bloques de contenido") y después los de cada una de sus respuestas,
+ * Todos los `assetId` (imagen, audio y vídeo) referenciados por el
+ * documento, sin duplicados y en orden estable de aparición: primero los
+ * bloques de imagen/audio/vídeo de `SlideNode.content` (en el orden exacto
+ * del array, milestone "Bloques de contenido") y después los de cada una de
+ * sus respuestas (solo imagen/audio: `DecisionResponse` no admite vídeo),
  * recorriendo los nodos en el orden en que están en `graph.nodes`.
  *
  * El orden es estable a propósito: hace que el HTML generado para un mismo
@@ -60,7 +61,7 @@ export function collectReferencedAssetIds(project: ProjectDocument): string[] {
   for (const node of project.graph.nodes) {
     if (node.type !== 'slide') continue
     for (const block of node.content) {
-      if (block.type === 'image' || block.type === 'audio') {
+      if (block.type === 'image' || block.type === 'audio' || block.type === 'video') {
         push(block.assetId)
       }
     }

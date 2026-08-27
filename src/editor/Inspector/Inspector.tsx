@@ -180,11 +180,31 @@ function SlideColorSection({ node }: { node: SlideNode }) {
   )
 }
 
-type AssetKind = 'image' | 'audio'
+type AssetKind = 'image' | 'audio' | 'video'
 
 const ASSET_KIND_LABEL: Record<AssetKind, string> = {
   image: 'imagen',
   audio: 'audio',
+  video: 'vídeo',
+}
+
+/**
+ * Mensaje de error cuando el archivo elegido supera el límite de tamaño de
+ * su tipo de asset. El límite ya NO es un único valor global (ver
+ * `MAX_ASSET_BYTES`/`MAX_VIDEO_ASSET_BYTES` en
+ * `src-tauri/src/persistence/assets.rs`: 15 MB para imagen/audio, 100 MB
+ * para vídeo), así que el mensaje se construye leyendo `max_bytes` del
+ * propio error (`PersistenceError::AssetTooLarge`, serializado tal cual, sin
+ * `rename_all`) en vez de hardcodear un número fijo — así es correcto para
+ * cualquier tipo de asset sin tener que duplicar el límite aquí.
+ */
+function assetTooLargeMessage(error: PersistenceCommandError): string {
+  const content = error.content as { max_bytes?: unknown } | undefined
+  const maxBytes = typeof content?.max_bytes === 'number' ? content.max_bytes : undefined
+  const maxMb = maxBytes !== undefined ? Math.round(maxBytes / (1024 * 1024)) : undefined
+  return maxMb !== undefined
+    ? `El archivo es demasiado grande (máximo ${maxMb} MB). Prueba con uno más ligero.`
+    : 'El archivo es demasiado grande. Prueba con uno más ligero.'
 }
 
 interface MediaAttachmentProps {
@@ -247,6 +267,10 @@ function AssetPreview({
         // eslint-disable-next-line jsx-a11y/media-has-caption
         <audio className={styles.audioPreview} controls src={dataUri} />
       )}
+      {dataUri && kind === 'video' && (
+        // eslint-disable-next-line jsx-a11y/media-has-caption
+        <video className={styles.videoPreview} controls src={dataUri} />
+      )}
       {error && (
         <p role="alert" className={styles.mediaError}>
           No se ha podido cargar la vista previa.
@@ -297,7 +321,7 @@ function MediaAttachment({
       // el que damos un mensaje específico: el resto de fallos (E/S, tipo no
       // soportado, etc.) comparten el mensaje genérico de siempre.
       if (error instanceof PersistenceCommandError && error.kind === 'AssetTooLarge') {
-        setPickError('El archivo es demasiado grande (máximo 15 MB). Prueba con uno más ligero.')
+        setPickError(assetTooLargeMessage(error))
       } else {
         setPickError(`No se ha podido adjuntar el ${label}. Inténtalo de nuevo.`)
       }
@@ -381,8 +405,8 @@ function MediaAttachment({
  *   cambiar de nodo, aquí se remonta al cambiar de bloque, así que su estado
  *   interno nunca se mezcla entre dos bloques de texto distintos de la misma
  *   diapositiva.
- * - `image`/`audio`: reutiliza `AssetPreview` (miniatura o `<audio
- *   controls>`) sobre el asset ya importado. A diferencia del antiguo
+ * - `image`/`audio`/`video`: reutiliza `AssetPreview` (miniatura, `<audio
+ *   controls>` o `<video controls>`) sobre el asset ya importado. A diferencia del antiguo
  *   `MediaAttachment` (adjuntar/reemplazar/quitar un único adjunto), un
  *   bloque de imagen/audio no ofrece "Reemplazar": para cambiar el archivo
  *   se quita el bloque y se añade uno nuevo — un bloque, una vez creado, no
@@ -425,7 +449,14 @@ function ContentBlockRow({
 
   const position = index + 1
   const labelId = `inspector-content-block-${block.id}-label`
-  const typeLabel = block.type === 'text' ? 'Texto' : block.type === 'image' ? 'Imagen' : 'Audio'
+  const typeLabel =
+    block.type === 'text'
+      ? 'Texto'
+      : block.type === 'image'
+        ? 'Imagen'
+        : block.type === 'audio'
+          ? 'Audio'
+          : 'Vídeo'
 
   return (
     <div className={styles.contentBlockRow}>
@@ -485,18 +516,24 @@ function ContentBlockRow({
 /**
  * Sección de contenido de una diapositiva: la lista de bloques (vacía en
  * teoría posible, aunque `createNode`/`duplicateNode` siempre siembran al
- * menos uno) más los tres controles de añadir. Mismo criterio de "+ Añadir
+ * menos uno) más los cuatro controles de añadir. Mismo criterio de "+ Añadir
  * X" que otros botones "+" ya usados en la app (`.addResponseButton`): +
- * Texto añade un bloque vacío al instante (sin diálogo); + Imagen/+ Audio
- * reutilizan el mismo flujo de importación de asset ya existente (diálogo
- * nativo -> `assetRepository.importAsset`, con el mismo límite de 15 MB y la
- * misma deduplicación por contenido que el resto de adjuntos de la app) y
- * solo añaden el bloque si el usuario no cancela.
+ * Texto añade un bloque vacío al instante (sin diálogo); + Imagen/+ Audio/+
+ * Vídeo reutilizan el mismo flujo de importación de asset ya existente
+ * (diálogo nativo -> `assetRepository.importAsset`, con la misma
+ * deduplicación por contenido que el resto de adjuntos de la app) y solo
+ * añaden el bloque si el usuario no cancela. El límite de tamaño depende del
+ * tipo (15 MB para imagen/audio, 100 MB para vídeo — ver
+ * `MAX_VIDEO_ASSET_BYTES` en `src-tauri/src/persistence/assets.rs`), pero el
+ * mensaje de error ante un archivo demasiado grande se construye en tiempo
+ * real a partir del error devuelto (`assetTooLargeMessage`), sin
+ * hardcodearlo aquí.
  */
 function ContentBlocksSection({ node, filePath }: { node: SlideNode; filePath: string }) {
   const addTextBlock = useProjectStore((state) => state.addTextBlock)
   const addImageBlock = useProjectStore((state) => state.addImageBlock)
   const addAudioBlock = useProjectStore((state) => state.addAudioBlock)
+  const addVideoBlock = useProjectStore((state) => state.addVideoBlock)
   const { pickImportAssetPath, assetRepository } = useAppServices()
 
   const [busyKind, setBusyKind] = useState<AssetKind | null>(null)
@@ -514,12 +551,14 @@ function ContentBlocksSection({ node, filePath }: { node: SlideNode; filePath: s
       const meta = await assetRepository.importAsset(filePath, sourcePath)
       if (kind === 'image') {
         addImageBlock(node.id, meta.id)
-      } else {
+      } else if (kind === 'audio') {
         addAudioBlock(node.id, meta.id)
+      } else {
+        addVideoBlock(node.id, meta.id)
       }
     } catch (error) {
       if (error instanceof PersistenceCommandError && error.kind === 'AssetTooLarge') {
-        setPickError('El archivo es demasiado grande (máximo 15 MB). Prueba con uno más ligero.')
+        setPickError(assetTooLargeMessage(error))
       } else {
         setPickError(`No se ha podido adjuntar el ${ASSET_KIND_LABEL[kind]}. Inténtalo de nuevo.`)
       }
@@ -575,6 +614,14 @@ function ContentBlocksSection({ node, filePath }: { node: SlideNode; filePath: s
           disabled={busyKind === 'audio'}
         >
           + Audio
+        </button>
+        <button
+          type="button"
+          className={styles.addResponseButton}
+          onClick={() => handleAddAsset('video')}
+          disabled={busyKind === 'video'}
+        >
+          + Vídeo
         </button>
       </div>
     </div>

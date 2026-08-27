@@ -136,6 +136,19 @@ export function addAudioBlock(
   return insertBlock(project, slideNodeId, { id: createId(), type: 'audio', assetId }, index)
 }
 
+/** Añade un bloque de vídeo que referencia un asset ya importado. Mismo
+ *  patrón exacto que `addAudioBlock` (misma firma, mismo criterio de
+ *  no-validación, sin ningún límite de cuántos bloques de vídeo puede tener
+ *  una diapositiva). */
+export function addVideoBlock(
+  project: ProjectDocument,
+  slideNodeId: string,
+  assetId: string,
+  index?: number,
+): ProjectDocument {
+  return insertBlock(project, slideNodeId, { id: createId(), type: 'video', assetId }, index)
+}
+
 /**
  * Actualiza el cuerpo (texto Tiptap serializado) de un bloque de texto
  * concreto, localizado por su `id` de bloque. Lanza `Error` si el nodo no es

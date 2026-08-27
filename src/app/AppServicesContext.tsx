@@ -21,13 +21,23 @@ const HTML_FILE_FILTERS = [{ name: 'Página web', extensions: ['html'] }]
 /** Filtro del diálogo de guardado de la exportación a paquete SCORM. */
 const SCORM_FILE_FILTERS = [{ name: 'Paquete SCORM', extensions: ['zip'] }]
 
+/** Filtro del diálogo de guardado de la "vista de guión imprimible"
+ *  (`src/export/scriptExport.ts`). Mismo tipo de archivo que el export HTML
+ *  interactivo (`.html`), documento distinto. */
+const SCRIPT_FILE_FILTERS = [{ name: 'Guión imprimible', extensions: ['html'] }]
+
 /** Filtro del diálogo de abrir para importar un archivo Twee (ver `src/import/twee`). */
 const TWEE_FILE_FILTERS = [{ name: 'Archivo Twee', extensions: ['twee', 'tw'] }]
 
-/** Extensiones de imagen/audio reconocidas al importar un asset. */
-const ASSET_FILE_FILTERS: Record<'image' | 'audio', { name: string; extensions: string[] }> = {
+/** Extensiones de imagen/audio/vídeo reconocidas al importar un asset. Mismas
+ *  extensiones que reconoce `detect_mime_type` en
+ *  `src-tauri/src/persistence/assets.rs`: los tres nombres de vídeo
+ *  (`mp4`/`webm`/`mov`) deben coincidir exactamente con esa lista para que
+ *  el diálogo nunca ofrezca un archivo que Rust luego rechazaría. */
+const ASSET_FILE_FILTERS: Record<'image' | 'audio' | 'video', { name: string; extensions: string[] }> = {
   image: { name: 'Imagen', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'] },
   audio: { name: 'Audio', extensions: ['mp3', 'wav', 'ogg', 'm4a'] },
+  video: { name: 'Vídeo', extensions: ['mp4', 'webm', 'mov'] },
 }
 
 /** Caracteres no válidos en un nombre de archivo en Windows/macOS. */
@@ -61,7 +71,7 @@ async function pickOpenProjectPathWithNativeDialog(): Promise<string | null> {
 }
 
 async function pickImportAssetPathWithNativeDialog(
-  kind: 'image' | 'audio',
+  kind: 'image' | 'audio' | 'video',
 ): Promise<string | null> {
   const selected = await open({
     filters: [ASSET_FILE_FILTERS[kind]],
@@ -80,6 +90,12 @@ async function pickExportHtmlPathWithNativeDialog(suggestedName?: string): Promi
 async function pickExportScormPathWithNativeDialog(suggestedName?: string): Promise<string | null> {
   const defaultPath = suggestedName ? `${sanitizeFileName(suggestedName)}.zip` : undefined
   const path = await save({ filters: SCORM_FILE_FILTERS, defaultPath })
+  return path ?? null
+}
+
+async function pickExportScriptPathWithNativeDialog(suggestedName?: string): Promise<string | null> {
+  const defaultPath = suggestedName ? `${sanitizeFileName(suggestedName)}.html` : undefined
+  const path = await save({ filters: SCRIPT_FILE_FILTERS, defaultPath })
   return path ?? null
 }
 
@@ -141,6 +157,7 @@ export const defaultAppServices: AppServices = {
   pickImportAssetPath: pickImportAssetPathWithNativeDialog,
   pickExportHtmlPath: pickExportHtmlPathWithNativeDialog,
   pickExportScormPath: pickExportScormPathWithNativeDialog,
+  pickExportScriptPath: pickExportScriptPathWithNativeDialog,
   assetRepository: new TauriAssetRepository(),
   htmlBundleWriter: new TauriHtmlBundleWriter(),
   scormPackageWriter: new TauriScormPackageWriter(),

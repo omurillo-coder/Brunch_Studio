@@ -633,6 +633,7 @@ describe('Inspector — editor de bloques de contenido de una diapositiva (miles
     assetRepository.registerSourceFile('/tmp/foto.png', new Uint8Array([1, 2, 3]), 'image/png')
     assetRepository.registerSourceFile('/tmp/foto2.png', new Uint8Array([7, 8, 9]), 'image/png')
     assetRepository.registerSourceFile('/tmp/audio.mp3', new Uint8Array([4, 5, 6]), 'audio/mpeg')
+    assetRepository.registerSourceFile('/tmp/clip.mp4', new Uint8Array([10, 11, 12]), 'video/mp4')
     return assetRepository
   }
 
@@ -714,6 +715,30 @@ describe('Inspector — editor de bloques de contenido de una diapositiva (miles
     })
   })
 
+  it('"+ Vídeo" añade un bloque de vídeo a content y muestra el reproductor', async () => {
+    const id = createEmptySlide()
+    act(() => {
+      useProjectStore.getState().selectNode(id)
+    })
+    const assetRepository = setupAssetRepository()
+    const pickImportAssetPath = vi.fn().mockResolvedValue('/tmp/clip.mp4')
+
+    const { container } = renderInspectorWithServices({ assetRepository, pickImportAssetPath })
+
+    fireEvent.click(screen.getByRole('button', { name: '+ Vídeo' }))
+
+    await waitFor(() => {
+      expect(slideNode(id).content).toMatchObject([{ type: 'video' }])
+    })
+    expect(pickImportAssetPath).toHaveBeenCalledWith('video')
+
+    await waitFor(() => {
+      const videoEl = container.querySelector('video')
+      expect(videoEl).toBeTruthy()
+      expect(videoEl?.getAttribute('src')).toContain('data:video/mp4;base64,')
+    })
+  })
+
   it('añadir un segundo bloque de imagen lo agrega al final (orden de aparición)', async () => {
     const id = createEmptySlide()
     act(() => {
@@ -755,6 +780,25 @@ describe('Inspector — editor de bloques de contenido de una diapositiva (miles
     expect(screen.getByRole('button', { name: '+ Texto' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '+ Imagen' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '+ Audio' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '+ Vídeo' })).toBeInTheDocument()
+  })
+
+  it('"Quitar" en un bloque de vídeo lo elimina de content sin pedir confirmación', async () => {
+    const id = createEmptySlide()
+    act(() => {
+      useProjectStore.getState().selectNode(id)
+    })
+    const assetRepository = setupAssetRepository()
+    const pickImportAssetPath = vi.fn().mockResolvedValue('/tmp/clip.mp4')
+
+    renderInspectorWithServices({ assetRepository, pickImportAssetPath })
+
+    fireEvent.click(screen.getByRole('button', { name: '+ Vídeo' }))
+    await waitFor(() => expect(slideNode(id).content).toHaveLength(1))
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Quitar bloque 1' }))
+
+    expect(slideNode(id).content).toEqual([])
   })
 
   it('los botones ↑/↓ reordenan los bloques; en los extremos quedan deshabilitados', async () => {

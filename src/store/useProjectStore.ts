@@ -6,6 +6,7 @@ import {
   addResponse as domainAddResponse,
   addTextBlock as domainAddTextBlock,
   addVariable as domainAddVariable,
+  addVideoBlock as domainAddVideoBlock,
   connect as domainConnect,
   createConnectedNode as domainCreateConnectedNode,
   createNode as domainCreateNode,
@@ -213,6 +214,7 @@ export interface ProjectStoreActions {
   addTextBlock: (slideNodeId: string, index?: number) => void
   addImageBlock: (slideNodeId: string, assetId: string, index?: number) => void
   addAudioBlock: (slideNodeId: string, assetId: string, index?: number) => void
+  addVideoBlock: (slideNodeId: string, assetId: string, index?: number) => void
   updateTextBlockBody: (slideNodeId: string, blockId: string, body: string) => void
   removeContentBlock: (slideNodeId: string, blockId: string) => void
   moveContentBlock: (slideNodeId: string, blockId: string, toIndex: number) => void
@@ -442,6 +444,15 @@ export const useProjectStore = create<ProjectStoreState>()(
 
     addAudioBlock: (slideNodeId, assetId, index) => {
       const next = domainAddAudioBlock(get().project, slideNodeId, assetId, index)
+      set((state) => {
+        state.history.past.push(state.project as ProjectDocument)
+        state.history.future = []
+        state.project = next
+      })
+    },
+
+    addVideoBlock: (slideNodeId, assetId, index) => {
+      const next = domainAddVideoBlock(get().project, slideNodeId, assetId, index)
       set((state) => {
         state.history.past.push(state.project as ProjectDocument)
         state.history.future = []

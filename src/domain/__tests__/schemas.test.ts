@@ -188,7 +188,7 @@ describe('ContentBlockSchema', () => {
   const BLOCK_ID = '66666666-6666-4666-8666-666666666666'
   const ASSET_ID = '77777777-7777-4777-8777-777777777777'
 
-  it('acepta un bloque de texto, imagen y audio válidos', () => {
+  it('acepta un bloque de texto, imagen, audio y vídeo válidos', () => {
     expect(ContentBlockSchema.safeParse({ id: BLOCK_ID, type: 'text', body: '' }).success).toBe(true)
     expect(
       ContentBlockSchema.safeParse({ id: BLOCK_ID, type: 'image', assetId: ASSET_ID }).success,
@@ -196,11 +196,14 @@ describe('ContentBlockSchema', () => {
     expect(
       ContentBlockSchema.safeParse({ id: BLOCK_ID, type: 'audio', assetId: ASSET_ID }).success,
     ).toBe(true)
+    expect(
+      ContentBlockSchema.safeParse({ id: BLOCK_ID, type: 'video', assetId: ASSET_ID }).success,
+    ).toBe(true)
   })
 
   it('rechaza un type desconocido', () => {
     expect(
-      ContentBlockSchema.safeParse({ id: BLOCK_ID, type: 'video', assetId: ASSET_ID }).success,
+      ContentBlockSchema.safeParse({ id: BLOCK_ID, type: 'gif', assetId: ASSET_ID }).success,
     ).toBe(false)
   })
 
@@ -208,10 +211,14 @@ describe('ContentBlockSchema', () => {
     expect(ContentBlockSchema.safeParse({ id: BLOCK_ID, type: 'text' }).success).toBe(false)
   })
 
-  it('rechaza un bloque de imagen/audio sin assetId, o con un assetId que no es uuid', () => {
+  it('rechaza un bloque de imagen/audio/vídeo sin assetId, o con un assetId que no es uuid', () => {
     expect(ContentBlockSchema.safeParse({ id: BLOCK_ID, type: 'image' }).success).toBe(false)
     expect(
       ContentBlockSchema.safeParse({ id: BLOCK_ID, type: 'audio', assetId: 'no-es-uuid' }).success,
+    ).toBe(false)
+    expect(ContentBlockSchema.safeParse({ id: BLOCK_ID, type: 'video' }).success).toBe(false)
+    expect(
+      ContentBlockSchema.safeParse({ id: BLOCK_ID, type: 'video', assetId: 'no-es-uuid' }).success,
     ).toBe(false)
   })
 

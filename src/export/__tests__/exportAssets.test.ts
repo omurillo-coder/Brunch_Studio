@@ -18,6 +18,10 @@ function audioBlock(assetId: string): ContentBlock {
   blockCounter += 1
   return { id: `block-${blockCounter}`, type: 'audio', assetId }
 }
+function videoBlock(assetId: string): ContentBlock {
+  blockCounter += 1
+  return { id: `block-${blockCounter}`, type: 'video', assetId }
+}
 
 function slide(id: string, overrides: Partial<SlideNode> = {}): SlideNode {
   return {
@@ -104,6 +108,16 @@ describe('collectReferencedAssetIds', () => {
   it('devuelve una lista vacía si el proyecto no tiene ningún asset', () => {
     expect(collectReferencedAssetIds(project([slide(SLIDE_A)]))).toEqual([])
   })
+
+  it('reúne también los bloques de vídeo de content, en el orden exacto, sin duplicados', () => {
+    const doc = project([
+      slide(SLIDE_A, {
+        content: [imageBlock('img-1'), videoBlock('vid-1'), videoBlock('vid-1'), videoBlock('vid-2')],
+      }),
+    ])
+
+    expect(collectReferencedAssetIds(doc)).toEqual(['img-1', 'vid-1', 'vid-2'])
+  })
 })
 
 describe('resolveExportAssets', () => {
@@ -121,6 +135,27 @@ describe('resolveExportAssets', () => {
       'img-1': { mimeType: 'image/png', dataBase64: 'AAA=' },
       'aud-1': { mimeType: 'audio/mpeg', dataBase64: 'BBB=' },
     })
+  })
+
+  it('resuelve un asset de vídeo referenciado, y omite uno huérfano (no referenciado por ningún bloque)', async () => {
+    const doc = project([slide(SLIDE_A, { content: [videoBlock('vid-referenced')] })])
+    const repository = fakeRepository({
+      'vid-referenced': { mimeType: 'video/mp4', filename: 'clip.mp4', dataBase64: 'VklEMQ==' },
+      'vid-orphan': { mimeType: 'video/mp4', filename: 'huerfano.mp4', dataBase64: 'VklEMg==' },
+    })
+
+    const result = await resolveExportAssets('/tmp/p.brunch', doc, repository)
+
+    // Solo se pide (y por tanto solo se embebe) el asset referenciado: el
+    // huérfano ni siquiera se consulta al repositorio, mismo mecanismo que
+    // usa el GC de assets huérfanos (`gc_orphan_assets` en Rust) para
+    // decidir qué conservar.
+    expect(result.assets).toEqual({
+      'vid-referenced': { mimeType: 'video/mp4', dataBase64: 'VklEMQ==' },
+    })
+    expect(result.failedAssetIds).toEqual([])
+    expect(repository.getAsset).toHaveBeenCalledTimes(1)
+    expect(repository.getAsset).toHaveBeenCalledWith('/tmp/p.brunch', 'vid-referenced')
   })
 
   it('un asset que falla no rompe la resolución de los demás', async () => {

@@ -356,6 +356,31 @@ describe('PlayerScreen: texto enriquecido del body', () => {
 })
 
 describe('PlayerScreen: imagen/audio adjuntos', () => {
+  it('el vídeo de un nodo se carga y se muestra con controles nativos, sin desbordar la tarjeta (clase "media")', async () => {
+    const assetRepository = new MemoryAssetRepository()
+    const videoId = await importFakeAsset(assetRepository, '/tmp/clip.mp4', [1, 2, 3], 'video/mp4')
+
+    const startId = startNodeId()
+    act(() => {
+      useProjectStore.getState().updateNode(startId, { title: 'Con vídeo' })
+      useProjectStore.getState().addVideoBlock(startId, videoId)
+      useProjectStore.getState().createNode('final', { x: 200, y: 0 })
+    })
+    const finalId = otherNodeIdOf('final')
+    act(() => {
+      useProjectStore.getState().connect(startId, finalId)
+    })
+
+    const { container } = renderPlayer({ assetRepository })
+
+    await waitFor(() => {
+      const video = container.querySelector('video')
+      expect(video?.getAttribute('src')).toContain('data:video/mp4;base64,')
+      expect(video?.controls).toBe(true)
+      expect(video?.classList.contains(styles.media ?? '')).toBe(true)
+    })
+  })
+
   it('la imagen y el audio de un nodo se cargan y se muestran', async () => {
     const assetRepository = new MemoryAssetRepository()
     const imageId = await importFakeAsset(assetRepository, '/tmp/foto.png', [1, 2, 3], 'image/png')
@@ -538,6 +563,39 @@ describe('PlayerScreen: bloques de contenido de una diapositiva (milestone "Bloq
     expect(elements.map((element) => element.tagName)).toEqual(['DIV', 'IMG', 'DIV', 'AUDIO'])
     expect(elements[0]?.textContent).toContain('Primer texto')
     expect(elements[2]?.textContent).toContain('Segundo texto')
+  })
+
+  it('pinta un bloque de vídeo intercalado con imagen/audio, en el orden exacto de content', async () => {
+    const assetRepository = new MemoryAssetRepository()
+    const imageId = await importFakeAsset(assetRepository, '/tmp/f.png', [5], 'image/png')
+    const videoId = await importFakeAsset(assetRepository, '/tmp/f.mp4', [6], 'video/mp4')
+    const audioId = await importFakeAsset(assetRepository, '/tmp/f.mp3', [7], 'audio/mpeg')
+
+    const startId = startNodeId()
+    act(() => {
+      useProjectStore.getState().addImageBlock(startId, imageId)
+      useProjectStore.getState().addVideoBlock(startId, videoId)
+      useProjectStore.getState().addAudioBlock(startId, audioId)
+      useProjectStore.getState().createNode('final', { x: 200, y: 0 })
+    })
+    const finalId = otherNodeIdOf('final')
+    act(() => {
+      useProjectStore.getState().connect(startId, finalId)
+    })
+
+    const { container } = renderPlayer({ assetRepository })
+
+    await waitFor(() => {
+      expect(container.querySelector('video')).toBeInTheDocument()
+    })
+
+    const card = container.querySelector(`.${styles.card}`)
+    const elements = [
+      ...(card?.querySelectorAll<HTMLElement>(`.${styles.body}, img, video, audio`) ?? []),
+    ]
+    // El bloque de texto inicial sembrado por `createNode` va vacío (no se
+    // rellenó), así que no pinta nada: solo imagen, vídeo, audio.
+    expect(elements.map((element) => element.tagName)).toEqual(['IMG', 'VIDEO', 'AUDIO'])
   })
 })
 

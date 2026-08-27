@@ -23,7 +23,7 @@ import { EXPORTED_STYLES } from './exportedStyles'
  *
  * Todo va embebido: estilos, runtime del Player en JS vanilla, el documento
  * como JSON, el cuerpo enriquecido de cada nodo ya convertido a HTML
- * estático, y cada imagen/audio como `data:` URI. Cero peticiones de red,
+ * estático, y cada imagen/audio/vídeo como `data:` URI. Cero peticiones de red,
  * cero dependencias, cero build step en destino.
  *
  * Lo que NO viaja al archivo exportado: React, Tiptap y ProseMirror. El

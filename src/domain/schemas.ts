@@ -258,6 +258,14 @@ const baseNodeFields = {
  *   antiguo `SlideNode.audioAssetId`, salvo que ahora pueden coexistir
  *   VARIOS bloques de audio en una misma diapositiva (el modelo anterior
  *   admitía como mucho uno).
+ * - `video`: referencia (`assetId`) a un vídeo ya importado a la biblioteca
+ *   de assets del proyecto. Cuarto tipo de bloque, añadido sin ningún
+ *   precedente en el modelo anterior a "Bloques de contenido" (no existía
+ *   ningún `videoAssetId`/`videoAssetIds`): mismo criterio que `image`/
+ *   `audio` (una simple referencia por `assetId`, sin límite de cuántos
+ *   bloques de vídeo puede tener una diapositiva). El asset en sí se importa
+ *   con su propio límite de tamaño, más alto que el de imagen/audio (ver
+ *   `MAX_VIDEO_ASSET_BYTES` en `src-tauri/src/persistence/assets.rs`).
  *
  * `id` identifica el bloque de forma estable dentro de `content` (generado
  * una vez al crearlo, nunca reasignado) — necesario para poder editar/
@@ -281,6 +289,11 @@ export const ContentBlockSchema = z.discriminatedUnion('type', [
   z.object({
     id: z.string().uuid(),
     type: z.literal('audio'),
+    assetId: z.string().uuid(),
+  }),
+  z.object({
+    id: z.string().uuid(),
+    type: z.literal('video'),
     assetId: z.string().uuid(),
   }),
 ])

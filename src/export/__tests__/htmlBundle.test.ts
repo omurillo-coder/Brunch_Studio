@@ -31,6 +31,7 @@ import type {
 
 const IMAGE_ASSET_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1'
 const AUDIO_ASSET_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2'
+const VIDEO_ASSET_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa4'
 
 const SLIDE_ID = '11111111-1111-4111-8111-111111111111'
 const DECISION_ID = '22222222-2222-4222-8222-222222222222'
@@ -69,6 +70,10 @@ function imageBlock(assetId: string): ContentBlock {
 function audioBlock(assetId: string): ContentBlock {
   blockCounter += 1
   return { id: `block-audio-${blockCounter}`, type: 'audio', assetId }
+}
+function videoBlock(assetId: string): ContentBlock {
+  blockCounter += 1
+  return { id: `block-video-${blockCounter}`, type: 'video', assetId }
 }
 
 function sampleProject(): ProjectDocument {
@@ -144,6 +149,7 @@ function sampleProject(): ProjectDocument {
 const sampleAssets: ExportAssetMap = {
   [IMAGE_ASSET_ID]: { mimeType: 'image/png', dataBase64: 'UE5HRkFLRQ==' },
   [AUDIO_ASSET_ID]: { mimeType: 'audio/mpeg', dataBase64: 'TVAzRkFLRQ==' },
+  [VIDEO_ASSET_ID]: { mimeType: 'video/mp4', dataBase64: 'TVA0RkFLRQ==' },
 }
 
 // -----------------------------------------------------------------------
@@ -678,6 +684,45 @@ describe('buildHtmlBundle — bloques de contenido de una diapositiva (milestone
     expect((elements[3] as HTMLAudioElement).getAttribute('src')).toBe(
       'data:audio/mpeg;base64,TVAzRkFLRQ==',
     )
+  })
+
+  it('pinta un bloque de vídeo con controles nativos y el mismo ancho/alto máximo que la imagen (clase "media")', () => {
+    const content = [imageBlock(IMAGE_ASSET_ID), videoBlock(VIDEO_ASSET_ID)]
+    runExportedBundle(buildHtmlBundle(blocksProject(content), sampleAssets))
+
+    const card = currentCard()
+    const video = card.querySelector<HTMLVideoElement>('video')
+    expect(video).not.toBeNull()
+    expect(video?.getAttribute('src')).toBe('data:video/mp4;base64,TVA0RkFLRQ==')
+    expect(video?.controls).toBe(true)
+    expect(video?.classList.contains('media')).toBe(true)
+  })
+
+  it('pinta bloques de texto/imagen/audio/vídeo intercalados, en el orden exacto de content', () => {
+    const content = [
+      textBlock(richBody('Primer texto')),
+      videoBlock(VIDEO_ASSET_ID),
+      imageBlock(IMAGE_ASSET_ID),
+      audioBlock(AUDIO_ASSET_ID),
+    ]
+    runExportedBundle(buildHtmlBundle(blocksProject(content), sampleAssets))
+
+    const card = currentCard()
+    const elements = [...card.querySelectorAll<HTMLElement>('.body, video, img, audio')]
+    expect(elements.map((element) => element.tagName)).toEqual(['DIV', 'VIDEO', 'IMG', 'AUDIO'])
+  })
+
+  it('un vídeo no resuelto se omite sin romper el orden de los demás bloques', () => {
+    const content = [videoBlock(VIDEO_ASSET_ID), imageBlock(IMAGE_ASSET_ID)]
+    runExportedBundle(
+      buildHtmlBundle(blocksProject(content), {
+        [IMAGE_ASSET_ID]: sampleAssets[IMAGE_ASSET_ID]!,
+      }),
+    )
+
+    const card = currentCard()
+    expect(card.querySelector('video')).toBeNull()
+    expect(card.querySelector('img')).not.toBeNull()
   })
 
   it('una imagen no resuelta se omite sin romper el orden de las demás', () => {

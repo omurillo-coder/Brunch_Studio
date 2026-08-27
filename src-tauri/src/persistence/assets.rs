@@ -19,17 +19,43 @@ use uuid::Uuid;
 use super::error::PersistenceError;
 use super::schema::verify_container_tables;
 
-/// Límite de tamaño de un archivo importable como asset: 15 MiB.
+/// Límite de tamaño de un archivo importable como asset de imagen/audio: 15 MiB.
 ///
 /// Por qué 15 MB: de sobra para una imagen o un clip de audio corto de buena
-/// calidad (los assets de este editor son ilustraciones/fotos de apoyo y
-/// clips breves, no vídeo ni pistas largas), pero lo bastante bajo para no
-/// permitir que un archivo enorme hinche sin control el `.brunch` (SQLite,
-/// que guarda los bytes tal cual en la columna `data`) ni las exportaciones
-/// (`export_html_bundle`/`export_scorm_package` embeben cada asset como
-/// `data:` URI en base64 dentro de un único HTML — la codificación base64 ya
-/// de por sí añade ~33% de tamaño).
+/// calidad, pero lo bastante bajo para no permitir que un archivo enorme
+/// hinche sin control el `.brunch` (SQLite, que guarda los bytes tal cual en
+/// la columna `data`) ni las exportaciones (`export_html_bundle`/
+/// `export_scorm_package` embeben cada asset como `data:` URI en base64
+/// dentro de un único HTML — la codificación base64 ya de por sí añade ~33%
+/// de tamaño).
 pub const MAX_ASSET_BYTES: u64 = 15 * 1024 * 1024;
+
+/// Límite de tamaño de un archivo importable como asset de VÍDEO: 100 MiB.
+///
+/// Por qué un límite propio, más alto que `MAX_ASSET_BYTES`: un vídeo real
+/// (aunque sea breve y de calidad moderada) pesa muy por encima de los 15 MB
+/// pensados para imagen/audio — aplicarle el mismo límite lo haría
+/// prácticamente inutilizable. Por qué 100 MB y no más: el export HTML/SCORM
+/// sigue embebiendo TODO como `data:` URI en base64 (~33% más pesado) dentro
+/// de un único archivo, y muchas plataformas LMS imponen su propio límite de
+/// tamaño de paquete SCORM (típicamente entre 50 y 250 MB) — 100 MB de vídeo
+/// origen ya produce un paquete considerablemente más pesado en base64, así
+/// que subir el límite sin más criterio arriesgaría paquetes que ni el LMS
+/// destino acepta. 100 MB es un punto intermedio razonable: cubre un vídeo
+/// corto/de apoyo de buena calidad sin disparar el tamaño del paquete
+/// exportado.
+pub const MAX_VIDEO_ASSET_BYTES: u64 = 100 * 1024 * 1024;
+
+/// Límite de tamaño aplicable a un asset ya clasificado por `detect_mime_type`
+/// (`"image"`/`"audio"`/`"video"`, ver esa función): `MAX_VIDEO_ASSET_BYTES`
+/// para vídeo, `MAX_ASSET_BYTES` para cualquier otro tipo reconocido.
+fn max_bytes_for(asset_type: &str) -> u64 {
+    if asset_type == "video" {
+        MAX_VIDEO_ASSET_BYTES
+    } else {
+        MAX_ASSET_BYTES
+    }
+}
 
 /// Metadatos de un asset recién importado (o ya existente, en el caso de
 /// deduplicación), devueltos al frontend.
@@ -55,8 +81,10 @@ pub struct AssetDataDto {
 
 /// Deriva `(tipo, mime_type)` a partir de la extensión de `path` (sin
 /// distinguir mayúsculas/minúsculas). `tipo` es el valor que se guarda en
-/// `assets.type` (`"image"`/`"audio"`). Devuelve `UnsupportedAssetType` si
-/// la extensión no está en la lista reconocida — ni falta ni panic.
+/// `assets.type` (`"image"`/`"audio"`/`"video"` — la columna es `TEXT` sin
+/// restricción `CHECK`, así que un tercer valor no rompe nada que ya
+/// asumiera solo dos posibles). Devuelve `UnsupportedAssetType` si la
+/// extensión no está en la lista reconocida — ni falta ni panic.
 fn detect_mime_type(path: &Path) -> Result<(&'static str, &'static str), PersistenceError> {
     let unsupported = || PersistenceError::UnsupportedAssetType(path.display().to_string());
 
@@ -75,6 +103,9 @@ fn detect_mime_type(path: &Path) -> Result<(&'static str, &'static str), Persist
         "wav" => Ok(("audio", "audio/wav")),
         "ogg" => Ok(("audio", "audio/ogg")),
         "m4a" => Ok(("audio", "audio/mp4")),
+        "mp4" => Ok(("video", "video/mp4")),
+        "webm" => Ok(("video", "video/webm")),
+        "mov" => Ok(("video", "video/quicktime")),
         _ => Err(unsupported()),
     }
 }
@@ -114,14 +145,16 @@ pub fn import_asset(
     source_path: &Path,
 ) -> Result<AssetMetaDto, PersistenceError> {
     let (asset_type, mime_type) = detect_mime_type(source_path)?;
+    let max_bytes = max_bytes_for(asset_type);
 
     // Comprueba el tamaño con `std::fs::metadata` (no carga nada en memoria)
     // ANTES de `std::fs::read`: un archivo que supere el límite se rechaza
-    // sin llegar a leerse por completo.
+    // sin llegar a leerse por completo. El límite depende del tipo ya
+    // detectado (`max_bytes_for`): 100 MB para vídeo, 15 MB para el resto.
     let actual_bytes = std::fs::metadata(source_path)?.len();
-    if actual_bytes > MAX_ASSET_BYTES {
+    if actual_bytes > max_bytes {
         return Err(PersistenceError::AssetTooLarge {
-            max_bytes: MAX_ASSET_BYTES,
+            max_bytes,
             actual_bytes,
         });
     }
@@ -351,6 +384,27 @@ mod tests {
     }
 
     #[test]
+    fn mime_detection_covers_video_extensions() {
+        let dir = TempDir::new().unwrap();
+        let project_path = setup_project(&dir, "mime-detection-video");
+
+        let mp4_path = dir.path().join("clip.mp4");
+        std::fs::write(&mp4_path, b"bytes de video mp4").unwrap();
+        let mp4_meta = import_asset(&project_path, &mp4_path).unwrap();
+        assert_eq!(mp4_meta.mime_type, "video/mp4");
+
+        let webm_path = dir.path().join("clip.webm");
+        std::fs::write(&webm_path, b"bytes de video webm").unwrap();
+        let webm_meta = import_asset(&project_path, &webm_path).unwrap();
+        assert_eq!(webm_meta.mime_type, "video/webm");
+
+        let mov_path = dir.path().join("clip.mov");
+        std::fs::write(&mov_path, b"bytes de video mov").unwrap();
+        let mov_meta = import_asset(&project_path, &mov_path).unwrap();
+        assert_eq!(mov_meta.mime_type, "video/quicktime");
+    }
+
+    #[test]
     fn import_asset_into_missing_project_returns_not_found() {
         let dir = TempDir::new().unwrap();
         let project_path = dir.path().join("no-existe.brunch");
@@ -395,6 +449,45 @@ mod tests {
             other => panic!("se esperaba AssetTooLarge, se obtuvo: {other:?}"),
         }
         // No debe haberse insertado ninguna fila: se rechazó antes de leer.
+        assert_eq!(count_assets(&project_path), 0);
+    }
+
+    #[test]
+    fn import_video_asset_over_image_limit_but_under_video_limit_succeeds() {
+        let dir = TempDir::new().unwrap();
+        let project_path = setup_project(&dir, "video-between-limits");
+
+        // 20 MB: por encima de MAX_ASSET_BYTES (15 MB, límite de
+        // imagen/audio) pero por debajo de MAX_VIDEO_ASSET_BYTES (100 MB) —
+        // debe aceptarse porque el tipo detectado es "video".
+        let source_path = dir.path().join("clip.mp4");
+        let file = std::fs::File::create(&source_path).unwrap();
+        file.set_len(20 * 1024 * 1024).unwrap();
+        assert!(20 * 1024 * 1024 > MAX_ASSET_BYTES);
+        assert!(20 * 1024 * 1024 < MAX_VIDEO_ASSET_BYTES);
+
+        let result = import_asset(&project_path, &source_path);
+        assert!(result.is_ok(), "un vídeo de 20 MB debe importarse: {result:?}");
+        assert_eq!(count_assets(&project_path), 1);
+    }
+
+    #[test]
+    fn import_video_asset_over_video_limit_returns_controlled_error() {
+        let dir = TempDir::new().unwrap();
+        let project_path = setup_project(&dir, "video-over-limit");
+
+        let source_path = dir.path().join("clip.mp4");
+        let file = std::fs::File::create(&source_path).unwrap();
+        file.set_len(MAX_VIDEO_ASSET_BYTES + 1).unwrap();
+
+        let result = import_asset(&project_path, &source_path);
+        match result {
+            Err(PersistenceError::AssetTooLarge { max_bytes, actual_bytes }) => {
+                assert_eq!(max_bytes, MAX_VIDEO_ASSET_BYTES);
+                assert_eq!(actual_bytes, MAX_VIDEO_ASSET_BYTES + 1);
+            }
+            other => panic!("se esperaba AssetTooLarge, se obtuvo: {other:?}"),
+        }
         assert_eq!(count_assets(&project_path), 0);
     }
 

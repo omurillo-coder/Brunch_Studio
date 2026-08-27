@@ -64,19 +64,40 @@ function PlayerAudio({
   return <audio className={styles.audio} controls src={dataUri} />
 }
 
+/** Vídeo adjunto de un bloque de `SlideNode.content` (cuarto tipo de bloque):
+ *  mismo criterio de tamaño máximo ya usado para las imágenes (`styles.media`
+ *  — ancho/alto máximo, sin desbordar ni distorsionar la tarjeta), con
+ *  controles nativos de reproducción. Mismo criterio de fallo silencioso que
+ *  `PlayerImage`/`PlayerAudio`. */
+function PlayerVideo({
+  assetId,
+  filePath,
+  assetRepository,
+}: {
+  assetId: string
+  filePath: string
+  assetRepository: AssetRepository
+}) {
+  const { dataUri } = useAssetDataUri(filePath, assetId, assetRepository)
+  if (!dataUri) return null
+  // eslint-disable-next-line jsx-a11y/media-has-caption
+  return <video className={styles.media} controls src={dataUri} />
+}
+
 /**
  * Un bloque de `SlideNode.content`, pintado según su `type` (milestone
- * "Bloques de contenido"): texto vía `RichTextView`, imagen/audio vía
- * `PlayerImage`/`PlayerAudio` — la misma resolución de asset que antes se
- * llamaba una vez por nodo, ahora generalizada a llamarse por cada bloque de
- * su tipo. Un bloque de texto vacío (sin escribir nada aún) no pinta nada,
- * mismo criterio de "vacío = nada" que el antiguo `body` único.
+ * "Bloques de contenido"): texto vía `RichTextView`, imagen/audio/vídeo vía
+ * `PlayerImage`/`PlayerAudio`/`PlayerVideo` — la misma resolución de asset
+ * que antes se llamaba una vez por nodo, ahora generalizada a llamarse por
+ * cada bloque de su tipo. Un bloque de texto vacío (sin escribir nada aún) no
+ * pinta nada, mismo criterio de "vacío = nada" que el antiguo `body` único.
  *
  * `key`: el llamador (`SlideContent`) ya pone `key={block.id}` en cada
  * instancia de este componente para la identidad de lista; aquí, en el
  * elemento raíz que devuelve cada rama, se añade además `key={block.assetId}`
- * para imagen/audio — mismo motivo que documenta `PlayerImage`/`PlayerAudio`
- * más abajo: si el asset de un bloque cambiara, fuerza a React a montar una
+ * para imagen/audio/vídeo — mismo motivo que documenta
+ * `PlayerImage`/`PlayerAudio`/`PlayerVideo` más abajo: si el asset de un
+ * bloque cambiara, fuerza a React a montar una
  * instancia nueva en vez de reutilizar un `dataUri` que ya no corresponde.
  */
 function ContentBlockView({
@@ -105,6 +126,15 @@ function ContentBlockView({
     case 'audio':
       return (
         <PlayerAudio
+          key={block.assetId}
+          assetId={block.assetId}
+          filePath={filePath}
+          assetRepository={assetRepository}
+        />
+      )
+    case 'video':
+      return (
+        <PlayerVideo
           key={block.assetId}
           assetId={block.assetId}
           filePath={filePath}

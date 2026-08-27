@@ -4,6 +4,7 @@ import {
   addAudioBlock,
   addImageBlock,
   addTextBlock,
+  addVideoBlock,
   moveContentBlock,
   removeContentBlock,
   updateTextBlockBody,
@@ -13,6 +14,7 @@ import type { SlideNode } from '../schemas'
 const IMAGE_ID = '11111111-1111-1111-1111-111111111111'
 const IMAGE_ID_2 = '11111111-1111-1111-1111-111111111112'
 const AUDIO_ID = '22222222-2222-2222-2222-222222222222'
+const VIDEO_ID = '33333333-3333-3333-3333-333333333333'
 
 /** Diapositiva de un proyecto en blanco: nace con un único bloque de texto
  *  vacío (ver `newSlideNode` en `src/domain/project.ts`). */
@@ -27,19 +29,30 @@ function slideOf(project: ReturnType<typeof createProject>, id: string): SlideNo
   return node
 }
 
-describe('addTextBlock / addImageBlock / addAudioBlock', () => {
+describe('addTextBlock / addImageBlock / addAudioBlock / addVideoBlock', () => {
   it('añaden un bloque al final de content por defecto', () => {
     const { project, slideId } = blankSlide()
     let updated = addImageBlock(project, slideId, IMAGE_ID)
     updated = addAudioBlock(updated, slideId, AUDIO_ID)
+    updated = addVideoBlock(updated, slideId, VIDEO_ID)
 
     const slide = slideOf(updated, slideId)
-    expect(slide.content.map((block) => block.type)).toEqual(['text', 'image', 'audio'])
+    expect(slide.content.map((block) => block.type)).toEqual(['text', 'image', 'audio', 'video'])
     expect(slide.content[1]).toMatchObject({ type: 'image', assetId: IMAGE_ID })
     expect(slide.content[2]).toMatchObject({ type: 'audio', assetId: AUDIO_ID })
+    expect(slide.content[3]).toMatchObject({ type: 'video', assetId: VIDEO_ID })
 
     // Inmutabilidad: el proyecto original no se toca.
     expect(slideOf(project, slideId).content).toHaveLength(1)
+  })
+
+  it('addVideoBlock sigue el mismo patrón que addAudioBlock: inserta al final, o en `index` si se indica', () => {
+    const { project, slideId } = blankSlide()
+    const appended = addVideoBlock(project, slideId, VIDEO_ID)
+    expect(slideOf(appended, slideId).content.map((block) => block.type)).toEqual(['text', 'video'])
+
+    const inserted = addVideoBlock(project, slideId, VIDEO_ID, 0)
+    expect(slideOf(inserted, slideId).content.map((block) => block.type)).toEqual(['video', 'text'])
   })
 
   it('insertan en la posición indicada cuando se pasa `index`', () => {

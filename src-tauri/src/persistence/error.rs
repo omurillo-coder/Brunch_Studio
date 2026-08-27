@@ -24,12 +24,14 @@ pub enum PersistenceError {
     /// campo `schemaVersion` numérico).
     InvalidDocument(String),
     /// El archivo indicado para importar como asset no tiene una extensión
-    /// reconocida como imagen o audio. El contenido es la ruta original
-    /// (para poder mostrar al usuario qué archivo se rechazó).
+    /// reconocida como imagen, audio o vídeo. El contenido es la ruta
+    /// original (para poder mostrar al usuario qué archivo se rechazó).
     UnsupportedAssetType(String),
-    /// El archivo indicado para importar como asset supera
-    /// `assets::MAX_ASSET_BYTES`. Se detecta con `std::fs::metadata` (sin
-    /// leer el contenido) antes de intentar cargarlo en memoria.
+    /// El archivo indicado para importar como asset supera el límite de
+    /// tamaño de su tipo (`assets::MAX_ASSET_BYTES` para imagen/audio,
+    /// `assets::MAX_VIDEO_ASSET_BYTES` para vídeo — ver `max_bytes_for` en
+    /// `assets.rs`). Se detecta con `std::fs::metadata` (sin leer el
+    /// contenido) antes de intentar cargarlo en memoria.
     AssetTooLarge { max_bytes: u64, actual_bytes: u64 },
     /// Se intentó abrir un `.brunch` que ya está abierto en OTRA ventana de
     /// esta misma instancia de la app (ver `crate::open_registry`). El
@@ -62,7 +64,7 @@ impl fmt::Display for PersistenceError {
             }
             PersistenceError::UnsupportedAssetType(path) => write!(
                 f,
-                "tipo de archivo no soportado como asset (ni imagen ni audio reconocidos): {path}"
+                "tipo de archivo no soportado como asset (ni imagen, ni audio, ni vídeo reconocidos): {path}"
             ),
             PersistenceError::AssetTooLarge { max_bytes, actual_bytes } => write!(
                 f,

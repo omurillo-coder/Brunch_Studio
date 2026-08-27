@@ -491,11 +491,13 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
    *  contenido"), según su \`type\` — traducción literal de
    *  \`ContentBlockView\` en \`src/player/PlayerScreen.tsx\`: texto (HTML ya
    *  renderizado en tiempo de exportación, indexado por \`block.id\` en
-   *  \`bodyHtml\`, ver \`renderNodeBodies\` en \`htmlBundle.ts\`), imagen o
-   *  audio (\`data:\` URI ya resuelto, indexado por \`block.assetId\` en
-   *  \`assetUris\`). Un bloque de texto vacío, o un bloque de imagen/audio
-   *  cuyo asset no se pudo leer en tiempo de exportación, no pinta nada —
-   *  mismo criterio tolerante que el resto del runtime exportado. */
+   *  \`bodyHtml\`, ver \`renderNodeBodies\` en \`htmlBundle.ts\`), imagen, audio
+   *  o vídeo (\`data:\` URI ya resuelto, indexado por \`block.assetId\` en
+   *  \`assetUris\`). Un bloque de texto vacío, o un bloque de imagen/audio/
+   *  vídeo cuyo asset no se pudo leer en tiempo de exportación, no pinta nada
+   *  — mismo criterio tolerante que el resto del runtime exportado. El vídeo
+   *  reutiliza la clase \`media\` (mismo ancho/alto máximo que la imagen, ver
+   *  exportedStyles.ts) para no desbordar ni distorsionar la tarjeta. */
   function appendContentBlock(card, block) {
     if (block.type === 'text') {
       var html = bodyHtml[block.id];
@@ -527,6 +529,17 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
       audio.controls = true;
       audio.src = audioUri;
       card.appendChild(audio);
+      return;
+    }
+    if (block.type === 'video') {
+      var videoUri = assetUris[block.assetId];
+      if (!videoUri) {
+        return;
+      }
+      var video = el('video', 'media');
+      video.controls = true;
+      video.src = videoUri;
+      card.appendChild(video);
     }
   }
 
