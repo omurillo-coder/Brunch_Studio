@@ -21,11 +21,6 @@ const HTML_FILE_FILTERS = [{ name: 'Página web', extensions: ['html'] }]
 /** Filtro del diálogo de guardado de la exportación a paquete SCORM. */
 const SCORM_FILE_FILTERS = [{ name: 'Paquete SCORM', extensions: ['zip'] }]
 
-/** Filtro del diálogo de guardado de la "vista de guión imprimible"
- *  (`src/export/scriptExport.ts`). Mismo tipo de archivo que el export HTML
- *  interactivo (`.html`), documento distinto. */
-const SCRIPT_FILE_FILTERS = [{ name: 'Guión imprimible', extensions: ['html'] }]
-
 /** Filtro del diálogo de abrir para importar un archivo Twee (ver `src/import/twee`). */
 const TWEE_FILE_FILTERS = [{ name: 'Archivo Twee', extensions: ['twee', 'tw'] }]
 
@@ -93,12 +88,6 @@ async function pickExportScormPathWithNativeDialog(suggestedName?: string): Prom
   return path ?? null
 }
 
-async function pickExportScriptPathWithNativeDialog(suggestedName?: string): Promise<string | null> {
-  const defaultPath = suggestedName ? `${sanitizeFileName(suggestedName)}.html` : undefined
-  const path = await save({ filters: SCRIPT_FILE_FILTERS, defaultPath })
-  return path ?? null
-}
-
 async function pickImportTweePathWithNativeDialog(): Promise<string | null> {
   const selected = await open({ filters: TWEE_FILE_FILTERS, multiple: false, directory: false })
   return typeof selected === 'string' ? selected : null
@@ -157,7 +146,6 @@ export const defaultAppServices: AppServices = {
   pickImportAssetPath: pickImportAssetPathWithNativeDialog,
   pickExportHtmlPath: pickExportHtmlPathWithNativeDialog,
   pickExportScormPath: pickExportScormPathWithNativeDialog,
-  pickExportScriptPath: pickExportScriptPathWithNativeDialog,
   assetRepository: new TauriAssetRepository(),
   htmlBundleWriter: new TauriHtmlBundleWriter(),
   scormPackageWriter: new TauriScormPackageWriter(),

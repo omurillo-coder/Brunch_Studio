@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { useCanRedo, useCanUndo, useProject, useProjectStore } from '../../store'
 import type { SaveStatus } from '../../store'
-import { useHtmlExport, useScormExport, useScriptExport } from '../../export'
+import { useHtmlExport, useScormExport } from '../../export'
 import styles from './Topbar.module.css'
 
 /**
@@ -71,15 +71,13 @@ export interface TopbarProps {
 /**
  * Barra superior del editor: nombre del proyecto, estado de guardado,
  * deshacer/rehacer (con atajo de teclado), "Exportar HTML", "Exportar
- * SCORM", "Exportar guión" y el botón "Probar".
+ * SCORM" y el botón "Probar".
  *
- * "Exportar HTML"/"Exportar SCORM"/"Exportar guión" viven aquí (y no en el
- * panel izquierdo ni en el Inspector) porque son acciones de proyecto, no de
- * nodo: al lado del nombre del proyecto, del estado de guardado y de
- * "Probar" — las otras cosas de la interfaz que hablan del documento entero y
- * no de la selección actual. "Exportar guión" (`src/export/scriptExport.ts`)
- * es un documento de solo lectura para revisar contenido, distinto del
- * export interactivo de los otros dos botones.
+ * "Exportar HTML"/"Exportar SCORM" viven aquí (y no en el panel izquierdo ni
+ * en el Inspector) porque son acciones de proyecto, no de nodo: al lado del
+ * nombre del proyecto, del estado de guardado y de "Probar" — las otras
+ * cosas de la interfaz que hablan del documento entero y no de la selección
+ * actual.
  */
 export function Topbar({
   filePath,
@@ -97,7 +95,6 @@ export function Topbar({
   const setPreviewMode = useProjectStore((state) => state.setPreviewMode)
   const htmlExport = useHtmlExport(filePath)
   const scormExport = useScormExport(filePath)
-  const scriptExport = useScriptExport()
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -215,29 +212,6 @@ export function Topbar({
           disabled={scormExport.status === 'exporting'}
         >
           {scormExport.status === 'exporting' ? 'Exportando…' : 'Exportar SCORM'}
-        </button>
-        {/* "Exportar guión": vista de solo lectura en texto claro de todo el
-            escenario, para revisar contenido sin el programa (documento
-            distinto del export interactivo de arriba, ver
-            `src/export/scriptExport.ts`). Mismo criterio de mensaje honesto
-            y sin jerga que los dos anteriores. */}
-        {scriptExport.message && (
-          <span
-            role={scriptExport.status === 'error' ? 'alert' : 'status'}
-            className={
-              scriptExport.status === 'error' ? styles.exportError : styles.exportStatus
-            }
-          >
-            {scriptExport.message}
-          </span>
-        )}
-        <button
-          type="button"
-          className={styles.exportButton}
-          onClick={scriptExport.exportScript}
-          disabled={scriptExport.status === 'exporting'}
-        >
-          {scriptExport.status === 'exporting' ? 'Exportando…' : 'Exportar guión'}
         </button>
         <button type="button" className={styles.playButton} onClick={() => setPreviewMode(true)}>
           ▶ Probar

@@ -51,14 +51,6 @@ export interface AppServices {
    * con extensión `.zip`. Mismo patrón que `pickExportHtmlPath`.
    */
   pickExportScormPath: (suggestedName?: string) => Promise<string | null>
-  /**
-   * Abre el diálogo nativo de "Guardar como…" para elegir dónde escribir la
-   * "vista de guión imprimible" (`.html`, `src/export/scriptExport.ts`);
-   * `null` si el usuario cancela. `suggestedName` preselecciona el nombre de
-   * archivo propuesto, con extensión `.html`. Mismo patrón que
-   * `pickExportHtmlPath`.
-   */
-  pickExportScriptPath: (suggestedName?: string) => Promise<string | null>
   /** Importa/lee assets binarios (imagen/audio) de un `.brunch`. */
   assetRepository: AssetRepository
   /** Escribe en disco el HTML autónomo generado por `src/export`. */
