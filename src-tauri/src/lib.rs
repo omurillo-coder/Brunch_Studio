@@ -1,9 +1,11 @@
 mod app_menu;
 mod commands;
 mod open_file;
+mod open_registry;
 mod persistence;
 
 use open_file::{PendingOpenPaths, StartupState};
+use open_registry::OpenProjectRegistry;
 use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -27,6 +29,21 @@ pub fn run() {
     }))
     .plugin(tauri_plugin_dialog::init())
     .on_menu_event(app_menu::handle_menu_event)
+    // Libera, en `OpenProjectRegistry` (ver comentario de módulo en
+    // `open_registry.rs`), cualquier ruta `.brunch` que la ventana
+    // destruida tuviera reservada — uno de los dos mecanismos de
+    // liberación (el otro es el comando explícito `release_open_project`,
+    // para "Cerrar proyecto" sin cerrar la ventana). `Destroyed` y no
+    // `CloseRequested`: este último puede cancelarse (ver
+    // `useWindowCloseGuard.ts`), así que solo `Destroyed` garantiza que la
+    // ventana de verdad ha dejado de existir.
+    .on_window_event(|window, event| {
+      if matches!(event, tauri::WindowEvent::Destroyed) {
+        if let Some(registry) = window.try_state::<OpenProjectRegistry>() {
+          registry.release_window(window.label());
+        }
+      }
+    })
     .setup(|app| {
       if cfg!(debug_assertions) {
         app.handle().plugin(
@@ -38,6 +55,9 @@ pub fn run() {
 
       app.manage(PendingOpenPaths::new());
       app.manage(StartupState::new());
+      // Registro de rutas `.brunch` abiertas (ver `open_registry.rs`):
+      // evita que el mismo archivo se abra a la vez en dos ventanas.
+      app.manage(OpenProjectRegistry::new());
       // Arranque en frío (tarea 1): si el propio sistema operativo invocó el
       // ejecutable con la ruta de un `.brunch` como argumento (asociación de
       // tipo de archivo del instalador en Windows/Linux; respaldo en
@@ -55,6 +75,7 @@ pub fn run() {
     .invoke_handler(tauri::generate_handler![
       commands::create_branch_project,
       commands::open_branch_project,
+      commands::release_open_project,
       commands::save_branch_project,
       commands::import_asset,
       commands::get_asset,

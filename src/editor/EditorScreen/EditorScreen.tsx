@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useAppServices } from '../../app/AppServicesContext'
 import { Topbar } from '../Topbar/Topbar'
 import { LeftPanel } from '../LeftPanel/LeftPanel'
 import { Inspector } from '../Inspector/Inspector'
@@ -53,7 +54,11 @@ export interface EditorScreenProps {
  * (`AUTOSAVE_DEBOUNCE_MS`, ver `useAutosave.ts`) se perdería: al desmontarse
  * el efecto de autoguardado limpia su temporizador pendiente (`clearTimeout`
  * en el cleanup) en vez de dejarlo completarse, así que hay que adelantar esa
- * escritura explícitamente antes de desmontar.
+ * escritura explícitamente antes de desmontar. Después, `releaseOpenProject`
+ * (`AppServices`) libera el registro de "proyecto abierto en esta ventana"
+ * que mantiene Rust (`OpenProjectRegistry`, ver `src-tauri/src/open_registry.rs`)
+ * — evita que "Cerrar proyecto" seguido de reabrir el mismo archivo se tope
+ * con el aviso de "ya está abierto en otra ventana" contra sí mismo.
  *
  * Panel izquierdo ocultable (tarea 1): `leftPanelVisible` es un estado local
  * de este componente (no del store de dominio ni del documento `.brunch` —
@@ -79,6 +84,7 @@ export interface EditorScreenProps {
  */
 export function EditorScreen({ filePath, onCloseProject }: EditorScreenProps) {
   const previewMode = usePreviewMode()
+  const { releaseOpenProject } = useAppServices()
   const { flushPendingSave } = useAutosave(filePath)
   // Guardián de cierre de ventana (tarea "cerrar con cambios pendientes"):
   // mismo criterio que `useAutosave` en cuanto a colocación — antes del
@@ -95,6 +101,12 @@ export function EditorScreen({ filePath, onCloseProject }: EditorScreenProps) {
 
   async function handleCloseProject() {
     await flushPendingSave()
+    // Libera el registro de "proyecto abierto" en Rust (`OpenProjectRegistry`,
+    // ver `src-tauri/src/open_registry.rs`) ANTES de volver a `HomeScreen`:
+    // sin esto, esta misma ventana (o cualquier otra) no podría reabrir este
+    // archivo — Rust seguiría pensando que sigue abierto aquí aunque ya no
+    // haya ningún `EditorScreen` mostrándolo.
+    await releaseOpenProject()
     onCloseProject()
   }
 

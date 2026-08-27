@@ -251,4 +251,38 @@ describe('EditorScreen — "Cerrar proyecto"', () => {
     })
     expect(repository.saveProject).toHaveBeenCalledTimes(1)
   })
+
+  /**
+   * Registro de "proyecto abierto" en Rust (`OpenProjectRegistry`, ver
+   * `src-tauri/src/open_registry.rs`): "Cerrar proyecto" debe liberarlo
+   * ANTES de volver a `HomeScreen` (`onCloseProject`) — si no, ni esta
+   * ventana ni ninguna otra podría reabrir el mismo archivo después.
+   */
+  it('libera el registro de proyecto abierto (releaseOpenProject) antes de avisar a onCloseProject', async () => {
+    const repository = createStubRepository()
+    const onCloseProject = vi.fn()
+    const releaseOpenProject = vi.fn().mockResolvedValue(undefined)
+    render(
+      <AppServicesProvider
+        services={{ repository, assetRepository: new MemoryAssetRepository(), releaseOpenProject }}
+      >
+        <EditorScreen filePath={TEST_FILE_PATH} onCloseProject={onCloseProject} />
+      </AppServicesProvider>,
+    )
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0)
+    })
+
+    await act(async () => {
+      emitMenuEvent('menu-close-project')
+      await vi.advanceTimersByTimeAsync(0)
+    })
+
+    expect(releaseOpenProject).toHaveBeenCalledTimes(1)
+    expect(onCloseProject).toHaveBeenCalledTimes(1)
+    expect(releaseOpenProject.mock.invocationCallOrder[0]).toBeLessThan(
+      onCloseProject.mock.invocationCallOrder[0] as number,
+    )
+  })
 })

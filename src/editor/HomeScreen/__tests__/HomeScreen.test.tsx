@@ -1,15 +1,29 @@
 import { fireEvent, render, screen } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { HomeScreen } from '../HomeScreen'
 import { AppServicesProvider } from '../../../app/AppServicesContext'
 import type { AppServices } from '../../../app/AppServices'
-import { MemoryProjectRepository, MemoryTextFileReader } from '../../../persistence'
+import {
+  MemoryProjectRepository,
+  MemoryTextFileReader,
+  PersistenceCommandError,
+} from '../../../persistence'
+import type { ProjectRepository } from '../../../persistence'
 import { createProject } from '../../../domain'
 import { useProjectStore } from '../../../store'
 import { resetProjectStore } from '../../../store/testHelpers'
 
+const messageMock = vi.fn()
+vi.mock('@tauri-apps/plugin-dialog', () => ({
+  message: (...args: unknown[]) => messageMock(...args),
+}))
+
 beforeEach(() => {
   resetProjectStore()
+})
+
+afterEach(() => {
+  messageMock.mockReset()
 })
 
 function renderHomeScreen(services: Partial<AppServices>, onProjectOpened = vi.fn()) {
@@ -135,6 +149,29 @@ describe('HomeScreen', () => {
     expect(onProjectOpened).not.toHaveBeenCalled()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(screen.getByText('Abrir proyecto')).toBeInTheDocument()
+  })
+
+  it('"Abrir proyecto" sobre un archivo ya abierto en otra ventana muestra el diálogo nativo de aviso y no navega', async () => {
+    messageMock.mockResolvedValue(undefined)
+    const repository: ProjectRepository = {
+      createProject: vi.fn(),
+      openProject: vi
+        .fn()
+        .mockRejectedValue(new PersistenceCommandError('AlreadyOpenElsewhere', '/tmp/ya-abierto.brunch')),
+      saveProject: vi.fn(),
+    }
+    const pickOpenProjectPath = vi.fn().mockResolvedValue('/tmp/ya-abierto.brunch')
+    const onProjectOpened = renderHomeScreen({ repository, pickOpenProjectPath })
+
+    fireEvent.click(screen.getByText('Abrir proyecto'))
+
+    await vi.waitFor(() => expect(messageMock).toHaveBeenCalledTimes(1))
+    const [msg] = messageMock.mock.calls[0] as [string]
+    expect(msg).toMatch(/ya está abierto en otra ventana/i)
+
+    expect(onProjectOpened).not.toHaveBeenCalled()
+    // No se muestra además el mensaje de error genérico de "Abrir proyecto".
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
   it('un fallo al abrir muestra un mensaje de error comprensible, sin jerga técnica', async () => {

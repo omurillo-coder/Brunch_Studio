@@ -1,9 +1,15 @@
 import { act, fireEvent, render, screen } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../App'
-import { MemoryProjectRepository } from '../persistence'
+import { MemoryProjectRepository, PersistenceCommandError } from '../persistence'
+import type { ProjectRepository } from '../persistence'
 import { createProject } from '../domain'
 import { resetProjectStore } from '../store/testHelpers'
+
+const messageMock = vi.fn()
+vi.mock('@tauri-apps/plugin-dialog', () => ({
+  message: (...args: unknown[]) => messageMock(...args),
+}))
 
 /**
  * "Cerrar proyecto" ya no es un botón (tarea 2: se movió al menú nativo
@@ -36,6 +42,10 @@ vi.mock('@tauri-apps/api/event', () => ({
 beforeEach(() => {
   resetProjectStore()
   menuEventListeners.clear()
+})
+
+afterEach(() => {
+  messageMock.mockReset()
 })
 
 describe('App: navegación HomeScreen -> EditorScreen', () => {
@@ -147,6 +157,33 @@ describe('App: navegación HomeScreen -> EditorScreen', () => {
     )
     // Sigue en HomeScreen: no hay rastro del shell del editor.
     expect(screen.getByText('Nuevo proyecto')).toBeInTheDocument()
+    expect(screen.queryByText('▶ Probar')).not.toBeInTheDocument()
+  })
+
+  it('con una ruta inicial ya abierta en otra ventana, muestra el diálogo nativo de aviso y se queda en HomeScreen', async () => {
+    messageMock.mockResolvedValue(undefined)
+    const repository: ProjectRepository = {
+      createProject: vi.fn(),
+      openProject: vi
+        .fn()
+        .mockRejectedValue(new PersistenceCommandError('AlreadyOpenElsewhere', '/tmp/ya-abierto.brunch')),
+      saveProject: vi.fn(),
+    }
+    const pickSaveProjectPath = vi.fn().mockResolvedValue(null)
+    const pickOpenProjectPath = vi.fn().mockResolvedValue(null)
+    const getInitialOpenPath = vi.fn().mockResolvedValue('/tmp/ya-abierto.brunch')
+
+    render(
+      <App services={{ repository, pickSaveProjectPath, pickOpenProjectPath, getInitialOpenPath }} />,
+    )
+
+    await vi.waitFor(() => expect(messageMock).toHaveBeenCalledTimes(1))
+    const [msg] = messageMock.mock.calls[0] as [string]
+    expect(msg).toMatch(/ya está abierto en otra ventana/i)
+
+    // Se queda en HomeScreen, sin el mensaje de error genérico ni rastro del editor.
+    expect(screen.getByText('Nuevo proyecto')).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(screen.queryByText('▶ Probar')).not.toBeInTheDocument()
   })
 

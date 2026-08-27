@@ -86,3 +86,28 @@ describe('getInitialOpenPath (consulta la ruta .brunch pendiente al backend)', (
     await expect(defaultAppServices.getInitialOpenPath()).resolves.toBeNull()
   })
 })
+
+/**
+ * `releaseOpenProject` (guarda "mismo `.brunch` en dos ventanas a la vez"):
+ * invoca `release_open_project` (ver `src-tauri/src/commands/mod.rs`) para
+ * que Rust libere, si la había, la ruta que esta ventana tenía reservada en
+ * `OpenProjectRegistry`. La ventana que llama la identifica Tauri
+ * automáticamente (parámetro `window: tauri::WebviewWindow` inyectado en el
+ * comando), así que no hace falta pasar ninguna label desde aquí — a
+ * diferencia de `take_pending_open_path`.
+ */
+describe('releaseOpenProject (libera el registro de proyecto abierto en Rust)', () => {
+  it('invoca release_open_project sin argumentos adicionales', async () => {
+    vi.mocked(invoke).mockResolvedValueOnce(undefined)
+
+    await defaultAppServices.releaseOpenProject()
+
+    expect(invoke).toHaveBeenCalledWith('release_open_project')
+  })
+
+  it('sin backend Tauri real detrás (invoke rechaza), no propaga el error', async () => {
+    vi.mocked(invoke).mockRejectedValueOnce(new Error('no Tauri backend'))
+
+    await expect(defaultAppServices.releaseOpenProject()).resolves.toBeUndefined()
+  })
+})

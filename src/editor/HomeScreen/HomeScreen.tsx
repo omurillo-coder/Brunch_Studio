@@ -5,6 +5,7 @@ import type { ProjectDocument } from '../../domain'
 import { convertTweeToProject } from '../../import/twee'
 import { useAppServices } from '../../app/AppServicesContext'
 import { openExistingProject } from '../../app/openExistingProject'
+import { showAlreadyOpenElsewhereWarningIfApplicable } from '../../app/alreadyOpenElsewhereWarning'
 import { useProjectStore } from '../../store'
 import logo from '../../assets/logo.png'
 import styles from './HomeScreen.module.css'
@@ -113,8 +114,14 @@ export function HomeScreen({ onProjectOpened, initialError }: HomeScreenProps) {
       const document = await openExistingProject(repository, path)
       loadProject(document)
       onProjectOpened(path)
-    } catch {
-      setError('No se ha podido abrir ese archivo. Comprueba que es un proyecto de Brunch Studio válido.')
+    } catch (error) {
+      // Caso específico: el archivo ya está abierto en otra ventana (ver
+      // `alreadyOpenElsewhereWarning.ts`). En ese caso no se navega a
+      // `EditorScreen` ni se muestra el mensaje genérico de abajo — el
+      // propio diálogo nativo ya deja claro qué ha pasado.
+      if (!(await showAlreadyOpenElsewhereWarningIfApplicable(error))) {
+        setError('No se ha podido abrir ese archivo. Comprueba que es un proyecto de Brunch Studio válido.')
+      }
       setBusy(false)
     }
   }

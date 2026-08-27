@@ -110,6 +110,23 @@ async function getInitialOpenPathFromTauri(): Promise<string | null> {
 }
 
 /**
+ * Invoca `release_open_project` (`src-tauri/src/commands/mod.rs`) para que
+ * Rust libere, si la había, la ruta `.brunch` que ESTA ventana tenía
+ * reservada en `OpenProjectRegistry`. Mismo criterio de robustez que
+ * `getInitialOpenPathFromTauri`: envuelto en `try/catch` porque sin backend
+ * Tauri real detrás (tests en jsdom, `npm run dev` fuera de un webview
+ * Tauri) `invoke` simplemente rechaza, y aquí no hay nada más que hacer
+ * salvo no tirar la app abajo — no queda ningún registro real que liberar.
+ */
+async function releaseOpenProjectInTauri(): Promise<void> {
+  try {
+    await invoke('release_open_project')
+  } catch (error) {
+    console.warn('[releaseOpenProjectInTauri] No se pudo liberar el registro de proyecto abierto.', error)
+  }
+}
+
+/**
  * Servicios "reales" por defecto: repositorio respaldado por los comandos
  * Tauri y diálogos nativos del sistema operativo.
  *
@@ -130,6 +147,7 @@ export const defaultAppServices: AppServices = {
   pickImportTweePath: pickImportTweePathWithNativeDialog,
   textFileReader: new TauriTextFileReader(),
   getInitialOpenPath: getInitialOpenPathFromTauri,
+  releaseOpenProject: releaseOpenProjectInTauri,
 }
 
 const AppServicesContext = createContext<AppServices>(defaultAppServices)

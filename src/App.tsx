@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useState } from 'react'
 import { AppServicesProvider, useAppServices } from './app/AppServicesContext'
 import type { AppServices } from './app/AppServices'
 import { openExistingProject } from './app/openExistingProject'
+import { showAlreadyOpenElsewhereWarningIfApplicable } from './app/alreadyOpenElsewhereWarning'
 import { HomeScreen } from './editor/HomeScreen/HomeScreen'
 import { useProjectStore } from './store'
 import styles from './App.module.css'
@@ -87,8 +88,14 @@ function AppShell() {
         if (cancelled) return
         loadProject(document)
         setOpenProjectPath(path)
-      } catch {
-        if (!cancelled) {
+      } catch (error) {
+        if (cancelled) return
+        // Mismo criterio que "Abrir proyecto" en `HomeScreen`: si el motivo
+        // concreto es que ya está abierto en otra ventana, el propio
+        // diálogo nativo de aviso ya lo explica — no hace falta (ni se
+        // debe) mostrar además el mensaje genérico de abajo.
+        const alreadyWarned = await showAlreadyOpenElsewhereWarningIfApplicable(error)
+        if (!cancelled && !alreadyWarned) {
           setInitialOpenError(
             'No se ha podido abrir ese archivo. Comprueba que es un proyecto de Brunch Studio válido.',
           )

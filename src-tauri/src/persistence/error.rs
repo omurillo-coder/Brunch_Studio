@@ -31,6 +31,12 @@ pub enum PersistenceError {
     /// `assets::MAX_ASSET_BYTES`. Se detecta con `std::fs::metadata` (sin
     /// leer el contenido) antes de intentar cargarlo en memoria.
     AssetTooLarge { max_bytes: u64, actual_bytes: u64 },
+    /// Se intentó abrir un `.brunch` que ya está abierto en OTRA ventana de
+    /// esta misma instancia de la app (ver `crate::open_registry`). El
+    /// contenido es la ruta que se intentó abrir, para poder mostrarla en el
+    /// mensaje al usuario. Evita el escenario de pérdida de datos silenciosa
+    /// en el que dos ventanas autoguardan el mismo archivo por separado.
+    AlreadyOpenElsewhere(String),
     /// Error de E/S genérico.
     Io(String),
     /// Error de SQLite genérico no cubierto por las variantes anteriores.
@@ -62,6 +68,9 @@ impl fmt::Display for PersistenceError {
                 f,
                 "el archivo es demasiado grande para importarse como asset: {actual_bytes} bytes (máximo {max_bytes} bytes)"
             ),
+            PersistenceError::AlreadyOpenElsewhere(path) => {
+                write!(f, "el proyecto ya está abierto en otra ventana: {path}")
+            }
             PersistenceError::Io(message) => write!(f, "error de E/S: {message}"),
             PersistenceError::Sqlite(message) => write!(f, "error de SQLite: {message}"),
         }

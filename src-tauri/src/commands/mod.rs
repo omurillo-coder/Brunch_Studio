@@ -7,6 +7,9 @@
 
 use std::path::Path;
 
+use tauri::Manager;
+
+use crate::open_registry::OpenProjectRegistry;
 use crate::persistence::{self, AssetDataDto, AssetMetaDto, PersistenceError};
 
 /// Crea un `.brunch` nuevo en `path`: inicializa el esquema SQLite y guarda
@@ -22,9 +25,53 @@ pub fn create_branch_project(path: String, document_json: String) -> Result<(), 
 /// Abre un `.brunch` existente en `path` y devuelve el JSON del
 /// `ProjectDocument` guardado, tal cual (el frontend lo valida con
 /// `ProjectDocumentSchema.parse` antes de confiar en él).
+///
+/// Único punto compartido por TODOS los flujos que abren un `.brunch` ya
+/// existente ("Abrir proyecto" en `HomeScreen.tsx`, doble clic desde
+/// Finder/Explorador vía `open_file.rs`, "Nueva ventana" con una ruta
+/// concreta) — por eso es también el sitio único donde se aplica la guarda
+/// contra abrir el MISMO archivo en dos ventanas a la vez (ver
+/// `crate::open_registry`): antes de leer/parsear el archivo de verdad, se
+/// reserva la ruta a nombre de la ventana que llama (`window`, inyectado por
+/// Tauri). Si ya estaba reservada por OTRA ventana, se trae esa ventana al
+/// frente (`set_focus`) y se rechaza con `AlreadyOpenElsewhere` sin tocar el
+/// archivo. Si `open_project_file` falla por cualquier otro motivo (no
+/// encontrado, inválido…), se deshace la reserva recién hecha: la ventana no
+/// se queda "poseyendo" una ruta que en realidad no llegó a abrir.
 #[tauri::command]
-pub fn open_branch_project(path: String) -> Result<String, PersistenceError> {
-    persistence::open_project_file(Path::new(&path))
+pub fn open_branch_project(
+    path: String,
+    window: tauri::WebviewWindow,
+    registry: tauri::State<'_, OpenProjectRegistry>,
+) -> Result<String, PersistenceError> {
+    let window_label = window.label().to_string();
+
+    if let Err(other_label) = registry.try_acquire(Path::new(&path), &window_label) {
+        if let Some(other_window) = window.app_handle().get_webview_window(&other_label) {
+            if let Err(error) = other_window.set_focus() {
+                log::warn!("No se pudo enfocar la ventana '{other_label}' que ya tiene el proyecto abierto: {error}");
+            }
+        }
+        return Err(PersistenceError::AlreadyOpenElsewhere(path));
+    }
+
+    persistence::open_project_file(Path::new(&path)).inspect_err(|_| {
+        registry.release_path_if_owned(Path::new(&path), &window_label);
+    })
+}
+
+/// Libera, si la había, la ruta `.brunch` que esta ventana tenía reservada
+/// en `OpenProjectRegistry` (ver `crate::open_registry`) — invocado desde
+/// `EditorScreen.handleCloseProject` (`src/editor/EditorScreen/EditorScreen.tsx`)
+/// justo ANTES de volver a `HomeScreen`, para que la ventana pueda abrir
+/// (u otra ventana pueda abrir) ese mismo archivo de nuevo sin que la app lo
+/// considere todavía "abierto aquí". El cierre real de la ventana libera la
+/// reserva por su cuenta (ver el `on_window_event` registrado en `lib.rs`),
+/// así que este comando solo hace falta para el caso "misma ventana, vuelve
+/// a Inicio sin cerrarse".
+#[tauri::command]
+pub fn release_open_project(window: tauri::WebviewWindow, registry: tauri::State<'_, OpenProjectRegistry>) {
+    registry.release_window(window.label());
 }
 
 /// Sobrescribe, dentro de una transacción, el `ProjectDocument` de un

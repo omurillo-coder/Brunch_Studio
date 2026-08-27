@@ -76,4 +76,15 @@ export interface AppServices {
    * posteriores devuelven `null` aunque la primera haya encontrado algo.
    */
   getInitialOpenPath: () => Promise<string | null>
+  /**
+   * Libera, si la había, la ruta `.brunch` que ESTA ventana tenía reservada
+   * en el registro de proyectos abiertos de Rust (`OpenProjectRegistry`, ver
+   * `src-tauri/src/open_registry.rs`) — comando `release_open_project`.
+   * Se invoca desde `EditorScreen.handleCloseProject` justo ANTES de volver
+   * a `HomeScreen`, para que ese mismo archivo pueda reabrirse (en esta
+   * ventana o en otra) sin que la app lo considere ya abierto. El cierre
+   * real de la ventana libera la reserva por su cuenta en Rust, así que este
+   * servicio solo hace falta para "Cerrar proyecto" sin cerrar la ventana.
+   */
+  releaseOpenProject: () => Promise<void>
 }
