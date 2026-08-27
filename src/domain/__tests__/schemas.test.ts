@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest'
 import {
   ContentBlockSchema,
   DecisionResponseSchema,
+  FINAL_VARIANTS,
+  FinalNodeSchema,
+  FinalVariantSchema,
   IntroNodeSchema,
   NODE_TYPES,
   NodeSchema,
@@ -319,6 +322,87 @@ describe('SlideColorSchema / SlideNodeSchema.color (paleta cerrada de color)', (
     if (result.success) {
       const slide = result.data.graph.nodes.find((node) => node.type === 'slide')
       expect(slide && slide.type === 'slide' ? slide.color : 'missing').toBeUndefined()
+    }
+  })
+})
+
+describe('FinalVariantSchema / FinalNodeSchema.variant (tres variantes de Final: general/bueno/malo)', () => {
+  const base = {
+    id: NODE_ID,
+    number: 1,
+    position: { x: 0, y: 0 },
+    title: '',
+    type: 'final' as const,
+    body: '',
+  }
+
+  it('FINAL_VARIANTS tiene exactamente los tres valores: general, good, bad', () => {
+    expect(FINAL_VARIANTS).toEqual(['general', 'good', 'bad'])
+  })
+
+  it('FinalVariantSchema acepta cada uno de los tres valores', () => {
+    for (const variant of FINAL_VARIANTS) {
+      expect(FinalVariantSchema.safeParse(variant).success).toBe(true)
+    }
+  })
+
+  it('FinalVariantSchema rechaza un valor fuera de los tres', () => {
+    expect(FinalVariantSchema.safeParse('excellent').success).toBe(false)
+    expect(FinalVariantSchema.safeParse('').success).toBe(false)
+  })
+
+  it('un Final sin `variant` parsea con el valor por defecto "general" (campo puramente aditivo)', () => {
+    const result = FinalNodeSchema.safeParse(base)
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data.variant).toBe('general')
+    }
+  })
+
+  it('acepta un Final con cada variante explícita', () => {
+    for (const variant of FINAL_VARIANTS) {
+      const result = FinalNodeSchema.safeParse({ ...base, variant })
+      expect(result.success).toBe(true)
+      if (result.success) {
+        expect(result.data.variant).toBe(variant)
+      }
+    }
+  })
+
+  it('rechaza una variante fuera de las tres soportadas', () => {
+    const result = FinalNodeSchema.safeParse({ ...base, variant: 'excellent' })
+    expect(result.success).toBe(false)
+  })
+
+  it('un documento completo (ProjectDocumentSchema) con un Final SIN `variant` sigue abriendo bien, tratado como "general" (compatibilidad con documentos guardados antes de esta fase)', () => {
+    const project = createProject('Proyecto sin variant')
+    // Documento con la forma de ANTES de esta fase: su Final no lleva
+    // `variant` en absoluto — simula un `.brunch` guardado por una versión
+    // anterior de la app. `finalWithoutVariant` se construye a propósito como
+    // literal plano (no tipado como `FinalNode`, que ya exige `variant`) para
+    // que TypeScript no fuerce el campo aquí: lo que se comprueba es que el
+    // schema Zod, no el tipo estático, sigue aceptando esta forma.
+    const finalWithoutVariant = {
+      id: '33333333-3333-4333-8333-333333333333',
+      number: 2,
+      position: { x: 0, y: 0 },
+      title: 'Fin',
+      type: 'final',
+      body: '',
+    }
+    const withLegacyFinal = {
+      ...project,
+      graph: {
+        ...project.graph,
+        nodes: [...project.graph.nodes, finalWithoutVariant],
+      },
+    }
+
+    const result = ProjectDocumentSchema.safeParse(withLegacyFinal)
+    expect(result.success).toBe(true)
+    if (result.success) {
+      const final = result.data.graph.nodes.find((node) => node.type === 'final')
+      expect(final && final.type === 'final' ? final.variant : 'missing').toBe('general')
     }
   })
 })

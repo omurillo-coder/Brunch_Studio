@@ -96,6 +96,57 @@ describe('runtime del Player', () => {
     expect(getView(project, restarted).kind).toBe('continue')
   })
 
+  describe('getInitialState/restart con startNodeId ("Probar desde aquí")', () => {
+    it('getInitialState(project, startNodeId) arranca en ese nodo, no en graph.startNodeId', () => {
+      const { project, decisionId } = buildFullGraph()
+
+      const state = getInitialState(project, decisionId)
+
+      expect(state.currentNodeId).toBe(decisionId)
+      expect(getView(project, state).kind).toBe('decision')
+    })
+
+    it('sin startNodeId, se comporta exactamente igual que antes (graph.startNodeId)', () => {
+      const { project, startId } = buildFullGraph()
+
+      expect(getInitialState(project, undefined)).toEqual(getInitialState(project))
+      expect(getInitialState(project).currentNodeId).toBe(startId)
+    })
+
+    it('siembra las variables igual que siempre (initialValue), sin reconstruir decisiones previas', () => {
+      let { project, decisionId } = buildFullGraph()
+      project = addVariable(project, { name: 'flag', type: 'boolean', initialValue: false })
+      const flagId = (project.variables[0] as VariableDef).id
+
+      const state = getInitialState(project, decisionId)
+
+      expect(state.currentNodeId).toBe(decisionId)
+      expect(state.variables).toEqual({ [flagId]: false })
+      expect(state.totalPoints).toBeNull()
+    })
+
+    it('si startNodeId no corresponde a ningún nodo del documento, cae en graph.startNodeId (fallback)', () => {
+      const { project, startId } = buildFullGraph()
+
+      const state = getInitialState(project, 'nodo-que-no-existe')
+
+      expect(state.currentNodeId).toBe(startId)
+    })
+
+    it('restart(project, startNodeId) reinicia al mismo nodo del override, no al de graph.startNodeId', () => {
+      const { project, decisionId, finalAId, responseA } = buildFullGraph()
+
+      let state = getInitialState(project, decisionId)
+      state = choose(project, state, responseA.id)
+      expect(state.currentNodeId).toBe(finalAId)
+
+      const restarted = restart(project, decisionId)
+
+      expect(restarted.currentNodeId).toBe(decisionId)
+      expect(restarted).toEqual(getInitialState(project, decisionId))
+    })
+  })
+
   it('dead-end: una diapositiva sin respuestas y sin destino', () => {
     const project = createProject('P') // inicio recién creado, sin target
 

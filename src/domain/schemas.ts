@@ -489,6 +489,18 @@ export const SlideNodeSchema = z.object({
 })
 
 /**
+ * Variantes de un nodo `final` (estructura de datos únicamente — sin
+ * comportamiento propio todavía, ver comentario de `FinalNodeSchema.variant`
+ * más abajo). Tres valores fijos: "general" (el comportamiento de siempre,
+ * también el valor por defecto), "good" y "bad". El TEXTO real de cada
+ * variante (contenido de ejemplo/plantilla) queda deliberadamente fuera de
+ * esta fase — lo aportará el usuario más adelante; aquí solo se sienta la
+ * estructura de datos + el desplegable del Inspector.
+ */
+export const FINAL_VARIANTS = ['general', 'good', 'bad'] as const
+export const FinalVariantSchema = z.enum(FINAL_VARIANTS)
+
+/**
  * Nodo terminal del recorrido: no tiene ninguna salida. A diferencia de
  * `SlideNode`, sigue teniendo un único `body` (cuerpo de texto Tiptap
  * serializado, ver `src/editor/richText/richTextContent.ts`) en vez de
@@ -500,6 +512,23 @@ export const FinalNodeSchema = z.object({
   ...baseNodeFields,
   type: z.literal('final'),
   body: z.string(),
+  /**
+   * Categoría/etiqueta adicional del Final: "general" (por defecto)/"good"/
+   * "bad". Puramente estructural en esta fase — NO cambia colores, ni
+   * comportamiento del export/SCORM, ni ningún otro dato del nodo (en
+   * particular, cambiar de variante no toca ni vacía `body`: son campos
+   * completamente independientes, ver `updateNode` en `src/domain/project.ts`).
+   * Eso vendrá en una fase futura cuando el usuario aporte más detalle.
+   *
+   * `.default('general')`: cambio puramente aditivo, igual criterio que
+   * `SlideNodeSchema.color` — cualquier documento `.brunch` guardado antes de
+   * esta fase (sin este campo en ninguno de sus nodos `final`) sigue abriendo
+   * igual, con todos sus Final existentes tratados como "general"
+   * automáticamente, sin necesitar código de migración explícito en
+   * `src/domain/migration.ts`. Ver el test de compatibilidad en
+   * `src/domain/__tests__/schemas.test.ts`.
+   */
+  variant: FinalVariantSchema.default('general'),
 })
 
 export const NodeSchema = z.discriminatedUnion('type', [
@@ -598,6 +627,7 @@ export type VariableEffect = z.infer<typeof VariableEffectSchema>
 export type DecisionResponse = z.infer<typeof DecisionResponseSchema>
 export type ContentBlock = z.infer<typeof ContentBlockSchema>
 export type SlideColor = z.infer<typeof SlideColorSchema>
+export type FinalVariant = z.infer<typeof FinalVariantSchema>
 
 export type IntroNode = z.infer<typeof IntroNodeSchema>
 export type SlideNode = z.infer<typeof SlideNodeSchema>

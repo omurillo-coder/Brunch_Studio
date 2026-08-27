@@ -1,8 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-import { checkSpelling, detectCycles, detectUnlinkedResponses } from '../../domain'
+import {
+  checkSpelling,
+  cycleIssueId,
+  detectCycles,
+  detectUnlinkedResponses,
+  spellingIssueId,
+  unlinkedResponseIssueId,
+} from '../../domain'
 import type { CycleIssue, Node, SpellingIssue, UnlinkedResponseIssue } from '../../domain'
-import { useProject, useProjectStore } from '../../store'
+import { useDismissedDiagnosticIds, useProject, useProjectStore } from '../../store'
 import styles from './DiagnosticsPanel.module.css'
 
 /**
@@ -36,6 +43,23 @@ import styles from './DiagnosticsPanel.module.css'
  *   manualmente el escaneo. El botón "Revisar ortografía" de la lista
  *   expandida permite volver a lanzarlo bajo demanda (p.ej. tras editar
  *   texto), sin disparar nada más por sí solo un cambio de `project`.
+ *
+ * Descartar avisos (tarea "Descartar avisos en el rincón de avisos"): cada
+ * fila individual gana un botón "×" ("Descartar") que la oculta de la
+ * lista. El descarte es SOLO DE SESIÓN — vive en `ui.dismissedDiagnosticIds`
+ * de `useProjectStore` (transitorio: no se persiste en el `.brunch`, no
+ * pasa por el historial de undo/redo, se reinicia con `loadProject`, ver su
+ * comentario en `src/store/types.ts`), identificado por un id ESTABLE por
+ * tipo de aviso (`cycleIssueId`/`unlinkedResponseIssueId`/`spellingIssueId`
+ * de `src/domain/diagnostics.ts`): si el problema real se soluciona y luego
+ * se reintroduce EXACTAMENTE igual más tarde, sigue apareciendo descartado
+ * (mismo id) — comportamiento aceptado, sin lógica de expiración. El
+ * contador de la insignia flotante (`total`) refleja solo los avisos NO
+ * descartados; los descartados de esta sesión se cuentan aparte
+ * (`dismissedCount`) y se recuperan TODOS a la vez con el enlace
+ * "Recuperar" al final de la lista — no hay recuperación individual por
+ * aviso en esta fase, ver comentario de `DismissedDiagnosticsFooter` más
+ * abajo.
  */
 
 type SpellingState =
@@ -45,16 +69,17 @@ type SpellingState =
   | { status: 'error'; message: string }
 
 /** Mismo criterio de formato que `LeftPanel` para el nombre visible de un
- *  nodo: número + "Referencia" (o el aviso de que no tiene). */
+ *  nodo: número + "Ref. oculta" (o el aviso de que no tiene). */
 function nodeLabel(node: Node | undefined): string {
   if (!node) return 'diapositiva eliminada'
-  const title = node.title.trim() || 'Sin referencia'
+  const title = node.title.trim() || 'Sin ref. oculta'
   return `${node.number}. ${title}`
 }
 
 export function DiagnosticsPanel() {
   const project = useProject()
   const focusNode = useProjectStore((state) => state.focusNode)
+  const dismissedIds = useDismissedDiagnosticIds()
   const [open, setOpen] = useState(false)
   const [spelling, setSpelling] = useState<SpellingState>({ status: 'idle' })
 
@@ -66,8 +91,22 @@ export function DiagnosticsPanel() {
     return map
   }, [project])
 
-  const cycles = useMemo(() => detectCycles(project), [project])
-  const unlinkedResponses = useMemo(() => detectUnlinkedResponses(project), [project])
+  const dismissedSet = useMemo(() => new Set(dismissedIds), [dismissedIds])
+
+  const allCycles = useMemo(() => detectCycles(project), [project])
+  const allUnlinkedResponses = useMemo(() => detectUnlinkedResponses(project), [project])
+  // Los avisos DESCARTADOS se filtran de la lista/contador aquí, en un único
+  // punto (en vez de repetir el filtro en cada grupo) — `cycles`/
+  // `unlinkedResponses`/`spellingIssues` (más abajo) ya son "los avisos que
+  // de verdad se muestran".
+  const cycles = useMemo(
+    () => allCycles.filter((cycle) => !dismissedSet.has(cycleIssueId(cycle))),
+    [allCycles, dismissedSet],
+  )
+  const unlinkedResponses = useMemo(
+    () => allUnlinkedResponses.filter((issue) => !dismissedSet.has(unlinkedResponseIssueId(issue))),
+    [allUnlinkedResponses, dismissedSet],
+  )
 
   // Depende de `project`: así el botón "Revisar ortografía" de la lista
   // expandida siempre relee el texto ACTUAL (no una copia obsoleta cerrada
@@ -99,14 +138,28 @@ export function DiagnosticsPanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const spellingIssues = spelling.status === 'done' ? spelling.issues : []
+  // Sin `useMemo`: `spelling.issues` ya es estable entre renders mientras el
+  // estado de ortografía no cambie (mismo array de referencia, fijado una
+  // vez por `setSpelling`), así que memoizar aquí encima no aporta nada —
+  // solo generaría un warning de "dependencia inestable" porque la propia
+  // expresión ternaria de la que depende (`allSpellingIssues`) sí cambia de
+  // referencia en cada render.
+  const allSpellingIssues = spelling.status === 'done' ? spelling.issues : []
+  const spellingIssues = allSpellingIssues.filter(
+    (issue) => !dismissedSet.has(spellingIssueId(issue)),
+  )
   const total = cycles.length + unlinkedResponses.length + spellingIssues.length
+  const dismissedCount = dismissedIds.length
 
   function goToNode(nodeId: string): void {
     focusNode(nodeId)
   }
 
-  if (total === 0) {
+  // Oculto solo cuando NO hay nada que mostrar en absoluto: ni avisos
+  // activos ni avisos descartados de esta sesión. Si se descartó TODO
+  // (`total === 0` con `dismissedCount > 0`), el panel se mantiene visible
+  // para no dejar el "Recuperar" inalcanzable — ver comentario de cabecera.
+  if (total === 0 && dismissedCount === 0) {
     return null
   }
 
@@ -114,13 +167,17 @@ export function DiagnosticsPanel() {
     <div className={styles.wrapper}>
       <button
         type="button"
-        className={styles.badge}
+        className={total > 0 ? styles.badge : styles.badgeResolved}
         aria-expanded={open}
-        aria-label={`${total} avisos del proyecto`}
+        aria-label={
+          dismissedCount > 0
+            ? `${total} avisos del proyecto, ${dismissedCount} descartados en esta sesión`
+            : `${total} avisos del proyecto`
+        }
         onClick={() => setOpen((value) => !value)}
       >
         <span className={styles.badgeIcon} aria-hidden="true">
-          ⚠
+          {total > 0 ? '⚠' : '✓'}
         </span>
         <span className={styles.badgeCount}>{total}</span>
       </button>
@@ -128,8 +185,8 @@ export function DiagnosticsPanel() {
       {open && (
         <div className={styles.list} role="region" aria-label="Avisos del proyecto">
           <DiagnosticsGroup title="Bucles" empty="Sin bucles detectados" items={cycles.length}>
-            {cycles.map((cycle, index) => (
-              <CycleRow key={index} cycle={cycle} nodeById={nodeById} onSelect={goToNode} />
+            {cycles.map((cycle) => (
+              <CycleRow key={cycleIssueId(cycle)} cycle={cycle} nodeById={nodeById} onSelect={goToNode} />
             ))}
           </DiagnosticsGroup>
 
@@ -140,7 +197,7 @@ export function DiagnosticsPanel() {
           >
             {unlinkedResponses.map((issue) => (
               <UnlinkedResponseRow
-                key={`${issue.nodeId}:${issue.responseId}`}
+                key={unlinkedResponseIssueId(issue)}
                 issue={issue}
                 nodeById={nodeById}
                 onSelect={goToNode}
@@ -160,11 +217,59 @@ export function DiagnosticsPanel() {
                 Revisar ortografía
               </button>
             </div>
-            <SpellingList spelling={spelling} nodeById={nodeById} onSelect={goToNode} />
+            <SpellingList spelling={spelling} dismissedSet={dismissedSet} nodeById={nodeById} onSelect={goToNode} />
           </div>
+
+          <DismissedDiagnosticsFooter count={dismissedCount} />
         </div>
       )}
     </div>
+  )
+}
+
+/**
+ * Pie de la lista: solo visible si hay algo descartado en esta sesión. Un
+ * único "Recuperar" que restaura TODOS los avisos descartados a la vez
+ * (`restoreDismissedDiagnostics`) — sin recuperación individual por aviso en
+ * esta fase: con el volumen esperado de avisos (decenas, no cientos) no
+ * aporta suficiente frente a la simplicidad de "recuperar todo" y da rastro
+ * visible + forma de revertir el descarte, que es lo que pide la tarea.
+ */
+function DismissedDiagnosticsFooter({ count }: { count: number }) {
+  const restoreDismissedDiagnostics = useProjectStore((state) => state.restoreDismissedDiagnostics)
+
+  if (count === 0) return null
+
+  return (
+    <div className={styles.dismissedFooter}>
+      <span>
+        {count} {count === 1 ? 'aviso descartado' : 'avisos descartados'} en esta sesión
+      </span>
+      <button type="button" className={styles.rescanButton} onClick={restoreDismissedDiagnostics}>
+        Recuperar
+      </button>
+    </div>
+  )
+}
+
+/**
+ * Botón "×" de descartar un aviso individual, compartido por las tres
+ * categorías. `diagnosticId` es el id ESTABLE del aviso (ver
+ * `cycleIssueId`/`unlinkedResponseIssueId`/`spellingIssueId`); `label`
+ * describe el aviso concreto para el nombre accesible del botón (distinto
+ * por fila, no un "Descartar" genérico repetido).
+ */
+function DismissButton({ diagnosticId, label }: { diagnosticId: string; label: string }) {
+  const dismissDiagnostic = useProjectStore((state) => state.dismissDiagnostic)
+  return (
+    <button
+      type="button"
+      className={styles.dismissButton}
+      aria-label={`Descartar aviso: ${label}`}
+      onClick={() => dismissDiagnostic(diagnosticId)}
+    >
+      <span aria-hidden="true">×</span>
+    </button>
   )
 }
 
@@ -203,14 +308,18 @@ function CycleRow({
 }) {
   const path = cycle.nodeIds.map((id) => nodeLabel(nodeById.get(id))).join(' → ')
   const firstNodeId = cycle.nodeIds[0]
+  const text = `Bucle detectado entre ${cycle.nodeIds.length} diapositivas (${path}) — revisa si es intencional`
   return (
-    <button
-      type="button"
-      className={styles.issueRow}
-      onClick={() => firstNodeId && onSelect(firstNodeId)}
-    >
-      Bucle detectado entre {cycle.nodeIds.length} diapositivas ({path}) — revisa si es intencional
-    </button>
+    <div className={styles.issueRowWrapper}>
+      <button
+        type="button"
+        className={styles.issueRow}
+        onClick={() => firstNodeId && onSelect(firstNodeId)}
+      >
+        {text}
+      </button>
+      <DismissButton diagnosticId={cycleIssueId(cycle)} label={text} />
+    </div>
   )
 }
 
@@ -225,19 +334,25 @@ function UnlinkedResponseRow({
 }) {
   const label = nodeLabel(nodeById.get(issue.nodeId))
   const responseText = issue.responseText.trim() || '(sin texto)'
+  const text = `${label}: la respuesta "${responseText}" no tiene destino conectado`
   return (
-    <button type="button" className={styles.issueRow} onClick={() => onSelect(issue.nodeId)}>
-      {label}: la respuesta "{responseText}" no tiene destino conectado
-    </button>
+    <div className={styles.issueRowWrapper}>
+      <button type="button" className={styles.issueRow} onClick={() => onSelect(issue.nodeId)}>
+        {text}
+      </button>
+      <DismissButton diagnosticId={unlinkedResponseIssueId(issue)} label={text} />
+    </div>
   )
 }
 
 function SpellingList({
   spelling,
+  dismissedSet,
   nodeById,
   onSelect,
 }: {
   spelling: SpellingState
+  dismissedSet: Set<string>
   nodeById: Map<string, Node>
   onSelect: (nodeId: string) => void
 }) {
@@ -247,21 +362,23 @@ function SpellingList({
   if (spelling.status === 'error') {
     return <p className={styles.emptyGroup}>No se pudo revisar la ortografía: {spelling.message}</p>
   }
-  if (spelling.issues.length === 0) {
+  const issues = spelling.issues.filter((issue) => !dismissedSet.has(spellingIssueId(issue)))
+  if (issues.length === 0) {
     return <p className={styles.emptyGroup}>Sin errores ortográficos detectados</p>
   }
   return (
     <>
-      {spelling.issues.map((issue, index) => (
-        <button
-          key={`${issue.nodeId}:${issue.word}:${index}`}
-          type="button"
-          className={styles.issueRow}
-          onClick={() => onSelect(issue.nodeId)}
-        >
-          {nodeLabel(nodeById.get(issue.nodeId))}: posible error ortográfico en "{issue.word}"
-        </button>
-      ))}
+      {issues.map((issue) => {
+        const text = `${nodeLabel(nodeById.get(issue.nodeId))}: posible error ortográfico en "${issue.word}"`
+        return (
+          <div key={spellingIssueId(issue)} className={styles.issueRowWrapper}>
+            <button type="button" className={styles.issueRow} onClick={() => onSelect(issue.nodeId)}>
+              {text}
+            </button>
+            <DismissButton diagnosticId={spellingIssueId(issue)} label={text} />
+          </div>
+        )
+      })}
     </>
   )
 }

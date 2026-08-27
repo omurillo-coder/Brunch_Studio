@@ -214,37 +214,17 @@
   background: var(--bs-color-border-strong);
 }
 
-/* Botón "Reintentar" dentro de la tarjeta de Final: acción destructiva del
-   recorrido en curso (lo reinicia desde el principio), así que usa el color
-   de peligro del sistema de tokens, no el de acento. */
-.dangerButton {
-  align-self: flex-start;
-  padding: var(--bs-space-2) var(--bs-space-4);
-  border: 1px solid var(--bs-color-danger);
-  border-radius: var(--bs-radius-sm);
-  background: var(--bs-color-danger);
-  color: var(--bs-color-danger-contrast);
-  font-size: var(--bs-font-size-md);
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.dangerButton:hover {
-  background: var(--bs-color-danger-hover);
-  border-color: var(--bs-color-danger-hover);
-}
-
-/* Fila de acciones de la vista Final: "Reintentar" (peligro) + "Salir"
-   (neutro), uno junto al otro. */
+/* Fila de acciones de la vista Final: "Volver a jugar" (`.primaryButton`,
+   mismo acento que "Continuar") + "Salir" (neutro), uno junto al otro. */
 .finalActions {
   display: flex;
   align-items: center;
   gap: var(--bs-space-3);
 }
 
-/* "Salir": no descarta nada ni es irreversible como "Reintentar", así que
-   usa un estilo neutro (mismo criterio que `.secondaryButton` de la
-   cabecera, pero al tamaño de los botones de la tarjeta de Final). */
+/* "Salir": no es la acción principal de la fila, así que usa un estilo
+   neutro (mismo criterio que `.secondaryButton` de la cabecera, pero al
+   tamaño de los botones de la tarjeta de Final). */
 .neutralButton {
   align-self: flex-start;
   padding: var(--bs-space-2) var(--bs-space-4);

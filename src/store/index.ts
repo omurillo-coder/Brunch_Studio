@@ -16,11 +16,13 @@ export {
   useSelectedNodeIds,
   useSaveStatus,
   usePreviewMode,
+  usePreviewStartNodeId,
   useHoveredNodeId,
   useContextMenu,
   useFocusRequestNodeId,
   useTitleFocusRequestNodeId,
   useViewportCenter,
   useClipboardNodeIds,
+  useDismissedDiagnosticIds,
 } from './selectors'
 export { resetProjectStore } from './testHelpers'

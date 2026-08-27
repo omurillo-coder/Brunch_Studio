@@ -116,7 +116,7 @@ describe('Inspector', () => {
 
     render(<Inspector filePath={TEST_FILE_PATH} />)
 
-    expect(screen.getByLabelText('Referencia')).toHaveValue('Bienvenida')
+    expect(screen.getByLabelText('Ref. oculta')).toHaveValue('Bienvenida')
     // El bloque de texto se edita con el mismo editor de texto enriquecido
     // de siempre (`RichTextEditor`, fase 4 Milestone 2): un `<div
     // contenteditable>`, no un `<textarea>` con `.value` — se comprueba el
@@ -133,7 +133,7 @@ describe('Inspector', () => {
     })
     render(<Inspector filePath={TEST_FILE_PATH} />)
 
-    const titleInput = screen.getByLabelText('Referencia')
+    const titleInput = screen.getByLabelText('Ref. oculta')
     expect(titleInput).toHaveAttribute('spellcheck', 'true')
     expect(titleInput).toHaveAttribute('lang', 'es')
   })
@@ -145,7 +145,7 @@ describe('Inspector', () => {
     render(<Inspector filePath={TEST_FILE_PATH} />)
 
     const historyBefore = useProjectStore.getState().history.past.length
-    const titleInput = screen.getByLabelText('Referencia')
+    const titleInput = screen.getByLabelText('Ref. oculta')
 
     fireEvent.change(titleInput, { target: { value: 'T' } })
     fireEvent.change(titleInput, { target: { value: 'Ti' } })
@@ -172,7 +172,7 @@ describe('Inspector', () => {
     render(<Inspector filePath={TEST_FILE_PATH} />)
 
     const historyBefore = useProjectStore.getState().history.past.length
-    const titleInput = screen.getByLabelText('Referencia')
+    const titleInput = screen.getByLabelText('Ref. oculta')
 
     fireEvent.change(titleInput, { target: { value: 'Confirmado con Enter' } })
     fireEvent.keyDown(titleInput, { key: 'Enter' })
@@ -188,13 +188,13 @@ describe('Inspector', () => {
     })
     render(<Inspector filePath={TEST_FILE_PATH} />)
 
-    expect(screen.getByLabelText('Referencia')).toHaveValue('Inicio')
+    expect(screen.getByLabelText('Ref. oculta')).toHaveValue('Inicio')
 
     act(() => {
       useProjectStore.getState().selectNode(slideNodeId())
     })
 
-    expect(screen.getByLabelText('Referencia')).toHaveValue('Diapositiva 2')
+    expect(screen.getByLabelText('Ref. oculta')).toHaveValue('Diapositiva 2')
   })
 
   it('cambiar de selección sin hacer blur confirma la edición pendiente', () => {
@@ -205,7 +205,7 @@ describe('Inspector', () => {
     render(<Inspector filePath={TEST_FILE_PATH} />)
 
     const historyBefore = useProjectStore.getState().history.past.length
-    const titleInput = screen.getByLabelText('Referencia')
+    const titleInput = screen.getByLabelText('Ref. oculta')
     fireEvent.change(titleInput, { target: { value: 'Editado sin blur' } })
 
     act(() => {
@@ -234,7 +234,7 @@ describe('Inspector — foco de título tras crear desde el menú contextual (fa
 
     render(<Inspector filePath={TEST_FILE_PATH} />)
 
-    expect(screen.getByLabelText('Referencia')).toHaveFocus()
+    expect(screen.getByLabelText('Ref. oculta')).toHaveFocus()
     expect(useProjectStore.getState().ui.titleFocusRequestNodeId).toBeNull()
   })
 
@@ -246,7 +246,7 @@ describe('Inspector — foco de título tras crear desde el menú contextual (fa
 
     render(<Inspector filePath={TEST_FILE_PATH} />)
 
-    expect(screen.getByLabelText('Referencia')).not.toHaveFocus()
+    expect(screen.getByLabelText('Ref. oculta')).not.toHaveFocus()
     expect(useProjectStore.getState().ui.titleFocusRequestNodeId).toBeNull()
   })
 })
@@ -898,7 +898,7 @@ describe('Inspector — editor de bloques de contenido de una diapositiva (miles
     const alert = await screen.findByRole('alert')
     expect(alert.textContent).not.toMatch(/error|stack|undefined|NaN|\[object/i)
     // El resto del Inspector sigue funcionando (el título se puede seguir editando).
-    expect(screen.getByLabelText('Referencia')).toBeInTheDocument()
+    expect(screen.getByLabelText('Ref. oculta')).toBeInTheDocument()
     expect(slideNode(id).content).toEqual([])
   })
 
@@ -1329,7 +1329,7 @@ describe('Inspector — navegación rápida entre diapositivas conectadas (tarea
     expect(useProjectStore.getState().ui.focusRequestNodeId).toBe(targetId)
   })
 
-  it('muestra "Sin referencia" para una diapositiva conectada sin título', () => {
+  it('muestra "Sin ref. oculta" para una diapositiva conectada sin título', () => {
     act(() => {
       useProjectStore.getState().createNode('slide', { x: 100, y: 0 })
     })
@@ -1342,7 +1342,7 @@ describe('Inspector — navegación rápida entre diapositivas conectadas (tarea
     render(<Inspector filePath={TEST_FILE_PATH} />)
 
     const outgoing = screen.getByText('A dónde lleva esta diapositiva').closest('div') as HTMLElement
-    expect(within(outgoing).getByText(/Sin referencia/)).toBeInTheDocument()
+    expect(within(outgoing).getByText(/Sin ref. oculta/)).toBeInTheDocument()
   })
 })
 
@@ -1660,18 +1660,18 @@ describe('Inspector — botón "Duplicar" (Tarea 1, "Duplicar diapositivas")', (
   })
 })
 
-describe('Inspector — etiqueta "Referencia" (renombrado de UI del campo `title`)', () => {
-  it('el campo de título se muestra con la etiqueta "Referencia", no "Título"', () => {
+describe('Inspector — etiqueta "Ref. oculta" (renombrado de UI del campo `title`)', () => {
+  it('el campo de título se muestra con la etiqueta "Ref. oculta", no "Título"', () => {
     act(() => {
       useProjectStore.getState().selectNode(startNodeId())
     })
     render(<Inspector filePath={TEST_FILE_PATH} />)
 
-    expect(screen.getByText('Referencia')).toBeInTheDocument()
+    expect(screen.getByText('Ref. oculta')).toBeInTheDocument()
     expect(screen.queryByText('Título')).not.toBeInTheDocument()
   })
 
-  it('un nodo sin título se etiqueta "Sin referencia" en el selector de destino', () => {
+  it('un nodo sin título se etiqueta "Sin ref. oculta" en el selector de destino', () => {
     act(() => {
       useProjectStore.getState().createNode('final', { x: 0, y: 0 })
       useProjectStore.getState().selectNode(startNodeId())
@@ -1679,9 +1679,61 @@ describe('Inspector — etiqueta "Referencia" (renombrado de UI del campo `title
     render(<Inspector filePath={TEST_FILE_PATH} />)
 
     // El nodo final recién creado, sin título, aparece como destino posible
-    // de "Continuar" con la etiqueta "Sin referencia" (ver `nodeOptionLabel`).
-    expect(screen.getByText(/Final \d+ — Sin referencia/)).toBeInTheDocument()
+    // de "Continuar" con la etiqueta "Sin ref. oculta" (ver `nodeOptionLabel`).
+    expect(screen.getByText(/Final \d+ — Sin ref. oculta/)).toBeInTheDocument()
     expect(screen.queryByText(/Sin título/)).not.toBeInTheDocument()
+  })
+})
+
+describe('Inspector — variante de un Final (general/bueno/malo)', () => {
+  function createAndSelectFinal(): string {
+    useProjectStore.getState().createNode('final', { x: 0, y: 0 }, { body: 'Cuerpo del final' })
+    const finalId = useProjectStore.getState().project.graph.nodes.find((n) => n.type === 'final')?.id
+    if (!finalId) throw new Error('setup inválido: no se creó el nodo final')
+    useProjectStore.getState().selectNode(finalId)
+    return finalId
+  }
+
+  it('un Final nuevo muestra el desplegable de variante con "Final general" seleccionado por defecto', () => {
+    act(() => {
+      createAndSelectFinal()
+    })
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    const select = screen.getByLabelText('Variante') as HTMLSelectElement
+    expect(select).toBeInTheDocument()
+    expect(select.value).toBe('general')
+    expect(screen.getByRole('option', { name: 'Final general' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'Final bueno' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'Final malo' })).toBeInTheDocument()
+  })
+
+  it('el desplegable NO aparece para una diapositiva ni para el nodo intro', () => {
+    act(() => {
+      useProjectStore.getState().selectNode(startNodeId())
+    })
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    expect(screen.queryByLabelText('Variante')).not.toBeInTheDocument()
+  })
+
+  it('cambiar la variante actualiza el nodo sin tocar `body`', () => {
+    let finalId = ''
+    act(() => {
+      finalId = createAndSelectFinal()
+    })
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    fireEvent.change(screen.getByLabelText('Variante'), { target: { value: 'good' } })
+
+    const node = useProjectStore.getState().project.graph.nodes.find((n) => n.id === finalId)
+    expect(node?.type === 'final' ? node.variant : undefined).toBe('good')
+    expect(node?.type === 'final' ? node.body : undefined).toBe('Cuerpo del final')
+
+    fireEvent.change(screen.getByLabelText('Variante'), { target: { value: 'bad' } })
+    const nodeAfter = useProjectStore.getState().project.graph.nodes.find((n) => n.id === finalId)
+    expect(nodeAfter?.type === 'final' ? nodeAfter.variant : undefined).toBe('bad')
+    expect(nodeAfter?.type === 'final' ? nodeAfter.body : undefined).toBe('Cuerpo del final')
   })
 })
 
@@ -1918,8 +1970,8 @@ describe('Inspector — color de una diapositiva (paleta cerrada)', () => {
   })
 })
 
-describe('Inspector — reorganización del Inspector (Tarea 4): Color arriba del todo, agrupado con Referencia/Contenido/Nota interna', () => {
-  it('para una diapositiva `slide`, "Color" aparece ANTES que "Referencia" en el DOM', () => {
+describe('Inspector — reorganización del Inspector (Tarea 4): Color arriba del todo, agrupado con Ref. oculta/Contenido/Nota interna', () => {
+  it('para una diapositiva `slide`, "Color" aparece ANTES que "Ref. oculta" en el DOM', () => {
     const id = startNodeId()
     act(() => {
       useProjectStore.getState().selectNode(id)
@@ -1927,14 +1979,14 @@ describe('Inspector — reorganización del Inspector (Tarea 4): Color arriba de
     const { container } = render(<Inspector filePath={TEST_FILE_PATH} />)
 
     const colorLabel = screen.getByText('Color')
-    const referenceLabel = screen.getByText('Referencia')
+    const referenceLabel = screen.getByText('Ref. oculta')
     // DOCUMENT_POSITION_FOLLOWING (4): colorLabel precede a referenceLabel.
     // eslint-disable-next-line no-bitwise
     expect(colorLabel.compareDocumentPosition(referenceLabel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(container).toBeTruthy()
   })
 
-  it('Color + Referencia + Contenido + Nota interna comparten el mismo contenedor agrupado (.metaGroup)', () => {
+  it('Color + Ref. oculta + Contenido + Nota interna comparten el mismo contenedor agrupado (.metaGroup)', () => {
     const id = startNodeId()
     act(() => {
       useProjectStore.getState().selectNode(id)
@@ -1943,7 +1995,7 @@ describe('Inspector — reorganización del Inspector (Tarea 4): Color arriba de
 
     const metaGroup = screen.getByText('Color').closest(`.${CSS.escape(styles.metaGroup as string)}`)
     expect(metaGroup).not.toBeNull()
-    expect(within(metaGroup as HTMLElement).getByText('Referencia')).toBeInTheDocument()
+    expect(within(metaGroup as HTMLElement).getByText('Ref. oculta')).toBeInTheDocument()
     expect(within(metaGroup as HTMLElement).getByText('Contenido')).toBeInTheDocument()
     expect(within(metaGroup as HTMLElement).getByText(/Nota interna/)).toBeInTheDocument()
   })
@@ -1960,7 +2012,7 @@ describe('Inspector — reorganización del Inspector (Tarea 4): Color arriba de
     expect(within(metaGroup as HTMLElement).queryByText('Destino de continuar')).not.toBeInTheDocument()
   })
 
-  it('para `final`/`intro` (sin sección Color) no se envuelve "Referencia" en el contenedor agrupado', () => {
+  it('para `final`/`intro` (sin sección Color) no se envuelve "Ref. oculta" en el contenedor agrupado', () => {
     act(() => {
       useProjectStore.getState().createNode('final', { x: 100, y: 0 })
     })
@@ -1973,7 +2025,7 @@ describe('Inspector — reorganización del Inspector (Tarea 4): Color arriba de
     })
     render(<Inspector filePath={TEST_FILE_PATH} />)
 
-    const referenceLabel = screen.getByText('Referencia')
+    const referenceLabel = screen.getByText('Ref. oculta')
     expect(referenceLabel.closest(`.${CSS.escape(styles.metaGroup as string)}`)).toBeNull()
   })
 })

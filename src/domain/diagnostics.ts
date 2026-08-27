@@ -34,6 +34,21 @@ export interface CycleIssue {
 }
 
 /**
+ * Identificador ESTABLE de un `CycleIssue`, usado por el "Descartar" de
+ * `DiagnosticsPanel` (descarte de sesión, ver `ui.dismissedDiagnosticIds` en
+ * `src/store/useProjectStore.ts`): dos ciclos con el MISMO conjunto de nodos
+ * implicados deben producir el mismo id aunque `detectCycles` los recorra en
+ * un orden distinto (p.ej. tras un recálculo posterior con el grafo
+ * ligeramente distinto en otra parte, pero el mismo bucle intacto) — por eso
+ * los ids se ORDENAN antes de unirlos, a diferencia de `cycle.nodeIds`, que
+ * conserva el orden de recorrido (significativo para pintar la ruta "A → B →
+ * C" en el panel, pero irrelevante para la identidad del aviso).
+ */
+export function cycleIssueId(cycle: CycleIssue): string {
+  return `cycle:${[...cycle.nodeIds].sort().join(',')}`
+}
+
+/**
  * Detecta bucles (ciclos) en el grafo dirigido derivado por `deriveEdges`.
  *
  * DFS estándar con pila de recursión (`stack`/`onStack`): al visitar un
@@ -113,6 +128,16 @@ export interface UnlinkedResponseIssue {
 }
 
 /**
+ * Identificador ESTABLE de un `UnlinkedResponseIssue` (ver `cycleIssueId`
+ * para el criterio general): `responseId` ya es único por sí solo dentro del
+ * documento, pero se antepone `nodeId` por claridad/depuración y para no
+ * depender en solitario de un campo que vive "un nivel más abajo".
+ */
+export function unlinkedResponseIssueId(issue: UnlinkedResponseIssue): string {
+  return `unlinkedResponse:${issue.nodeId}:${issue.responseId}`
+}
+
+/**
  * Respuestas de decisión SIN `targetNodeId`, una entrada por respuesta.
  *
  * Más fino que `SLIDE_WITHOUT_TARGET`/`RESPONSE_WITHOUT_TARGET` de
@@ -152,6 +177,17 @@ export interface SpellingIssue {
   word: string
 }
 
+/**
+ * Identificador ESTABLE de un `SpellingIssue` (ver `cycleIssueId` para el
+ * criterio general): `word` se normaliza a minúsculas, mismo criterio que la
+ * deduplicación de `checkSpelling` (ver su comentario) — así "Ola"/"ola" en
+ * el mismo nodo cuentan como el mismo aviso a efectos de descarte, igual que
+ * ya cuentan como el mismo aviso a efectos de detección.
+ */
+export function spellingIssueId(issue: SpellingIssue): string {
+  return `spelling:${issue.nodeId}:${issue.word.toLowerCase()}`
+}
+
 interface ReviewableText {
   nodeId: string
   text: string
@@ -162,7 +198,7 @@ interface ReviewableText {
  * con el nodo del que procede (para que el panel de avisos pueda centrar el
  * lienzo en él con `focusNode`, ver `DiagnosticsPanel`):
  *
- * - `title` ("Referencia" en la UI, ver `Inspector.tsx`) de CUALQUIER nodo.
+ * - `title` ("Ref. oculta" en la UI, ver `Inspector.tsx`) de CUALQUIER nodo.
  * - `intro`: además, `caseName`.
  * - `slide`: además, cada bloque `type: 'text'` de `content` (vía
  *   `extractPlainText(parseRichBody(block.body))`) y el `text` de cada

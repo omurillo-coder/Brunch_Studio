@@ -8,11 +8,23 @@ import styles from './NodeCard.module.css'
 
 /**
  * Nodos personalizados del lienzo, uno por tipo de dominio (`intro`, `slide`
- * y `final`). Compactos a propósito: tipo traducido + número visible +
- * título (nunca el `id` interno), truncados con CSS si son largos. El `body`
- * completo del nodo nunca se pinta aquí — el lienzo debe seguir siendo
- * legible con decenas de nodos; el contenido completo se edita en el
+ * y `final`). Compactos a propósito: referencia/título + código corto
+ * "D{número}" (nunca el `id` interno), truncados con CSS si son largos. El
+ * `body` completo del nodo nunca se pinta aquí — el lienzo debe seguir
+ * siendo legible con decenas de nodos; el contenido completo se edita en el
  * inspector.
+ *
+ * Tarea "Numeración corta": la antigua etiqueta traducida de tipo
+ * (`NODE_TYPE_LABEL`, "Inicio"/"Diapositiva"/"Final") ya NO se pinta en la
+ * cabecera de la tarjeta — la sustituye `shortNodeLabel` ("D" + `number`)
+ * para los tres tipos de nodo por igual: desde el punto de vista del
+ * usuario "todo son diapositivas numeradas". `NODE_TYPE_LABEL` sigue
+ * existiendo y en uso en otros sitios (menú "¿Qué quieres crear?" de
+ * `ConnectionMenu`, botones "+ Inicio/Diapositiva/Final" de `LeftPanel`,
+ * texto del Inspector), solo deja de usarse AQUÍ para esta etiqueta visual
+ * concreta. Tarea "Orden de la tarjeta": dentro de la cabecera, la
+ * referencia/título se pinta ANTES que el código corto (ver `Header` más
+ * abajo y `.title`/`.type` en `NodeCard.module.css`).
  *
  * Milestone "Diapositiva de Inicio": SÍ vuelve a existir un nodo visual de
  * "Inicio" (`intro`), a diferencia del antiguo tipo `start` que este mismo
@@ -37,6 +49,23 @@ export const NODE_TYPE_LABEL: Record<NodeType, string> = {
  *  aquí como en la lista de `LeftPanel`. */
 export const START_NODE_LABEL = 'Inicio'
 
+/**
+ * Código corto "D{número}" (Tarea "Numeración corta"): sustituye a
+ * `NODE_TYPE_LABEL[type]` en el sitio donde se identifica visualmente cada
+ * nodo, tanto en la cabecera de la tarjeta del lienzo (`Header` más abajo)
+ * como en la fila de la lista del panel izquierdo (`LeftPanel.tsx`, que
+ * importa y reutiliza esta misma función en vez de duplicarla). Vale para
+ * los tres tipos de nodo por igual — incluidos `intro`/`final` — porque
+ * conceptualmente, para el usuario, "todo son diapositivas numeradas". NO
+ * sustituye el campo `number` en sí, que sigue mostrándose aparte sin
+ * cambios (`.number` aquí, `.nodeNumber` en `LeftPanel`). Acepta cualquier
+ * objeto con `number` (nodo de dominio o `CanvasNodeData`) para no acoplarse
+ * a un tipo concreto.
+ */
+export function shortNodeLabel(node: { number: number }): string {
+  return `D${node.number}`
+}
+
 /** Máximo de respuestas que se resumen dentro de la tarjeta. El propio
  *  esquema de dominio ya limita `responses` a 4, así que esto es solo una
  *  defensa adicional si esa cota cambiara en el futuro. */
@@ -46,7 +75,7 @@ const MAX_SUMMARIZED_RESPONSES = MAX_RESPONSES
  *  `<label>` del Inspector) — el nombre del campo no cambia, solo el texto
  *  visible. */
 function displayTitle(title: string): string {
-  return title.trim() || 'Sin referencia'
+  return title.trim() || 'Sin ref. oculta'
 }
 
 /** Texto accesible de la insignia de aviso "sin salida" (punto 1),
@@ -122,18 +151,26 @@ function PinBadge({ data }: { data: CanvasNodeData }) {
 function Header({ data }: { data: CanvasNodeData }) {
   return (
     <div className={styles.header}>
-      <span className={styles.type}>{NODE_TYPE_LABEL[data.nodeType]}</span>
+      {/* Tarea "Orden de la tarjeta": la referencia/título se pinta PRIMERO,
+          el código corto "D{número}" (antes, la etiqueta de tipo) justo
+          después — ver `.title`/`.type` en `NodeCard.module.css` para el
+          reflejo visual de este mismo orden (título a la izquierda,
+          insignias a la derecha). */}
+      <span className={styles.title}>{displayTitle(data.title)}</span>
+      <span className={styles.type}>{shortNodeLabel(data)}</span>
       {/* La marca "Inicio" solo aporta información en una `SlideNode` que
           hace de inicio (documentos sin `intro`, ver comentario de cabecera
-          del módulo): en un nodo `intro` sería redundante, ya que su propia
-          insignia de tipo ya dice "Inicio" (`NODE_TYPE_LABEL.intro`). */}
+          del módulo): en un nodo `intro` sería redundante — un `intro`
+          siempre es `startNodeId` cuando existe (`IntroNodeSchema`), y ya se
+          distingue de un vistazo por su propio fondo (`.cardIntro`) y su
+          contorno negro (Tarea "Contorno de Inicio/Final") sin necesidad de
+          repetir "Inicio" en texto. */}
       {data.isStart && data.nodeType !== 'intro' && (
         <span className={styles.startMark} title="Diapositiva de inicio">
           {START_NODE_LABEL}
         </span>
       )}
       <span className={styles.number}>{data.number}</span>
-      <span className={styles.title}>{displayTitle(data.title)}</span>
       <PinBadge data={data} />
     </div>
   )

@@ -1,5 +1,11 @@
-import { useEffect } from 'react'
-import { useCanRedo, useCanUndo, useProject, useProjectStore } from '../../store'
+import { useEffect, useRef, useState } from 'react'
+import {
+  useCanRedo,
+  useCanUndo,
+  useProject,
+  useProjectStore,
+  useSelectedNodeIds,
+} from '../../store'
 import type { SaveStatus } from '../../store'
 import { useHtmlExport, useScormExport } from '../../export'
 import styles from './Topbar.module.css'
@@ -70,14 +76,14 @@ export interface TopbarProps {
 
 /**
  * Barra superior del editor: nombre del proyecto, estado de guardado,
- * deshacer/rehacer (con atajo de teclado), "Exportar HTML", "Exportar
- * SCORM" y el botón "Probar".
+ * deshacer/rehacer (con atajo de teclado), el menú "Exportar" y los botones
+ * "Probar desde aquí"/"Probar".
  *
- * "Exportar HTML"/"Exportar SCORM" viven aquí (y no en el panel izquierdo ni
- * en el Inspector) porque son acciones de proyecto, no de nodo: al lado del
- * nombre del proyecto, del estado de guardado y de "Probar" — las otras
- * cosas de la interfaz que hablan del documento entero y no de la selección
- * actual.
+ * El menú "Exportar" (y no botones sueltos de "Exportar HTML"/"Exportar
+ * SCORM"/etc.) vive aquí (y no en el panel izquierdo ni en el Inspector)
+ * porque son acciones de proyecto, no de nodo: al lado del nombre del
+ * proyecto, del estado de guardado y de "Probar" — las otras cosas de la
+ * interfaz que hablan del documento entero y no de la selección actual.
  */
 export function Topbar({
   filePath,
@@ -93,8 +99,17 @@ export function Topbar({
   const undo = useProjectStore((state) => state.undo)
   const redo = useProjectStore((state) => state.redo)
   const setPreviewMode = useProjectStore((state) => state.setPreviewMode)
+  const selectedNodeIds = useSelectedNodeIds()
   const htmlExport = useHtmlExport(filePath)
   const scormExport = useScormExport(filePath)
+  const [exportMenuOpen, setExportMenuOpen] = useState(false)
+  const exportMenuRef = useRef<HTMLDivElement>(null)
+
+  // "Probar desde aquí" (tarea "Probar desde aquí"): solo tiene sentido con
+  // exactamente UN nodo seleccionado en el lienzo — con ninguno no hay nodo
+  // por el que arrancar, y con varios no hay forma de elegir cuál. Ver
+  // `selection.selectedNodeIds` (`useProjectStore.ts`).
+  const canPlayFromSelection = selectedNodeIds.length === 1
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -119,6 +134,33 @@ export function Topbar({
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [undo, redo])
+
+  // Cierre del menú "Exportar": clic/mousedown fuera del menú (incluido el
+  // propio botón "Exportar", ya cubierto porque forma parte de
+  // `exportMenuRef`), o `Escape` — mismo patrón ya establecido en
+  // `ConnectionMenu` (`src/editor/Canvas/ConnectionMenu.tsx`) para el menú
+  // "¿Qué quieres añadir?": sin librería externa, un `<div>` posicionado en
+  // CSS (`position: absolute`, ver `Topbar.module.css`) que se cierra solo.
+  // Los listeners solo se registran mientras el menú está abierto.
+  useEffect(() => {
+    if (!exportMenuOpen) return
+
+    function handlePointerDown(event: MouseEvent) {
+      if (!exportMenuRef.current) return
+      if (event.target instanceof Node && exportMenuRef.current.contains(event.target)) return
+      setExportMenuOpen(false)
+    }
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') setExportMenuOpen(false)
+    }
+
+    document.addEventListener('mousedown', handlePointerDown)
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [exportMenuOpen])
 
   return (
     <header className={styles.bar}>
@@ -158,10 +200,10 @@ export function Topbar({
           ↻
         </button>
         {/* Panel de variables del proyecto (fase 2 "Variables/condiciones",
-            Tarea 1): botón toggle, mismo criterio visual que
-            "Exportar HTML"/"Exportar SCORM" (borde + fondo neutro), con
-            `aria-pressed` reflejando si el panel está abierto — ver
-            `VariablesPanel` en `EditorScreen`. */}
+            Tarea 1): botón toggle, mismo criterio visual que el botón
+            "Exportar" (borde + fondo neutro), con `aria-pressed` reflejando
+            si el panel está abierto — ver `VariablesPanel` en
+            `EditorScreen`. */}
         <button
           type="button"
           className={styles.exportButton}
@@ -170,11 +212,70 @@ export function Topbar({
         >
           Variables
         </button>
-        {/* Resultado de la última exportación. `role="alert"` solo para el
-            fallo (interrumpe al lector de pantalla porque hay algo que
-            corregir); el éxito va como `role="status"`, que se anuncia sin
-            interrumpir. Mismo criterio de mensajes honestos y sin jerga que
-            `HomeScreen`. */}
+        {/* Menú "Exportar" (sustituye a los antiguos botones sueltos
+            "Exportar HTML"/"Exportar SCORM"): un único botón que despliega
+            un `<div>` posicionado en CSS con las tres opciones. */}
+        <div className={styles.exportMenuWrapper} ref={exportMenuRef}>
+          <button
+            type="button"
+            className={styles.exportButton}
+            onClick={() => setExportMenuOpen((open) => !open)}
+            aria-haspopup="menu"
+            aria-expanded={exportMenuOpen}
+          >
+            Exportar
+          </button>
+          {exportMenuOpen && (
+            <div className={styles.exportMenu} role="menu" aria-label="Exportar">
+              {/* "Exportar revisión profes": su lógica todavía no está
+                  definida (el usuario la explicará más adelante) — se deja
+                  aquí visible pero DESHABILITADA, sin ninguna acción real
+                  detrás. Cuando se defina, el hueco natural es un hook
+                  `useTeacherReviewExport(filePath)` análogo a
+                  `useHtmlExport`/`useScormExport` de arriba, cableado igual
+                  que ellos (estado + mensaje bajo el botón "Exportar"). */}
+              <button
+                type="button"
+                role="menuitem"
+                className={styles.exportMenuItem}
+                disabled
+                title="Todavía por definir"
+              >
+                Exportar revisión profes (próximamente)
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className={styles.exportMenuItem}
+                onClick={() => {
+                  setExportMenuOpen(false)
+                  void htmlExport.exportHtml()
+                }}
+                disabled={htmlExport.status === 'exporting'}
+              >
+                {htmlExport.status === 'exporting' ? 'Exportando…' : 'Exportar HTML'}
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className={styles.exportMenuItem}
+                onClick={() => {
+                  setExportMenuOpen(false)
+                  void scormExport.exportScorm()
+                }}
+                disabled={scormExport.status === 'exporting'}
+              >
+                {scormExport.status === 'exporting' ? 'Exportando…' : 'Exportar SCORM'}
+              </button>
+            </div>
+          )}
+        </div>
+        {/* Resultado de la última exportación, bajo el botón "Exportar"
+            (el menú ya se ha cerrado al elegir la opción, ver arriba) —
+            mismo criterio de mensajes honestos y sin jerga que
+            `HomeScreen`. `role="alert"` solo para el fallo (interrumpe al
+            lector de pantalla porque hay algo que corregir); el éxito va
+            como `role="status"`, que se anuncia sin interrumpir. */}
         {htmlExport.message && (
           <span
             role={htmlExport.status === 'error' ? 'alert' : 'status'}
@@ -185,14 +286,6 @@ export function Topbar({
             {htmlExport.message}
           </span>
         )}
-        <button
-          type="button"
-          className={styles.exportButton}
-          onClick={htmlExport.exportHtml}
-          disabled={htmlExport.status === 'exporting'}
-        >
-          {htmlExport.status === 'exporting' ? 'Exportando…' : 'Exportar HTML'}
-        </button>
         {/* Mismo criterio de mensaje honesto y sin jerga que "Exportar
             HTML" de arriba. */}
         {scormExport.message && (
@@ -205,13 +298,24 @@ export function Topbar({
             {scormExport.message}
           </span>
         )}
+        {/* "Probar desde aquí": mismo estilo visual que "▶ Probar", pero
+            deshabilitado salvo con exactamente un nodo seleccionado en el
+            lienzo (`canPlayFromSelection`). Pasa ese único id como segundo
+            argumento de `setPreviewMode` — el override de "por dónde
+            arranca esta sesión de Probar" (ver `UiState.previewStartNodeId`
+            en `store/types.ts`), consumido por `PlayerScreen`. */}
         <button
           type="button"
-          className={styles.exportButton}
-          onClick={scormExport.exportScorm}
-          disabled={scormExport.status === 'exporting'}
+          className={styles.playButton}
+          onClick={() => setPreviewMode(true, selectedNodeIds[0])}
+          disabled={!canPlayFromSelection}
+          title={
+            canPlayFromSelection
+              ? undefined
+              : 'Selecciona exactamente una diapositiva en el lienzo para probar desde ahí'
+          }
         >
-          {scormExport.status === 'exporting' ? 'Exportando…' : 'Exportar SCORM'}
+          ▶ Probar desde aquí
         </button>
         <button type="button" className={styles.playButton} onClick={() => setPreviewMode(true)}>
           ▶ Probar

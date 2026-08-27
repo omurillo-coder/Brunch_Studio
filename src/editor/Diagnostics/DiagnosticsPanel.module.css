@@ -32,6 +32,30 @@
   background: var(--bs-color-warning);
 }
 
+/* Variante neutra de `.badge`: se usa cuando `total` (avisos activos) es 0
+   pero el panel sigue visible porque hay avisos descartados de esta sesión
+   por recuperar (ver comentario de cabecera de `DiagnosticsPanel.tsx`) — sin
+   el color/tono de alerta de `.badge`, que no tendría sentido con cero
+   avisos activos. */
+.badgeResolved {
+  display: flex;
+  align-items: center;
+  gap: var(--bs-space-1);
+  padding: var(--bs-space-1) var(--bs-space-3);
+  border: 1px solid var(--bs-color-border);
+  border-radius: var(--bs-radius-lg);
+  background: var(--bs-color-surface);
+  color: var(--bs-color-text-muted);
+  font-size: var(--bs-font-size-sm);
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: var(--bs-shadow-sm);
+}
+
+.badgeResolved:hover {
+  border-color: var(--bs-color-border-strong);
+}
+
 .badgeIcon {
   font-size: var(--bs-font-size-md);
   line-height: 1;
@@ -102,9 +126,19 @@
   color: var(--bs-color-text-faint);
 }
 
+/* Fila de un aviso individual: el botón de "ir al nodo" (`.issueRow`) más el
+   botón de "Descartar" (`.dismissButton`), uno junto al otro — dos controles
+   interactivos distintos, nunca un botón anidado dentro de otro. */
+.issueRowWrapper {
+  display: flex;
+  align-items: stretch;
+  gap: var(--bs-space-1);
+}
+
 .issueRow {
   display: block;
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   text-align: left;
   padding: var(--bs-space-2);
   border: none;
@@ -118,4 +152,43 @@
 
 .issueRow:hover {
   background: var(--bs-color-bg);
+}
+
+/* Botón "×" de descartar un aviso individual: mismo estilo sobrio (borde
+   fino, fondo neutro, texto atenuado) que `.rescanButton`/`.removeButton`
+   (ver `Inspector.module.css`), en formato compacto de icono. */
+.dismissButton {
+  flex-shrink: 0;
+  align-self: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--bs-color-border);
+  border-radius: var(--bs-radius-sm);
+  background: var(--bs-color-bg);
+  color: var(--bs-color-text-muted);
+  font-size: var(--bs-font-size-sm);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.dismissButton:hover {
+  border-color: var(--bs-color-danger);
+  color: var(--bs-color-danger);
+}
+
+/* Pie de la lista con el rastro de "cuántos avisos se han descartado en esta
+   sesión" y el enlace para recuperarlos, ver `DismissedDiagnosticsFooter`. */
+.dismissedFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--bs-space-2);
+  padding-top: var(--bs-space-2);
+  border-top: 1px solid var(--bs-color-border);
+  font-size: var(--bs-font-size-xs);
+  color: var(--bs-color-text-muted);
 }

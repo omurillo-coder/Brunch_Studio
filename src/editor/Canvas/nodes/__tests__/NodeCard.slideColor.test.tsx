@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { Canvas } from '../../Canvas'
 import { useProjectStore } from '../../../../store'
 import { resetProjectStore } from '../../../../store/testHelpers'
+import { shortNodeLabel } from '../nodeTypes'
 import styles from '../NodeCard.module.css'
 
 /**
@@ -60,7 +61,7 @@ describe('NodeCard — fondo de color de una diapositiva `slide`', () => {
     expect(coloredCard?.classList.contains(cardSlideYellowClass)).toBe(true)
 
     // La diapositiva de inicio, sin color, no lleva ninguna clase de color.
-    const uncoloredTitle = screen.getByText('Sin referencia')
+    const uncoloredTitle = screen.getByText('Sin ref. oculta')
     const uncoloredCard = uncoloredTitle.closest(`.${CSS.escape(cardClass)}`)
     expect(uncoloredCard).not.toBeNull()
     expect(uncoloredCard?.classList.contains(cardSlideYellowClass)).toBe(false)
@@ -123,7 +124,11 @@ describe('NodeCard — fondo de color de una diapositiva `slide`', () => {
     const finalCard = finalTitle.closest(`.${CSS.escape(cardClass)}`)
     expect(hasAnySlideColorClass(finalCard)).toBe(false)
 
-    const introTitle = screen.getByText('Inicio')
+    const intro = useProjectStore.getState().project.graph.nodes.find((n) => n.type === 'intro')
+    if (!intro) throw new Error('setup inválido')
+    // Ya no muestra el texto "Inicio" (Tarea "Numeración corta": ese sitio
+    // ahora es el código corto "D{número}", ver `shortNodeLabel`).
+    const introTitle = screen.getByText(shortNodeLabel(intro))
     const introCard = introTitle.closest(`.${CSS.escape(cardClass)}`)
     expect(hasAnySlideColorClass(introCard)).toBe(false)
   })

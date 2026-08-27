@@ -25,6 +25,7 @@ function sampleProject(overrides: Partial<ProjectDocument['metadata']> = {}): Pr
           id: '11111111-1111-4111-8111-111111111111',
           number: 1,
           type: 'final',
+          variant: 'general',
           position: { x: 0, y: 0 },
           title: 'Fin',
           body: '',

@@ -4,9 +4,9 @@
  * Es la traducción a CSS plano (sin CSS Modules, sin ningún build step) de
  * `src/styles/tokens.css` + `src/player/PlayerScreen.module.css`: los mismos
  * tokens `--bs-*` con los mismos valores — incluido el acento corporativo
- * iLERNA `#00aec7` y el rojo de peligro `#c22b3a` del botón "Reintentar" — y
- * las mismas reglas de tarjeta, opciones y medios, para que la experiencia
- * exportada se vea igual que en el modo "Probar" del editor.
+ * iLERNA `#00aec7` — y las mismas reglas de tarjeta, opciones y medios, para
+ * que la experiencia exportada se vea igual que en el modo "Probar" del
+ * editor.
  *
  * Se mantiene el prefijo `--bs-` y el bloque `prefers-color-scheme: dark`
  * aunque el HTML exportado sea un archivo aislado: así comparar este archivo
@@ -32,9 +32,6 @@ export const EXPORTED_STYLES = `
   --bs-color-accent: #00aec7;
   --bs-color-accent-hover: #33c6da;
   --bs-color-accent-contrast: #002b32;
-  --bs-color-danger: #c22b3a;
-  --bs-color-danger-hover: #a32230;
-  --bs-color-danger-contrast: #ffffff;
   --bs-color-focus-ring: rgba(0, 174, 199, 0.45);
   /* Destacado del texto enriquecido (marca highlight de Tiptap, fase 8),
      mismo valor que --bs-color-highlight en tokens.css. */
@@ -71,9 +68,6 @@ export const EXPORTED_STYLES = `
     --bs-color-accent: #2cc7de;
     --bs-color-accent-hover: #5ad6e8;
     --bs-color-accent-contrast: #06222a;
-    --bs-color-danger: #f0677a;
-    --bs-color-danger-hover: #f78b99;
-    --bs-color-danger-contrast: #2a0b10;
     --bs-color-focus-ring: rgba(44, 199, 222, 0.5);
     --bs-color-highlight: #6b5717;
     --bs-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
@@ -287,24 +281,6 @@ button:focus-visible {
 .primaryButton:hover {
   background: var(--bs-color-accent-hover);
   border-color: var(--bs-color-accent-hover);
-}
-
-/* "Reintentar": descarta el recorrido en curso y su puntuación, así que usa
-   el color de peligro del sistema, igual que en la app. */
-.dangerButton {
-  align-self: flex-start;
-  padding: var(--bs-space-2) var(--bs-space-4);
-  border: 1px solid var(--bs-color-danger);
-  border-radius: var(--bs-radius-sm);
-  background: var(--bs-color-danger);
-  color: var(--bs-color-danger-contrast);
-  font-size: var(--bs-font-size-md);
-  font-weight: 600;
-}
-
-.dangerButton:hover {
-  background: var(--bs-color-danger-hover);
-  border-color: var(--bs-color-danger-hover);
 }
 
 .options {

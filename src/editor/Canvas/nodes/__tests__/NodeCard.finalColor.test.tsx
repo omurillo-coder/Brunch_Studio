@@ -39,7 +39,7 @@ describe('NodeCard — fondo de la diapositiva `final`', () => {
     // La diapositiva de inicio, creada por defecto por el store, es de tipo
     // `slide` y sigue mostrando el placeholder de "sin referencia" cuando no
     // tiene título (ver `displayTitle` en `nodeTypes.tsx`).
-    const slideTitle = screen.getByText('Sin referencia')
+    const slideTitle = screen.getByText('Sin ref. oculta')
     const slideCard = slideTitle.closest(`.${CSS.escape(cardClass)}`)
     expect(slideCard).not.toBeNull()
     expect(slideCard?.classList.contains(cardFinalClass)).toBe(false)

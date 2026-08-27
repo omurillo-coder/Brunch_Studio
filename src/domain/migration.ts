@@ -199,6 +199,12 @@ function preContentBlocksNodeToNode(node: PreContentBlocksNode): Node {
       internalNote: node.internalNote,
       type: 'final',
       body: node.body,
+      // Migración de un documento anterior a las variantes de Final
+      // (general/bueno/malo, ver `FinalVariantSchema`): nace "general", mismo
+      // valor por defecto que aplica el propio schema Zod vía `.default(...)`
+      // — aquí se fija explícitamente porque este objeto se construye a mano,
+      // sin pasar por `FinalNodeSchema.parse`.
+      variant: 'general',
     }
     return final
   }

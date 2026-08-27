@@ -6,7 +6,15 @@ import { createNode, createProject, updateNode } from '../project'
 import { connect } from '../graph'
 import { addResponse, updateResponse } from '../responses'
 import { addTextBlock, updateTextBlockBody } from '../content'
-import { checkSpelling, detectCycles, detectUnlinkedResponses, tokenizeForSpelling } from '../diagnostics'
+import {
+  checkSpelling,
+  cycleIssueId,
+  detectCycles,
+  detectUnlinkedResponses,
+  spellingIssueId,
+  tokenizeForSpelling,
+  unlinkedResponseIssueId,
+} from '../diagnostics'
 import type { ProjectDocument } from '../schemas'
 
 /** Ruta absoluta al fichero de datos `.aff`/`.dic` de `dictionary-es`
@@ -231,5 +239,58 @@ describe('checkSpelling (diccionario real, integración)', () => {
     expect(speller.correct('bienvenido')).toBe(true)
     expect(speller.correct('diapositiva')).toBe(true)
     expect(speller.correct('blaaaxyzqq')).toBe(false)
+  })
+})
+
+// -----------------------------------------------------------------------
+// Identificadores estables de cada tipo de aviso (Tarea "Descartar avisos"):
+// usados por el "Descartar" de DiagnosticsPanel/ui.dismissedDiagnosticIds
+// (ver src/store/useProjectStore.ts) para que un aviso descartado no
+// reaparezca al recalcular la lista con el mismo problema exacto.
+// -----------------------------------------------------------------------
+
+describe('cycleIssueId', () => {
+  it('es estable frente al orden de recorrido: mismo conjunto de nodos, orden distinto -> mismo id', () => {
+    const idA = cycleIssueId({ nodeIds: ['a', 'b', 'c'] })
+    const idB = cycleIssueId({ nodeIds: ['c', 'a', 'b'] })
+    expect(idA).toBe(idB)
+  })
+
+  it('distingue ciclos con conjuntos de nodos distintos', () => {
+    const idA = cycleIssueId({ nodeIds: ['a', 'b'] })
+    const idB = cycleIssueId({ nodeIds: ['a', 'c'] })
+    expect(idA).not.toBe(idB)
+  })
+})
+
+describe('unlinkedResponseIssueId', () => {
+  it('es estable para el mismo nodo/respuesta', () => {
+    const issue = { nodeId: 'node-1', responseId: 'response-1', responseText: 'Sí' }
+    expect(unlinkedResponseIssueId(issue)).toBe(unlinkedResponseIssueId({ ...issue }))
+  })
+
+  it('distingue respuestas distintas, incluso del mismo nodo', () => {
+    const idA = unlinkedResponseIssueId({ nodeId: 'node-1', responseId: 'r1', responseText: '' })
+    const idB = unlinkedResponseIssueId({ nodeId: 'node-1', responseId: 'r2', responseText: '' })
+    expect(idA).not.toBe(idB)
+  })
+})
+
+describe('spellingIssueId', () => {
+  it('es estable para el mismo nodo/palabra', () => {
+    const issue = { nodeId: 'node-1', word: 'erorr' }
+    expect(spellingIssueId(issue)).toBe(spellingIssueId({ ...issue }))
+  })
+
+  it('normaliza a minúsculas: "Ola"/"ola" en el mismo nodo producen el mismo id', () => {
+    const idA = spellingIssueId({ nodeId: 'node-1', word: 'Ola' })
+    const idB = spellingIssueId({ nodeId: 'node-1', word: 'ola' })
+    expect(idA).toBe(idB)
+  })
+
+  it('distingue la misma palabra en nodos distintos', () => {
+    const idA = spellingIssueId({ nodeId: 'node-1', word: 'erorr' })
+    const idB = spellingIssueId({ nodeId: 'node-2', word: 'erorr' })
+    expect(idA).not.toBe(idB)
   })
 })

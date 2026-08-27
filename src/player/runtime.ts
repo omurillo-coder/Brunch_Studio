@@ -145,12 +145,25 @@ function findNode(project: ProjectDocument, nodeId: string): Node | null {
  * saltar automáticamente: la diapositiva de inicio es una diapositiva
  * normal y se muestra tal cual.
  *
- * Si `startNodeId` no corresponde a ningún nodo del documento (documento
- * incoherente), `currentNodeId` queda en `null` y `getView` resuelve a
- * `dead-end`.
+ * `startNodeId` (opcional, botón "Probar desde aquí" de `Topbar`): si se
+ * pasa y corresponde a un nodo real del documento, el recorrido arranca ahí
+ * en vez de en `graph.startNodeId` — únicamente el nodo de arranque cambia;
+ * `variables` se sigue sembrando igual que siempre a partir de
+ * `VariableDef.initialValue` (`initialVariableState`), SIN reconstruir qué
+ * decisiones se habrían tomado antes de llegar a `startNodeId`. Si no se
+ * pasa, o si no corresponde a ningún nodo del documento (p.ej. se borró
+ * entre seleccionarlo y pulsar el botón), se usa `graph.startNodeId` como
+ * hasta ahora — mismo criterio tolerante que el resto de este módulo (ver
+ * comentario de cabecera): nunca lanza, como mucho cae en el mismo `null`
+ * de un `graph.startNodeId` incoherente.
+ *
+ * Si el nodo de arranque resultante (`startNodeId` o `graph.startNodeId`)
+ * no corresponde a ningún nodo del documento, `currentNodeId` queda en
+ * `null` y `getView` resuelve a `dead-end`.
  */
-export function getInitialState(project: ProjectDocument): PlayerState {
-  const start = findNode(project, project.graph.startNodeId)
+export function getInitialState(project: ProjectDocument, startNodeId?: string): PlayerState {
+  const requested = startNodeId ? findNode(project, startNodeId) : null
+  const start = requested ?? findNode(project, project.graph.startNodeId)
   return {
     currentNodeId: start ? start.id : null,
     totalPoints: null,
@@ -160,12 +173,13 @@ export function getInitialState(project: ProjectDocument): PlayerState {
 
 /**
  * Reinicia el recorrido: recalcula el estado inicial desde cero (mismo
- * resultado que `getInitialState`). Nombre propio para que quien la llama
- * (`PlayerScreen`) exprese la intención "reiniciar" sin tener que saber que
- * internamente es la misma función que el cálculo inicial.
+ * resultado que `getInitialState`, mismo `startNodeId` opcional — ver su
+ * comentario). Nombre propio para que quien la llama (`PlayerScreen`)
+ * exprese la intención "reiniciar" sin tener que saber que internamente es
+ * la misma función que el cálculo inicial.
  */
-export function restart(project: ProjectDocument): PlayerState {
-  return getInitialState(project)
+export function restart(project: ProjectDocument, startNodeId?: string): PlayerState {
+  return getInitialState(project, startNodeId)
 }
 
 /**

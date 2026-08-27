@@ -81,12 +81,14 @@ describe('LeftPanel', () => {
     expect(button).toHaveAttribute('title', 'Ya existe la diapositiva de Inicio')
   })
 
-  it('la lista muestra etiquetas en español y ningún UUID visible', () => {
+  it('la lista muestra el código corto "D{número}" de cada nodo y ningún UUID visible', () => {
     render(<LeftPanel />)
 
-    // El proyecto recién creado ya tiene su diapositiva de inicio.
-    expect(screen.getByText('Diapositiva')).toBeInTheDocument()
-    expect(screen.getByText('Sin referencia')).toBeInTheDocument()
+    // El proyecto recién creado ya tiene su diapositiva de inicio (D1) —
+    // Tarea "Numeración corta": el sitio donde antes se mostraba la
+    // etiqueta de tipo ("Diapositiva") ahora muestra "D{número}".
+    expect(screen.getByText('D1')).toBeInTheDocument()
+    expect(screen.getByText('Sin ref. oculta')).toBeInTheDocument()
 
     const startNode = useProjectStore.getState().project.graph.nodes[0]
     if (!startNode) throw new Error('El proyecto no tiene nodos')
@@ -99,8 +101,9 @@ describe('LeftPanel', () => {
       useProjectStore.getState().createNode('slide', { x: 0, y: 0 })
     })
 
-    // Dos diapositivas en la lista, pero solo una marcada como inicio.
-    expect(screen.getAllByText('Diapositiva')).toHaveLength(2)
+    // Dos diapositivas en la lista (D1, D2), pero solo una marcada como
+    // inicio.
+    expect(screen.getAllByText(/^D\d+$/)).toHaveLength(2)
     expect(screen.getAllByTitle('Diapositiva de inicio')).toHaveLength(1)
     expect(screen.getByText('Inicio')).toBeInTheDocument()
   })
@@ -188,7 +191,9 @@ describe('LeftPanel — buscador del proyecto (fase 8)', () => {
       useProjectStore.getState().createNode('slide', { x: 0, y: 0 }, { title: 'Otra diapositiva' })
     })
 
-    expect(screen.getAllByRole('button', { name: /Diapositiva|Final/ }).length).toBeGreaterThanOrEqual(2)
+    // Tarea "Numeración corta": la etiqueta de tipo dentro del nombre
+    // accesible del botón ahora es el código corto "D{número}".
+    expect(screen.getAllByRole('button', { name: /D\d+/ }).length).toBeGreaterThanOrEqual(2)
   })
 
   it('filtra por título (case-insensitive, substring)', () => {
@@ -359,11 +364,11 @@ describe('LeftPanel — reordenar la lista de diapositivas (↑/↓)', () => {
     })
 
     // La diapositiva de inicio nace en el índice 0: su ↑ está deshabilitado.
-    expect(screen.getByLabelText('Subir "Sin referencia"')).toBeDisabled()
+    expect(screen.getByLabelText('Subir "Sin ref. oculta"')).toBeDisabled()
     // "Segunda" queda última: su ↓ está deshabilitado.
     expect(screen.getByLabelText('Bajar "Segunda"')).toBeDisabled()
     // Los extremos opuestos de cada una siguen activos.
-    expect(screen.getByLabelText('Bajar "Sin referencia"')).not.toBeDisabled()
+    expect(screen.getByLabelText('Bajar "Sin ref. oculta"')).not.toBeDisabled()
     expect(screen.getByLabelText('Subir "Segunda"')).not.toBeDisabled()
   })
 

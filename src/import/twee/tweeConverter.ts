@@ -339,7 +339,7 @@ export function convertTweeToProject(source: string, fallbackName: string): Conv
       // Un pasaje sin enlaces se convierte en un nodo `final`, que sigue
       // teniendo un único `body` (a diferencia de `slide`, ver
       // `src/domain/schemas.ts`) — el texto del pasaje va directo ahí.
-      const final: FinalNode = { ...common, type: 'final', body }
+      const final: FinalNode = { ...common, type: 'final', body, variant: 'general' }
       return final
     }
 

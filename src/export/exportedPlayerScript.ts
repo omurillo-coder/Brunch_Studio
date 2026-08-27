@@ -765,13 +765,14 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
         card.appendChild(points);
       }
 
-      // Fila de acciones: "Reintentar" (peligro) + "Salir" (neutro), una
-      // junto a la otra. Sin clase propia en exportedStyles.ts (fuera de
-      // alcance): flex simple vía \`style.cssText\`.
+      // Fila de acciones: "Volver a jugar" (acento, mismo estilo que
+      // "Continuar") + "Salir" (neutro), una junto a la otra. Sin clase
+      // propia en exportedStyles.ts (fuera de alcance): flex simple vía
+      // \`style.cssText\`.
       var actions = el('div', null);
       actions.style.cssText = 'display:flex;align-items:center;gap:var(--bs-space-3);';
 
-      var retryButton = el('button', 'dangerButton');
+      var retryButton = el('button', 'primaryButton');
       retryButton.type = 'button';
       retryButton.textContent = texts.retry;
       retryButton.addEventListener('click', function () {
@@ -779,8 +780,8 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
       });
       actions.appendChild(retryButton);
 
-      // "Salir": estilo neutro (no es una acción destructiva como
-      // "Reintentar"), reutilizando los mismos tokens --bs-* que ya define
+      // "Salir": estilo neutro (no es la acción principal de esta fila),
+      // reutilizando los mismos tokens --bs-* que ya define
       // exportedStyles.ts en :root para que se vea coherente con el resto de
       // la tarjeta, sin añadir ninguna clase a ese archivo.
       var exitButton = el('button', null);

@@ -70,14 +70,14 @@ describe('App: navegación HomeScreen -> EditorScreen', () => {
     expect(screen.getAllByText('Escenario de prueba').length).toBeGreaterThan(0)
     expect(screen.getByText('+ Diapositiva')).toBeInTheDocument()
     expect(screen.getByText('+ Final')).toBeInTheDocument()
-    // La diapositiva de Inicio, sembrada automáticamente por la plantilla
-    // al crear el proyecto, ya aparece en la lista del panel izquierdo
-    // (etiquetada "Inicio", sin la marca aparte de "punto de partida" que
-    // usan los demás tipos — su propia etiqueta de tipo ya lo dice) y el
+    // La diapositiva de Inicio, sembrada automáticamente por la plantilla al
+    // crear el proyecto, ya aparece en la lista del panel izquierdo — desde
+    // el rediseño "D1/D25" ya no lleva la etiqueta de tipo "Inicio", sino el
+    // código corto D+número (siempre nace como el primer nodo, "D1") — y el
     // botón "+ Inicio" queda deshabilitado porque ya existe una.
-    // "Inicio" aparece tanto en la tarjeta del lienzo como en el panel
+    // "D1" aparece tanto en la tarjeta del lienzo como en el panel
     // izquierdo — dos elementos distintos con el mismo texto.
-    expect(screen.getAllByText('Inicio').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('D1').length).toBeGreaterThanOrEqual(1)
     expect(screen.getByText('+ Inicio')).toBeDisabled()
   })
 

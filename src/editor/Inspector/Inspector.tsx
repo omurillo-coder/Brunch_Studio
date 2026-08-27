@@ -11,6 +11,7 @@ import {
   CICLOS,
   COMPARISON_OPERATORS,
   DEFAULT_CONTINUE_LABEL,
+  FINAL_VARIANTS,
   MAX_RESPONSES,
   RESPONSE_LETTERS,
   SLIDE_COLORS,
@@ -20,6 +21,8 @@ import type {
   ComparisonOperator,
   ContentBlock,
   DecisionResponse,
+  FinalNode,
+  FinalVariant,
   IntroNode,
   Node,
   NodeType,
@@ -81,14 +84,14 @@ const NO_TARGET_VALUE = '__none__'
 /**
  * Etiqueta legible de un nodo para mostrarlo como destino posible en un
  * `<select>` — nunca el `id` interno (UUID) como texto visible. Formato:
- * "<Tipo> <número> — <referencia o 'Sin referencia'>", p.ej.
- * "Diapositiva 3 — Bienvenida". "Referencia" es la etiqueta de UI del campo
+ * "<Tipo> <número> — <referencia o 'Sin ref. oculta'>", p.ej.
+ * "Diapositiva 3 — Bienvenida". "Ref. oculta" es la etiqueta de UI del campo
  * `title` del dominio (ver comentario de `NodeFields` más abajo, junto al
  * `<label>` del campo): el nombre del campo en el modelo no cambia, solo su
  * texto visible.
  */
 function nodeOptionLabel(node: Node): string {
-  const title = node.title.trim() || 'Sin referencia'
+  const title = node.title.trim() || 'Sin ref. oculta'
   return `${NODE_TYPE_LABEL[node.type]} ${node.number} — ${title}`
 }
 
@@ -135,7 +138,7 @@ const SLIDE_COLOR_SWATCH_CLASS: Record<SlideColor, string | undefined> = {
  * propio fondo fijo por tipo — ver comentario de `SlideColorSchema` en
  * `src/domain/schemas.ts`): fila de pastillas clicables, una por cada color
  * de `SLIDE_COLORS` más "Sin color" para volver a `null`. Situada junto al
- * campo "Referencia" (ver `NodeFields`) por ser, junto al título, uno de los
+ * campo "Ref. oculta" (ver `NodeFields`) por ser, junto al título, uno de los
  * primeros datos que identifican la diapositiva de un vistazo.
  *
  * La pastilla del color actualmente elegido se marca con `.colorSwatchSelected`
@@ -2043,6 +2046,52 @@ function DuplicateNodeButton({ node }: { node: Node }) {
 }
 
 /**
+ * Etiqueta legible de cada variante de un nodo `final` (estructura de datos
+ * únicamente por ahora, ver comentario de `FinalVariantSchema` en
+ * `src/domain/schemas.ts`: el TEXTO real de cada variante lo aportará el
+ * usuario más adelante, este desplegable solo fija la categoría).
+ */
+const FINAL_VARIANT_LABEL: Record<FinalVariant, string> = {
+  general: 'Final general',
+  good: 'Final bueno',
+  bad: 'Final malo',
+}
+
+/**
+ * Desplegable de variante de un nodo `final` (general/bueno/malo, ver
+ * `FinalVariantSchema`). Cambiar de variante es un único `updateNode` con
+ * SOLO `variant` en el patch — nunca toca ni vacía `body` (el texto del
+ * Final, editado aparte más abajo por `RichTextEditor`): son campos
+ * completamente independientes, ver comentario de `UpdateNodePatch.variant`
+ * en `src/domain/project.ts`. Sin "commit on blur": un `<select>` no tiene
+ * estado intermedio que proteger, mismo criterio que el resto de selectores
+ * de este archivo (`SlideColorSection`, `ConditionEditor`...).
+ */
+function FinalVariantSection({ node }: { node: FinalNode }) {
+  const updateNode = useProjectStore((state) => state.updateNode)
+  const fieldId = 'inspector-final-variant'
+
+  function handleChange(event: ChangeEvent<HTMLSelectElement>) {
+    updateNode(node.id, { variant: event.target.value as FinalVariant })
+  }
+
+  return (
+    <div>
+      <label className={styles.label} htmlFor={fieldId}>
+        Variante
+      </label>
+      <select id={fieldId} className={styles.select} value={node.variant} onChange={handleChange}>
+        {FINAL_VARIANTS.map((variant) => (
+          <option key={variant} value={variant}>
+            {FINAL_VARIANT_LABEL[variant]}
+          </option>
+        ))}
+      </select>
+    </div>
+  )
+}
+
+/**
  * Campos de edición de un nodo (título/body), comunes a cualquier tipo, más
  * — para una Diapositiva — sus adjuntos, su modo "de continuar" (si no tiene
  * respuestas) y la sección de respuestas.
@@ -2129,19 +2178,20 @@ function NodeFields({
     }
   }
 
-  // "Referencia" es la etiqueta de UI del campo `title` del dominio (el
+  // "Ref. oculta" es la etiqueta de UI del campo `title` del dominio (el
   // nombre del campo en el modelo/schema no cambia, solo su texto visible —
-  // ver también `nodeOptionLabel` más arriba y los "Sin referencia" de
-  // `LeftPanel`/`nodeTypes.tsx`). `id`/`htmlFor` se dejan como estaban: son
-  // detalle interno del DOM, no texto visible. Extraído a una variable (en
-  // vez de repetir el JSX) porque Tarea 4 lo sitúa en dos posiciones
-  // distintas del árbol según el tipo de nodo (ver más abajo): dentro del
-  // grupo "sobre esta diapositiva en sí" para una `slide`, en su posición de
-  // siempre para `final`/`intro`.
+  // ver también `nodeOptionLabel` más arriba y los "Sin ref. oculta" de
+  // `LeftPanel`/`nodeTypes.tsx`, que otro proceso en paralelo actualiza a
+  // "Sin ref. oculta" — fuera de mi alcance en este archivo). `id`/`htmlFor`
+  // se dejan como estaban: son detalle interno del DOM, no texto visible.
+  // Extraído a una variable (en vez de repetir el JSX) porque Tarea 4 lo
+  // sitúa en dos posiciones distintas del árbol según el tipo de nodo (ver
+  // más abajo): dentro del grupo "sobre esta diapositiva en sí" para una
+  // `slide`, en su posición de siempre para `final`/`intro`.
   const referenceField = (
     <div>
       <label className={styles.label} htmlFor="inspector-node-title">
-        Referencia
+        Ref. oculta
       </label>
       <input
         id="inspector-node-title"
@@ -2164,11 +2214,11 @@ function NodeFields({
   return (
     <div className={styles.fields}>
       {node.type === 'slide' ? (
-        /* Tarea 4 (reorganización del Inspector): Color + Referencia +
+        /* Tarea 4 (reorganización del Inspector): Color + Ref. oculta +
            Contenido (bloques) + Nota interna agrupados en un bloque
            diferenciado ("sobre esta diapositiva en sí"), con Color arriba
-           del todo — antes que "Referencia" — y el orden relativo de
-           Referencia/Contenido/Nota interna intacto respecto al de siempre.
+           del todo — antes que "Ref. oculta" — y el orden relativo de
+           Ref. oculta/Contenido/Nota interna intacto respecto al de siempre.
            El resto de la sección (destino/respuestas/enrutado condicional/
            conexiones) queda FUERA de este bloque, ver más abajo — mismo
            contenedor con borde/fondo sutil (`.metaGroup`,
@@ -2184,20 +2234,23 @@ function NodeFields({
         <>
           {referenceField}
           {node.type === 'final' && (
-            <div>
-              <span id="inspector-node-body-label" className={styles.label}>
-                Contenido
-              </span>
-              <RichTextEditor
-                body={node.body}
-                onCommit={(nextBody) => updateNode(node.id, { body: nextBody })}
-                ariaLabelledBy="inspector-node-body-label"
-              />
-            </div>
+            <>
+              <FinalVariantSection node={node} />
+              <div>
+                <span id="inspector-node-body-label" className={styles.label}>
+                  Contenido
+                </span>
+                <RichTextEditor
+                  body={node.body}
+                  onCommit={(nextBody) => updateNode(node.id, { body: nextBody })}
+                  ariaLabelledBy="inspector-node-body-label"
+                />
+              </div>
+            </>
           )}
           {/* Diapositiva de Inicio (Tarea 2, milestone "Diapositiva de
               Inicio"): ciclo/asignatura/nombre de caso/destino, ver
-              `IntroSection`. La "Referencia" (campo `title`) de arriba se
+              `IntroSection`. La "Ref. oculta" (campo `title`) de arriba se
               deja visible también para un `intro` — decisión deliberada, no
               un olvido: es solo una nota interna más (nunca se exporta como
               tal, ver su comentario más arriba) y mantenerla consistente en

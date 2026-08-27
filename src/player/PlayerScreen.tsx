@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useProject, useProjectStore } from '../store'
+import { useProject, useProjectStore, usePreviewStartNodeId } from '../store'
 import { CICLOS, DEFAULT_CONTINUE_LABEL, RESPONSE_LETTERS } from '../domain'
 import type { ContentBlock, DecisionResponse, IntroNode, SlideNode } from '../domain'
 import { advance, choose, getInitialState, getView } from './runtime'
@@ -321,8 +321,8 @@ export interface PlayerScreenProps {
  * del store — nunca una copia — que reproduce el documento como lo vería
  * quien lo juega: una diapositiva sin respuestas con su botón de continuar,
  * una diapositiva con respuestas como opciones elegibles, un Final (con
- * botón "Reintentar"), o un aviso breve si el recorrido llega a un punto sin
- * continuación configurada. El recorrido empieza directamente en
+ * botón "Volver a jugar"), o un aviso breve si el recorrido llega a un punto
+ * sin continuación configurada. El recorrido empieza directamente en
  * `graph.startNodeId`: ya no hay ningún nodo "Inicio" invisible del que
  * saltar.
  *
@@ -333,12 +333,26 @@ export interface PlayerScreenProps {
  * efímera de lectura, no parte del documento. Si el usuario sale y vuelve a
  * entrar al Player, empieza otra vez desde el principio — comportamiento
  * esperado, no un bug.
+ *
+ * "Probar desde aquí" (botón de `Topbar`): `previewStartNodeId`
+ * (`ui.previewStartNodeId` del store, ver su comentario de diseño en
+ * `store/types.ts`) es el nodo por el que debe arrancar ESTA sesión en vez
+ * de `graph.startNodeId`, o `null` si se entró por el botón normal
+ * "▶ Probar". Se pasa tal cual a `getInitialState`/`restart` (que resuelven
+ * el fallback si el id no correspondiera a ningún nodo) tanto al arrancar
+ * como en `handleRestart`: "Reiniciar experiencia"/"Volver a jugar" reinicia
+ * al mismo punto en el que empezó esta sesión concreta, no al inicio real
+ * del proyecto — sería sorprendente que "probar desde aquí" te devolviera a
+ * `graph.startNodeId` al reiniciar.
  */
 export function PlayerScreen({ filePath }: PlayerScreenProps) {
   const project = useProject()
   const setPreviewMode = useProjectStore((state) => state.setPreviewMode)
+  const previewStartNodeId = usePreviewStartNodeId()
   const { assetRepository } = useAppServices()
-  const [playerState, setPlayerState] = useState<PlayerState>(() => getInitialState(project))
+  const [playerState, setPlayerState] = useState<PlayerState>(() =>
+    getInitialState(project, previewStartNodeId ?? undefined),
+  )
   const [exitMessageVisible, setExitMessageVisible] = useState(false)
 
   function handleExit() {
@@ -346,7 +360,7 @@ export function PlayerScreen({ filePath }: PlayerScreenProps) {
   }
 
   function handleRestart() {
-    setPlayerState(getInitialState(project))
+    setPlayerState(getInitialState(project, previewStartNodeId ?? undefined))
   }
 
   /**
@@ -463,16 +477,19 @@ export function PlayerScreen({ filePath }: PlayerScreenProps) {
               <p className={styles.points}>Puntuación final: {playerState.totalPoints} puntos</p>
             )}
             <div className={styles.finalActions}>
-              {/* Reintentar: mismo efecto que "↺ Reiniciar experiencia" de la
-                  cabecera, pero dentro de la propia tarjeta de Final, que es
-                  donde el usuario está mirando al terminar el recorrido. En
-                  color de peligro porque descarta el recorrido en curso (y
-                  su puntuación) para empezar de cero. */}
-              <button type="button" className={styles.dangerButton} onClick={handleRestart}>
-                Reintentar
+              {/* Volver a jugar: mismo efecto que "↺ Reiniciar experiencia" de
+                  la cabecera, pero dentro de la propia tarjeta de Final, que
+                  es donde el usuario está mirando al terminar el recorrido.
+                  Mismo estilo/color de acento que "Continuar" (`.primaryButton`,
+                  ver comentario de esa clase en `PlayerScreen.module.css`) —
+                  antes era un botón de peligro (rojo) porque descartaba el
+                  recorrido en curso, pero "volver a jugar" es una acción
+                  habitual y esperada al terminar, no destructiva. */}
+              <button type="button" className={styles.primaryButton} onClick={handleRestart}>
+                Volver a jugar
               </button>
-              {/* Salir: estilo neutro (no es una acción destructiva como
-                  "Reintentar"). Ver `handleExitAttempt`. */}
+              {/* Salir: estilo neutro (no es la acción principal de esta
+                  fila). Ver `handleExitAttempt`. */}
               <button type="button" className={styles.neutralButton} onClick={handleExitAttempt}>
                 Salir
               </button>

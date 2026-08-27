@@ -878,3 +878,51 @@ describe('setClipboardNodeIds (portapapeles interno de Ctrl/Cmd+C/V, ver useCanv
     expect(useProjectStore.getState().ui.clipboardNodeIds).toEqual([])
   })
 })
+
+describe('dismissDiagnostic / restoreDismissedDiagnostics (descarte de avisos, SOLO de sesión)', () => {
+  it('dismissDiagnostic añade el id sin generar entrada de historial', () => {
+    const historyBefore = useProjectStore.getState().history.past.length
+
+    useProjectStore.getState().dismissDiagnostic('cycle:a,b')
+
+    expect(useProjectStore.getState().ui.dismissedDiagnosticIds).toEqual(['cycle:a,b'])
+    expect(useProjectStore.getState().history.past.length).toBe(historyBefore)
+  })
+
+  it('descartar el mismo id dos veces no lo duplica', () => {
+    useProjectStore.getState().dismissDiagnostic('cycle:a,b')
+    useProjectStore.getState().dismissDiagnostic('cycle:a,b')
+
+    expect(useProjectStore.getState().ui.dismissedDiagnosticIds).toEqual(['cycle:a,b'])
+  })
+
+  it('descarta varios avisos distintos', () => {
+    useProjectStore.getState().dismissDiagnostic('cycle:a,b')
+    useProjectStore.getState().dismissDiagnostic('spelling:node-1:erorr')
+
+    expect(useProjectStore.getState().ui.dismissedDiagnosticIds).toEqual([
+      'cycle:a,b',
+      'spelling:node-1:erorr',
+    ])
+  })
+
+  it('restoreDismissedDiagnostics vacía la lista, sin tocar el historial', () => {
+    useProjectStore.getState().dismissDiagnostic('cycle:a,b')
+    useProjectStore.getState().dismissDiagnostic('spelling:node-1:erorr')
+    const historyBefore = useProjectStore.getState().history.past.length
+
+    useProjectStore.getState().restoreDismissedDiagnostics()
+
+    expect(useProjectStore.getState().ui.dismissedDiagnosticIds).toEqual([])
+    expect(useProjectStore.getState().history.past.length).toBe(historyBefore)
+  })
+
+  it('loadProject resetea ui.dismissedDiagnosticIds', () => {
+    useProjectStore.getState().dismissDiagnostic('cycle:a,b')
+
+    const fresh = useProjectStore.getState().project
+    useProjectStore.getState().loadProject(fresh)
+
+    expect(useProjectStore.getState().ui.dismissedDiagnosticIds).toEqual([])
+  })
+})

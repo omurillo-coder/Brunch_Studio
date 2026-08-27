@@ -89,7 +89,15 @@ describe('collectReferencedAssetIds', () => {
           response({ id: 'r2', letter: 'B', audioAssetId: 'aud-2' }),
         ],
       }),
-      { id: FINAL, number: 3, type: 'final', position: { x: 0, y: 0 }, title: '', body: '' },
+      {
+        id: FINAL,
+        number: 3,
+        type: 'final',
+        position: { x: 0, y: 0 },
+        title: '',
+        body: '',
+        variant: 'general',
+      },
     ])
 
     expect(collectReferencedAssetIds(doc)).toEqual(['img-1', 'aud-1', 'img-2', 'aud-2'])

@@ -43,6 +43,7 @@ function sampleProject(): ProjectDocument {
     id: FINAL_ID,
     number: 2,
     type: 'final',
+    variant: 'general',
     position: { x: 300, y: 0 },
     title: 'Fin',
     body: richBody('Se acabó.'),

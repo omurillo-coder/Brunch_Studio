@@ -74,6 +74,27 @@
   background: var(--bs-color-intro-bg);
 }
 
+/* Tarea "Contorno de Inicio/Final": además de su fondo de color propio,
+   `.cardFinal`/`.cardIntro` llevan un contorno oscuro que las hace destacar
+   frente a una diapositiva normal — por TIPO de nodo (`data.nodeType ===
+   'final'`/`'intro'` en `cardClassName`), así que cubre igual cualquier
+   variante de `final` que exista en el dominio, no solo una en concreto.
+   Deliberadamente `outline` y NO `border-color`: ese canal ya está en uso
+   por el anillo de selección (`.selected .card` de arriba) y por el aviso
+   "sin salida" (`.cardWarning` más abajo), y `outline` es una capa de
+   pintado totalmente aparte (no participa en el layout de la caja ni en
+   `border`), así que este contorno se ve SIEMPRE en estas tarjetas —
+   seleccionadas o no, con aviso o no — sin pisar ni ser pisado por ninguno
+   de esos dos anillos. `outline-offset: 2px` las separa del anillo de
+   selección/aviso (que dibuja su propio `box-shadow` pegado al borde, 0 a
+   2px hacia fuera): así ambos anillos quedan uno junto a otro (2 a 4px el
+   negro), en vez de solaparse. */
+.cardFinal,
+.cardIntro {
+  outline: 2px solid var(--bs-color-text);
+  outline-offset: 2px;
+}
+
 /* Color opcional de una diapositiva `slide` (paleta cerrada,
    `SLIDE_COLORS` en `src/domain/schemas.ts`): mismo criterio que
    `.cardFinal`/`.cardIntro` — solo cambia el fondo, mismo texto
@@ -170,13 +191,19 @@
   color: var(--bs-color-accent);
 }
 
+/* Tarea "Orden de la tarjeta": pintado PRIMERO en el DOM (ver `Header` en
+   `nodeTypes.tsx`) y alineado a la izquierda (antes `text-align: right`,
+   cuando era el último elemento) para que se lea como el texto principal de
+   la cabecera; al ser el único elemento `flex: 1 1 auto`, ocupa el espacio
+   sobrante y empuja el resto de insignias (`.type` con el código corto
+   "D{número}", `.startMark`, `.number`) hacia la derecha de la fila. */
 .title {
   flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-  text-align: right;
+  text-align: left;
   font-weight: 600;
 }
 

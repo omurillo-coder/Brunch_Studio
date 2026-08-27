@@ -31,6 +31,19 @@ export interface UiState {
   hoveredNodeId: string | null
   previewMode: boolean
   /**
+   * Nodo por el que debe arrancar el recorrido de ESTA sesión de "Probar"
+   * (botón "Probar desde aquí" de `Topbar`, tarea "Probar desde aquí"),
+   * `null` cuando se entra por el botón normal "▶ Probar" (arranca en
+   * `graph.startNodeId`, como siempre). Fijado por `setPreviewMode` a la vez
+   * que `previewMode`: entrar sin pasar un id (botón normal) lo deja en
+   * `null` aunque una sesión anterior lo hubiera fijado — el override es
+   * solo para esa sesión de prueba concreta, nunca se "recuerda" entre
+   * entradas al Player. Lo consume `PlayerScreen` para arrancar
+   * (`getInitialState`) y para reiniciar (`restart`) en el mismo nodo
+   * durante toda la sesión.
+   */
+  previewStartNodeId: string | null
+  /**
    * Petición de "centrar el lienzo en este nodo", fijada por `focusNode`
    * (p.ej. al hacer clic en un elemento de `LeftPanel`) y consumida por el
    * componente del lienzo (fase 5), que centra la vista y la limpia con
@@ -60,6 +73,31 @@ export interface UiState {
    * consume este campo debe usar un valor de repuesto razonable.
    */
   viewportCenter: NodePosition | null
+  /**
+   * Avisos descartados del "rinconcito de avisos" (`DiagnosticsPanel`,
+   * tarea "Descartar avisos en el rincón de avisos"): ids ESTABLES (ver
+   * `cycleIssueId`/`unlinkedResponseIssueId`/`spellingIssueId` en
+   * `src/domain/diagnostics.ts`) de los avisos que el usuario ha descartado
+   * en ESTA sesión. Mismo criterio de transitoriedad que `clipboardNodeIds`
+   * más arriba: SOLO de sesión — no se persiste en el `.brunch` (no vive en
+   * `project`), no pasa por el historial de undo/redo (ninguna acción de
+   * dismiss/restore toca `history`) y `loadProject` lo reinicia a vacío
+   * igual que el resto de `ui`, mismo motivo (abrir OTRO documento no debe
+   * arrastrar descartes de la sesión anterior).
+   *
+   * Un array plano (no un `Set`) por el mismo motivo que `clipboardNodeIds`:
+   * el volumen esperado de avisos es pequeño (decenas, no miles), así que la
+   * O(n) de comprobar pertenencia es irrelevante, y evita depender del
+   * plugin `enableMapSet` de Immer (no habilitado en este proyecto) que
+   * haría falta para mutar un `Set` dentro de un `set()` de
+   * `zustand/middleware/immer`.
+   *
+   * Si el problema real que originó un aviso desaparece y luego se
+   * reintroduce EXACTAMENTE igual más tarde (mismo id), es aceptable que
+   * siga apareciendo descartado — no hay lógica de expiración, comportamiento
+   * razonable y esperado para un descarte de sesión.
+   */
+  dismissedDiagnosticIds: string[]
   /**
    * "Portapapeles" interno de duplicar diapositivas con Ctrl/Cmd+C/V (ver
    * `useCanvasClipboard` en `src/editor/Canvas/`): ids de los nodos

@@ -3,6 +3,7 @@ import { createId, nextNodeNumber } from './id'
 import { connect } from './graph'
 import type {
   FinalNode,
+  FinalVariant,
   IntroNode,
   Node,
   NodePosition,
@@ -85,6 +86,16 @@ export interface CreateNodeExtra {
  * conexión, igual que el de una `SlideNode`): usa `connect`/`disconnect` de
  * `src/domain/graph.ts`, generalizados para aceptar un nodo `intro` como
  * origen.
+ *
+ * `variant` (tres variantes de un Final — general/bueno/malo, ver
+ * `FinalVariantSchema` en `src/domain/schemas.ts`): solo aplica a un nodo
+ * `final`; si el patch lo incluye y el nodo es `slide`/`intro`, `updateNode`
+ * lanza, mismo criterio que `body`. No admite `null` (a diferencia de
+ * `color`): un `final` siempre tiene una variante (`.default('general')` en
+ * el schema), nunca "sin variante" que borrar — mismo criterio que `caseName`
+ * de un `intro`. Cambiar la variante es puramente una categoría/etiqueta
+ * adicional: NUNCA toca ni vacía `body` (el texto del Final), que se sigue
+ * editando por su cuenta, de forma completamente independiente.
  */
 export interface UpdateNodePatch {
   title?: string
@@ -97,6 +108,7 @@ export interface UpdateNodePatch {
   cicloId?: string | null
   asignaturaId?: string | null
   caseName?: string
+  variant?: FinalVariant
 }
 
 /**
@@ -239,7 +251,7 @@ export function createNode(
       break
     }
     case 'final': {
-      const node: FinalNode = { ...common, type: 'final', body }
+      const node: FinalNode = { ...common, type: 'final', body, variant: 'general' }
       newNode = node
       break
     }
@@ -415,6 +427,11 @@ export function updateNode(
       `El nodo "${nodeId}" es de tipo "${node.type}" y no tiene un único "body": usa las funciones de src/domain/content.ts para editar sus bloques de contenido.`,
     )
   }
+  if (patch.variant !== undefined && node && node.type !== 'final') {
+    throw new Error(
+      `El nodo "${nodeId}" es de tipo "${node.type}" y no admite variante de Final (general/bueno/malo).`,
+    )
+  }
   const setsIntroOnlyField =
     patch.cicloId !== undefined || patch.asignaturaId !== undefined || patch.caseName !== undefined
   if (setsIntroOnlyField && node && node.type !== 'intro') {
@@ -432,6 +449,7 @@ export function updateNode(
     }
     if (draftNode.type === 'final') {
       if (patch.body !== undefined) draftNode.body = patch.body
+      if (patch.variant !== undefined) draftNode.variant = patch.variant
     }
     if (draftNode.type === 'slide') {
       if (patch.continueLabel !== undefined) {
@@ -631,7 +649,9 @@ export function duplicateNode(
       break
     }
     case 'final': {
-      const node: FinalNode = { ...common, type: 'final', body: source.body }
+      // `variant` es contenido (categoría del Final), se copia tal cual —
+      // mismo criterio que `color` en una `slide`, ver comentario más arriba.
+      const node: FinalNode = { ...common, type: 'final', body: source.body, variant: source.variant }
       duplicate = node
       break
     }

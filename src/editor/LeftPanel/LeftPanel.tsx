@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { useProject, useProjectStore, useSelectedNodeIds, useViewportCenter } from '../../store'
 import { CICLOS } from '../../domain'
 import type { Node, NodePosition, NodeType } from '../../domain'
-import { NODE_TYPE_LABEL, START_NODE_LABEL } from '../Canvas/nodes/nodeTypes'
+import { NODE_TYPE_LABEL, START_NODE_LABEL, shortNodeLabel } from '../Canvas/nodes/nodeTypes'
 import { extractPlainText, parseRichBody } from '../richText/richTextContent'
 import styles from './LeftPanel.module.css'
 
@@ -220,16 +220,21 @@ export function LeftPanel() {
               aria-current={selectedNodeIds.includes(node.id) ? 'true' : undefined}
               onClick={() => focusNode(node.id)}
             >
-              <span className={styles.nodeType}>{NODE_TYPE_LABEL[node.type]}</span>
+              {/* Tarea "Numeración corta": código "D{número}" en vez de la
+                  antigua etiqueta traducida de tipo — misma función
+                  compartida que usa `Header` en `nodeTypes.tsx`, no
+                  duplicada aquí. */}
+              <span className={styles.nodeType}>{shortNodeLabel(node)}</span>
               {/* Marca discreta del punto de partida del recorrido. Mismo
                   criterio (y misma etiqueta) que en la tarjeta del lienzo:
                   el inicio ya no es siempre un nodo aparte (documentos sin
                   `intro` todavía), así que hay que poder distinguirlo de un
                   vistazo entre las demás diapositivas. Se omite para un nodo
                   `intro` (siempre es `startNodeId` cuando existe, ver
-                  `IntroNodeSchema`): su propia etiqueta de tipo ya dice
-                  "Inicio", repetirlo sería redundante — mismo criterio que
-                  `Header` en `nodeTypes.tsx`. */}
+                  `IntroNodeSchema`): ya se distingue de un vistazo por su
+                  propio fondo/contorno en el lienzo, y repetir "Inicio" aquí
+                  sería redundante — mismo criterio que `Header` en
+                  `nodeTypes.tsx`. */}
               {node.id === project.graph.startNodeId && node.type !== 'intro' && (
                 <span className={styles.nodeStartMark} title="Diapositiva de inicio">
                   {START_NODE_LABEL}
@@ -239,7 +244,7 @@ export function LeftPanel() {
               {/* "Referencia" es la etiqueta de UI del campo `title` de
                   dominio (ver el `<label>` del Inspector) — el nombre del
                   campo no cambia, solo el texto que ve el usuario. */}
-              <span className={styles.nodeTitle}>{node.title.trim() || 'Sin referencia'}</span>
+              <span className={styles.nodeTitle}>{node.title.trim() || 'Sin ref. oculta'}</span>
             </button>
             {/* Reordenar (puramente organizativo, ver `reorderNode` en
                 `src/domain/nodeOrder.ts`): botones fuera del `<button>` de
@@ -256,7 +261,7 @@ export function LeftPanel() {
                   reorderNode(node.id, index - 1)
                 }}
                 disabled={isSearching || index === 0}
-                aria-label={`Subir "${node.title.trim() || 'Sin referencia'}"`}
+                aria-label={`Subir "${node.title.trim() || 'Sin ref. oculta'}"`}
                 title={isSearching ? 'Borra la búsqueda para reordenar' : undefined}
               >
                 ↑
@@ -269,7 +274,7 @@ export function LeftPanel() {
                   reorderNode(node.id, index + 1)
                 }}
                 disabled={isSearching || index === visibleNodes.length - 1}
-                aria-label={`Bajar "${node.title.trim() || 'Sin referencia'}"`}
+                aria-label={`Bajar "${node.title.trim() || 'Sin ref. oculta'}"`}
                 title={isSearching ? 'Borra la búsqueda para reordenar' : undefined}
               >
                 ↓

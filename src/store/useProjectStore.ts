@@ -271,7 +271,12 @@ export interface ProjectStoreActions {
   }) => void
   closeContextMenu: () => void
   setHover: (nodeId: string | null) => void
-  setPreviewMode: (enabled: boolean) => void
+  // -- Modo "Probar" (transitorio; ver `UiState.previewMode`/
+  // -- `previewStartNodeId`). `startNodeId` es el override de "Probar desde
+  // -- aquí" (`Topbar`): se ignora cuando `enabled` es `false`, y al activar
+  // -- SIN pasarlo se limpia cualquier override de una sesión anterior —
+  // -- ver comentario de diseño en `UiState.previewStartNodeId`.
+  setPreviewMode: (enabled: boolean, startNodeId?: string) => void
 
   // -- Portapapeles interno de duplicar con Ctrl/Cmd+C/V (transitorio; ver
   // -- `UiState.clipboardNodeIds` y `useCanvasClipboard` en
@@ -289,6 +294,12 @@ export interface ProjectStoreActions {
   // -- Centro visible del lienzo (transitorio; ver
   // -- `UiState.viewportCenter`), tarea 4 --
   setViewportCenter: (position: NodePosition | null) => void
+
+  // -- Avisos descartados del "rinconcito de avisos" (transitorio, SOLO de
+  // -- sesión; ver `UiState.dismissedDiagnosticIds` y
+  // -- `src/domain/diagnostics.ts` para los ids estables) --
+  dismissDiagnostic: (diagnosticId: string) => void
+  restoreDismissedDiagnostics: () => void
 }
 
 export type ProjectStoreState = ProjectStoreData & ProjectStoreActions
@@ -309,10 +320,12 @@ export function createInitialState(): ProjectStoreData {
       contextMenu: emptyContextMenu,
       hoveredNodeId: null,
       previewMode: false,
+      previewStartNodeId: null,
       focusRequestNodeId: null,
       titleFocusRequestNodeId: null,
       viewportCenter: null,
       clipboardNodeIds: [],
+      dismissedDiagnosticIds: [],
     },
     saveStatus: 'idle',
     history: { past: [], future: [] },
@@ -669,10 +682,12 @@ export const useProjectStore = create<ProjectStoreState>()(
           contextMenu: emptyContextMenu,
           hoveredNodeId: null,
           previewMode: false,
+          previewStartNodeId: null,
           focusRequestNodeId: null,
           titleFocusRequestNodeId: null,
           viewportCenter: null,
           clipboardNodeIds: [],
+          dismissedDiagnosticIds: [],
         }
         state.saveStatus = 'idle'
         state.drag = null
@@ -736,9 +751,14 @@ export const useProjectStore = create<ProjectStoreState>()(
       })
     },
 
-    setPreviewMode: (enabled) => {
+    setPreviewMode: (enabled, startNodeId) => {
       set((state) => {
         state.ui.previewMode = enabled
+        // `startNodeId` solo tiene sentido al ACTIVAR el modo "Probar"; al
+        // desactivarlo, o al activarlo sin pasarlo (botón normal
+        // "▶ Probar"), se limpia — el override de "Probar desde aquí" es
+        // solo para esa sesión de prueba concreta, ver `UiState.previewStartNodeId`.
+        state.ui.previewStartNodeId = enabled && startNodeId ? startNodeId : null
       })
     },
 
@@ -770,6 +790,22 @@ export const useProjectStore = create<ProjectStoreState>()(
     setViewportCenter: (position) => {
       set((state) => {
         state.ui.viewportCenter = position
+      })
+    },
+
+    dismissDiagnostic: (diagnosticId) => {
+      set((state) => {
+        // Sin duplicados: descartar un aviso ya descartado (p.ej. doble
+        // clic) no debe dejar el id repetido en la lista.
+        if (!state.ui.dismissedDiagnosticIds.includes(diagnosticId)) {
+          state.ui.dismissedDiagnosticIds.push(diagnosticId)
+        }
+      })
+    },
+
+    restoreDismissedDiagnostics: () => {
+      set((state) => {
+        state.ui.dismissedDiagnosticIds = []
       })
     },
   })),

@@ -26,6 +26,8 @@ export const useSaveStatus = () => useProjectStore((state) => state.saveStatus)
 
 export const usePreviewMode = () => useProjectStore((state) => state.ui.previewMode)
 
+export const usePreviewStartNodeId = () => useProjectStore((state) => state.ui.previewStartNodeId)
+
 export const useHoveredNodeId = () => useProjectStore((state) => state.ui.hoveredNodeId)
 
 export const useContextMenu = () => useProjectStore((state) => state.ui.contextMenu)
@@ -38,3 +40,6 @@ export const useTitleFocusRequestNodeId = () =>
 export const useViewportCenter = () => useProjectStore((state) => state.ui.viewportCenter)
 
 export const useClipboardNodeIds = () => useProjectStore((state) => state.ui.clipboardNodeIds)
+
+export const useDismissedDiagnosticIds = () =>
+  useProjectStore((state) => state.ui.dismissedDiagnosticIds)

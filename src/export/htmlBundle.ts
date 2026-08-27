@@ -62,7 +62,7 @@ const EXPORTED_TEXTS: ExportedTexts = {
   finalFallbackBody: 'Has llegado al final de esta experiencia.',
   pointsPrefix: 'Puntuación final: ',
   pointsSuffix: ' puntos',
-  retry: 'Reintentar',
+  retry: 'Volver a jugar',
   deadEnd: 'Esta parte de la experiencia no tiene una continuación configurada.',
   nodeImageAlt: 'Imagen de esta pantalla',
   responseImageAlt: 'Imagen de la respuesta ',

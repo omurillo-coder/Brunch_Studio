@@ -333,6 +333,62 @@ describe('updateNode — color (paleta cerrada de color de una diapositiva)', ()
   })
 })
 
+describe('updateNode — variant (tres variantes de Final: general/bueno/malo)', () => {
+  it('un Final nuevo nace con variant "general"', () => {
+    const project = createNode(createProject('P'), 'final', { x: 0, y: 0 })
+    const finalId = otherNodeIdOf(project, 'final')
+    const node = project.graph.nodes.find((n) => n.id === finalId)
+    expect(node?.type === 'final' ? node.variant : 'missing').toBe('general')
+  })
+
+  it('fija y cambia la variante sin tocar `body`', () => {
+    let project = createNode(createProject('P'), 'final', { x: 0, y: 0 }, { body: 'Texto original' })
+    const finalId = otherNodeIdOf(project, 'final')
+
+    project = updateNode(project, finalId, { variant: 'good' })
+    let node = project.graph.nodes.find((n) => n.id === finalId)
+    expect(node?.type === 'final' ? node.variant : undefined).toBe('good')
+    expect(node?.type === 'final' ? node.body : undefined).toBe('Texto original')
+
+    project = updateNode(project, finalId, { variant: 'bad' })
+    node = project.graph.nodes.find((n) => n.id === finalId)
+    expect(node?.type === 'final' ? node.variant : undefined).toBe('bad')
+    expect(node?.type === 'final' ? node.body : undefined).toBe('Texto original')
+
+    // Editar `body` por separado tampoco toca `variant`.
+    project = updateNode(project, finalId, { body: 'Texto nuevo' })
+    node = project.graph.nodes.find((n) => n.id === finalId)
+    expect(node?.type === 'final' ? node.variant : undefined).toBe('bad')
+    expect(node?.type === 'final' ? node.body : undefined).toBe('Texto nuevo')
+
+    // `undefined` no toca el campo.
+    project = updateNode(project, finalId, { title: 'X' })
+    node = project.graph.nodes.find((n) => n.id === finalId)
+    expect(node?.type === 'final' ? node.variant : undefined).toBe('bad')
+  })
+
+  it('lanza error al fijar variant en una diapositiva o en el nodo intro', () => {
+    let project = createProject('P')
+    const startId = project.graph.startNodeId
+    expect(() => updateNode(project, startId, { variant: 'good' })).toThrow()
+
+    project = createNode(project, 'intro', { x: 0, y: 0 })
+    const introId = project.graph.nodes.find((n) => n.type === 'intro')?.id
+    if (!introId) throw new Error('No se creó el nodo intro')
+    expect(() => updateNode(project, introId, { variant: 'bad' })).toThrow()
+  })
+
+  it('duplicar un Final conserva su variante', () => {
+    let project = createNode(createProject('P'), 'final', { x: 0, y: 0 })
+    const finalId = otherNodeIdOf(project, 'final')
+    project = updateNode(project, finalId, { variant: 'good' })
+
+    const { project: nextProject, nodeId: copyId } = duplicateNode(project, finalId, { x: 40, y: 40 })
+    const copy = nextProject.graph.nodes.find((n) => n.id === copyId)
+    expect(copy?.type === 'final' ? copy.variant : 'missing').toBe('good')
+  })
+})
+
 describe('createConnectedNode', () => {
   it('crea y conecta en una sola llamada desde una diapositiva sin respuestas (sin sourceResponseId)', () => {
     const project = createProject('P')

@@ -63,9 +63,11 @@
   cursor: default;
 }
 
-/* "Exportar HTML": acción de proyecto secundaria respecto a "Probar", así
-   que va en estilo neutro (borde + fondo de superficie) en vez del acento,
-   para que la barra siga teniendo un único botón dominante. */
+/* "Exportar": acción de proyecto secundaria respecto a "Probar", así que va
+   en estilo neutro (borde + fondo de superficie) en vez del acento, para
+   que la barra siga teniendo un único botón dominante. También es el botón
+   que abre el menú desplegable de las tres opciones de exportación (ver
+   `.exportMenuWrapper`/`.exportMenu` más abajo). */
 .exportButton {
   display: inline-flex;
   align-items: center;
@@ -85,6 +87,55 @@
 }
 
 .exportButton:disabled {
+  color: var(--bs-color-text-faint);
+  cursor: default;
+}
+
+/* Contenedor del botón "Exportar" + su menú desplegable: `position:
+   relative` es lo único que necesita el menú (`position: absolute`) para
+   anclarse justo debajo del botón, sin ninguna librería externa. */
+.exportMenuWrapper {
+  position: relative;
+  display: inline-flex;
+}
+
+/* Menú desplegable de "Exportar": mismo criterio visual sobrio que
+   `ConnectionMenu` (`src/editor/Canvas/ConnectionMenu.module.css`) — panel
+   flotante con borde + sombra suave, alineado a la derecha del botón que lo
+   abre (la barra superior crece hacia la izquierda desde el borde derecho
+   de la ventana). */
+.exportMenu {
+  position: absolute;
+  top: calc(100% + var(--bs-space-1));
+  right: 0;
+  z-index: 20;
+  min-width: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--bs-space-2);
+  background: var(--bs-color-surface);
+  border: 1px solid var(--bs-color-border);
+  border-radius: var(--bs-radius-md);
+  box-shadow: var(--bs-shadow-sm);
+}
+
+.exportMenuItem {
+  padding: var(--bs-space-2);
+  border: none;
+  border-radius: var(--bs-radius-sm);
+  background: transparent;
+  color: var(--bs-color-text);
+  font-size: var(--bs-font-size-sm);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.exportMenuItem:hover:not(:disabled) {
+  background: var(--bs-color-bg);
+}
+
+.exportMenuItem:disabled {
   color: var(--bs-color-text-faint);
   cursor: default;
 }
@@ -114,7 +165,17 @@
   font-weight: 600;
 }
 
-.playButton:hover {
+.playButton:hover:not(:disabled) {
   background: var(--bs-color-accent-hover);
   border-color: var(--bs-color-accent-hover);
+}
+
+/* "Probar desde aquí": deshabilitado salvo con exactamente un nodo
+   seleccionado (ver `canPlayFromSelection` en `Topbar.tsx`) — mismo
+   criterio visual de "deshabilitado" que `.exportButton`/`.iconButton`. */
+.playButton:disabled {
+  background: var(--bs-color-border-strong);
+  border-color: var(--bs-color-border-strong);
+  color: var(--bs-color-text-faint);
+  cursor: default;
 }

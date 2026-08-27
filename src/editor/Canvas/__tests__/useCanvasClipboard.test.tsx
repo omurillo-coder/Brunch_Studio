@@ -25,7 +25,7 @@ function startNodeId(): string {
 describe('useCanvasClipboard — Ctrl/Cmd+C/V fuera de un campo editable', () => {
   it('Ctrl+C guarda la selección en ui.clipboardNodeIds y Ctrl+V duplica, seleccionando la copia', async () => {
     render(<Canvas />)
-    await screen.findByText('Diapositiva')
+    await screen.findByText('D1')
 
     const startId = startNodeId()
     act(() => {
@@ -46,7 +46,7 @@ describe('useCanvasClipboard — Ctrl/Cmd+C/V fuera de un campo editable', () =>
 
   it('sin ningún nodo seleccionado, Ctrl+C no guarda nada en el portapapeles', async () => {
     render(<Canvas />)
-    await screen.findByText('Diapositiva')
+    await screen.findByText('D1')
     act(() => {
       useProjectStore.getState().clearSelection()
     })
@@ -58,7 +58,7 @@ describe('useCanvasClipboard — Ctrl/Cmd+C/V fuera de un campo editable', () =>
 
   it('con el portapapeles vacío, Ctrl+V no duplica nada', async () => {
     render(<Canvas />)
-    await screen.findByText('Diapositiva')
+    await screen.findByText('D1')
     const nodesBefore = useProjectStore.getState().project.graph.nodes.length
 
     fireEvent.keyDown(window, { key: 'v', ctrlKey: true })
@@ -68,7 +68,7 @@ describe('useCanvasClipboard — Ctrl/Cmd+C/V fuera de un campo editable', () =>
 
   it('Ctrl+V duplica varios nodos guardados a la vez y deja seleccionadas todas las copias', async () => {
     render(<Canvas />)
-    await screen.findByText('Diapositiva')
+    await screen.findByText('D1')
 
     act(() => {
       useProjectStore.getState().createNode('final', { x: 100, y: 100 })
@@ -92,7 +92,7 @@ describe('useCanvasClipboard — Ctrl/Cmd+C/V fuera de un campo editable', () =>
 
   it('un id del portapapeles que ya no existe (borrado tras copiar) se ignora sin lanzar', async () => {
     render(<Canvas />)
-    await screen.findByText('Diapositiva')
+    await screen.findByText('D1')
 
     act(() => {
       useProjectStore.getState().createNode('final', { x: 100, y: 100 })
@@ -121,7 +121,7 @@ describe('useCanvasClipboard — con el foco DENTRO de un campo editable (caso c
         <input aria-label="campo de prueba" defaultValue="hola" />
       </>,
     )
-    await screen.findByText('Diapositiva')
+    await screen.findByText('D1')
 
     act(() => {
       useProjectStore.getState().selectNode(startNodeId())
@@ -149,7 +149,7 @@ describe('useCanvasClipboard — con el foco DENTRO de un campo editable (caso c
         <input aria-label="campo de prueba" defaultValue="hola" />
       </>,
     )
-    await screen.findByText('Diapositiva')
+    await screen.findByText('D1')
 
     const startId = startNodeId()
     act(() => {
@@ -169,7 +169,7 @@ describe('useCanvasClipboard — con el foco DENTRO de un campo editable (caso c
 
   it('Ctrl+C dentro de un elemento contentEditable (equivalente al editor de cuerpo) tampoco duplica', async () => {
     render(<Canvas />)
-    await screen.findByText('Diapositiva')
+    await screen.findByText('D1')
 
     act(() => {
       useProjectStore.getState().selectNode(startNodeId())

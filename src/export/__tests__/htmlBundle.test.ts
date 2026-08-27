@@ -20,7 +20,7 @@ import type {
  *
  * 1. Sobre el string generado: que contenga lo que debe (títulos, cuerpo ya
  *    renderizado desde Tiptap, `data:` URI de los assets, acento iLERNA,
- *    "Reintentar") y que NO contenga lo que no debe (letras A/B/C/D como
+ *    "Volver a jugar") y que NO contenga lo que no debe (letras A/B/C/D como
  *    etiqueta de opción, React/Tiptap/ProseMirror, peticiones de red).
  *
  * 2. Ejecutando de verdad el `<script>` del propio HTML generado en jsdom
@@ -126,6 +126,7 @@ function sampleProject(): ProjectDocument {
     id: FINAL_ID,
     number: 3,
     type: 'final',
+    variant: 'general',
     position: { x: 600, y: 0 },
     title: 'Caso cerrado',
     body: richBody('Has terminado el recorrido.'),
@@ -190,6 +191,7 @@ function blocksProject(content: ContentBlock[]): ProjectDocument {
     id: MULTI_IMAGE_FINAL_ID,
     number: 2,
     type: 'final',
+    variant: 'general',
     position: { x: 300, y: 0 },
     title: 'Fin',
     body: '',
@@ -285,17 +287,16 @@ describe('buildHtmlBundle — contenido del archivo generado', () => {
     expect(html).toContain('data:audio/mpeg;base64,TVAzRkFLRQ==')
   })
 
-  it('usa el acento corporativo iLERNA y el rojo de peligro de la app', () => {
+  it('usa el acento corporativo iLERNA', () => {
     const html = buildHtmlBundle(sampleProject(), sampleAssets)
 
     expect(html).toContain('#00aec7')
-    expect(html).toContain('#c22b3a')
   })
 
-  it('incluye los textos de interfaz del Player, con "Reintentar"', () => {
+  it('incluye los textos de interfaz del Player, con "Volver a jugar"', () => {
     const html = buildHtmlBundle(sampleProject(), sampleAssets)
 
-    expect(html).toContain('Reintentar')
+    expect(html).toContain('Volver a jugar')
     expect(html).toContain('Puntuación final: ')
     expect(html).toContain('Continuar')
     expect(html).toContain('Fin de la experiencia')
@@ -531,7 +532,7 @@ describe('buildHtmlBundle — comportamiento del HTML generado (jsdom)', () => {
     expect(card.querySelector('.title')?.textContent).toBe('Fin de la experiencia')
     expect(card.querySelector('.body')?.textContent).toContain('Has terminado el recorrido.')
     expect(card.querySelector('.points')?.textContent).toBe('Puntuación final: 10 puntos')
-    expect(card.querySelector('.dangerButton')?.textContent).toBe('Reintentar')
+    expect(card.querySelector('.primaryButton')?.textContent).toBe('Volver a jugar')
   })
 
   it('la respuesta con puntuación negativa también se acumula tal cual', () => {
@@ -544,11 +545,11 @@ describe('buildHtmlBundle — comportamiento del HTML generado (jsdom)', () => {
     )
   })
 
-  it('"Reintentar" vuelve al inicio y descarta la puntuación acumulada', () => {
+  it('"Volver a jugar" vuelve al inicio y descarta la puntuación acumulada', () => {
     runExportedBundle(buildHtmlBundle(sampleProject(), sampleAssets))
     clickButton('Empezar el caso')
     clickButton('Avisar al responsable')
-    clickButton('Reintentar')
+    clickButton('Volver a jugar')
 
     // De vuelta a la diapositiva de inicio: se reconoce por su botón de
     // continuar personalizado, no por su título (que no se pinta).
@@ -608,7 +609,7 @@ describe('buildHtmlBundle — comportamiento del HTML generado (jsdom)', () => {
     )
   })
 
-  it('"Salir" aparece junto a "Reintentar" en el Final, llama a window.close() y muestra el aviso de cierre', () => {
+  it('"Salir" aparece junto a "Volver a jugar" en el Final, llama a window.close() y muestra el aviso de cierre', () => {
     const closeSpy = vi.spyOn(window, 'close').mockImplementation(() => {})
 
     runExportedBundle(buildHtmlBundle(sampleProject(), sampleAssets))
@@ -617,7 +618,7 @@ describe('buildHtmlBundle — comportamiento del HTML generado (jsdom)', () => {
 
     const card = currentCard()
     expect(card.textContent).toContain('Salir')
-    expect(card.querySelector('.dangerButton')?.textContent).toBe('Reintentar')
+    expect(card.querySelector('.primaryButton')?.textContent).toBe('Volver a jugar')
     expect(card.textContent).not.toContain('Ya puedes cerrar esta pestaña.')
 
     clickButton('Salir')
@@ -849,6 +850,7 @@ function variablesProject(): ProjectDocument {
     id: VAR_FINAL_TRUE_ID,
     number: 3,
     type: 'final',
+    variant: 'general',
     position: { x: 600, y: -50 },
     title: 'Final activado',
     body: richBody('Terminaste con el flag activado.'),
@@ -858,6 +860,7 @@ function variablesProject(): ProjectDocument {
     id: VAR_FINAL_FALSE_ID,
     number: 4,
     type: 'final',
+    variant: 'general',
     position: { x: 600, y: 50 },
     title: 'Final no activado',
     body: richBody('Terminaste sin activar el flag.'),
@@ -929,11 +932,11 @@ describe('buildHtmlBundle — comportamiento del HTML generado: variables/condic
     )
   })
 
-  it('"Reintentar" reinicia las variables: tras reiniciar, la respuesta condicionada vuelve a estar oculta', () => {
+  it('"Volver a jugar" reinicia las variables: tras reiniciar, la respuesta condicionada vuelve a estar oculta', () => {
     runExportedBundle(buildHtmlBundle(variablesProject(), {}))
     clickButton('Activar')
     clickButton('Ver resultado')
-    clickButton('Reintentar')
+    clickButton('Volver a jugar')
 
     const optionTexts = [
       ...document.querySelectorAll<HTMLButtonElement>('#brunch-root .optionButton'),
@@ -1012,6 +1015,7 @@ function bugReportProject(): ProjectDocument {
     id: BUG_FINAL_TRUE_ID,
     number: 3,
     type: 'final',
+    variant: 'general',
     position: { x: 600, y: -50 },
     title: 'Final con el punto',
     body: richBody('Llegaste con el punto.'),
@@ -1021,6 +1025,7 @@ function bugReportProject(): ProjectDocument {
     id: BUG_FINAL_FALSE_ID,
     number: 4,
     type: 'final',
+    variant: 'general',
     position: { x: 600, y: 50 },
     title: 'Final sin el punto',
     body: richBody('Llegaste sin el punto.'),
@@ -1124,6 +1129,7 @@ function introProject(overrides: Partial<IntroNode> = {}): ProjectDocument {
     id: INTRO_FINAL_ID,
     number: 3,
     type: 'final',
+    variant: 'general',
     position: { x: 400, y: 0 },
     title: 'Fin',
     body: '',

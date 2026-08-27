@@ -4,6 +4,7 @@ import { Canvas } from '../../Canvas'
 import { useProjectStore } from '../../../../store'
 import { resetProjectStore } from '../../../../store/testHelpers'
 import { CICLOS } from '../../../../domain'
+import { shortNodeLabel } from '../nodeTypes'
 import styles from '../NodeCard.module.css'
 
 /**
@@ -32,7 +33,11 @@ describe('NodeCard — fondo y contenido del nodo `intro` (Diapositiva de Inicio
 
     render(<Canvas />)
 
-    const introTitle = await screen.findByText('Inicio')
+    const intro = useProjectStore.getState().project.graph.nodes.find((n) => n.type === 'intro')
+    if (!intro) throw new Error('setup inválido')
+    // Ya no muestra el texto "Inicio" (Tarea "Numeración corta": ese sitio
+    // ahora es el código corto "D{número}", ver `shortNodeLabel`).
+    const introTitle = await screen.findByText(shortNodeLabel(intro))
     const introCard = introTitle.closest(`.${CSS.escape(cardClass)}`)
     expect(introCard).not.toBeNull()
     expect(introCard?.classList.contains(cardIntroClass)).toBe(true)
@@ -42,10 +47,11 @@ describe('NodeCard — fondo y contenido del nodo `intro` (Diapositiva de Inicio
     expect(finalCard).not.toBeNull()
     expect(finalCard?.classList.contains(cardIntroClass)).toBe(false)
 
-    // Identificada por su insignia de tipo ("Diapositiva"), no por
-    // "Sin referencia": tanto la diapositiva como el propio `intro` (título
-    // vacío) muestran ese mismo texto de placeholder.
-    const slideTypeBadge = screen.getByText('Diapositiva')
+    // Identificada por su código corto (la diapositiva de inicio sembrada
+    // por `resetProjectStore` es siempre D1), no por "Sin ref. oculta": tanto
+    // la diapositiva como el propio `intro` (título vacío) muestran ese
+    // mismo texto de placeholder.
+    const slideTypeBadge = screen.getByText('D1')
     const slideCard = slideTypeBadge.closest(`.${CSS.escape(cardClass)}`)
     expect(slideCard).not.toBeNull()
     expect(slideCard?.classList.contains(cardIntroClass)).toBe(false)
@@ -87,7 +93,7 @@ describe('NodeCard — fondo y contenido del nodo `intro` (Diapositiva de Inicio
     if (!intro) throw new Error('setup inválido')
 
     render(<Canvas />)
-    await screen.findByText('Inicio')
+    await screen.findByText(shortNodeLabel(intro))
 
     const nodeHandles = Array.from(
       document.querySelectorAll(`.react-flow__handle[data-nodeid="${intro.id}"]`),

@@ -181,6 +181,51 @@ describe('Topbar', () => {
     expect(useProjectStore.getState().ui.previewMode).toBe(false)
     fireEvent.click(screen.getByText('▶ Probar'))
     expect(useProjectStore.getState().ui.previewMode).toBe(true)
+    // Botón normal: sin override de nodo inicial.
+    expect(useProjectStore.getState().ui.previewStartNodeId).toBeNull()
+  })
+
+  describe('"Probar desde aquí"', () => {
+    it('está deshabilitado sin selección', () => {
+      renderTopbar()
+
+      expect(useProjectStore.getState().selection.selectedNodeIds).toEqual([])
+      expect(screen.getByText('▶ Probar desde aquí')).toBeDisabled()
+    })
+
+    it('está deshabilitado con varios nodos seleccionados', () => {
+      renderTopbar()
+
+      // El proyecto "de fábrica" solo trae un nodo: se añade uno más para
+      // poder seleccionar dos a la vez.
+      act(() => {
+        useProjectStore.getState().createNode('final', { x: 200, y: 0 })
+      })
+      const ids = useProjectStore.getState().project.graph.nodes.map((node) => node.id)
+      expect(ids.length).toBeGreaterThan(1)
+      act(() => {
+        useProjectStore.getState().setSelection(ids)
+      })
+
+      expect(screen.getByText('▶ Probar desde aquí')).toBeDisabled()
+    })
+
+    it('está habilitado con exactamente un nodo seleccionado, y arranca "Probar" en ese nodo', () => {
+      renderTopbar()
+
+      const nodeId = useProjectStore.getState().project.graph.nodes[0]!.id
+      act(() => {
+        useProjectStore.getState().selectNode(nodeId)
+      })
+
+      const button = screen.getByText('▶ Probar desde aquí')
+      expect(button).not.toBeDisabled()
+
+      fireEvent.click(button)
+
+      expect(useProjectStore.getState().ui.previewMode).toBe(true)
+      expect(useProjectStore.getState().ui.previewStartNodeId).toBe(nodeId)
+    })
   })
 
   it('el botón de panel izquierdo (tarea 1) refleja leftPanelVisible y llama a onToggleLeftPanel', () => {
@@ -243,6 +288,65 @@ describe('Topbar', () => {
   })
 })
 
+/** Abre el menú desplegable "Exportar" — precondición de todos los tests de
+ *  las opciones que contiene (mismo mecanismo que un usuario real: hay que
+ *  pulsar el botón "Exportar" antes de poder elegir una opción). */
+function openExportMenu(): void {
+  fireEvent.click(screen.getByRole('button', { name: 'Exportar' }))
+}
+
+describe('Topbar — menú "Exportar"', () => {
+  beforeEach(() => {
+    seedCompleteIntro()
+  })
+
+  it('está cerrado al montar, y se abre/cierra al pulsar el botón "Exportar"', () => {
+    renderTopbar()
+
+    expect(screen.queryByRole('menu', { name: 'Exportar' })).not.toBeInTheDocument()
+
+    openExportMenu()
+    expect(screen.getByRole('menu', { name: 'Exportar' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Exportar' }))
+    expect(screen.queryByRole('menu', { name: 'Exportar' })).not.toBeInTheDocument()
+  })
+
+  it('muestra las tres opciones; "Exportar revisión profes" está deshabilitada', () => {
+    renderTopbar()
+    openExportMenu()
+
+    expect(screen.getByRole('menuitem', { name: 'Exportar HTML' })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: 'Exportar SCORM' })).toBeInTheDocument()
+
+    const teacherReviewItem = screen.getByRole('menuitem', {
+      name: 'Exportar revisión profes (próximamente)',
+    })
+    expect(teacherReviewItem).toBeDisabled()
+    expect(teacherReviewItem).toHaveAttribute('title', 'Todavía por definir')
+  })
+
+  it('se cierra al hacer clic fuera', () => {
+    renderTopbar()
+    openExportMenu()
+    expect(screen.getByRole('menu', { name: 'Exportar' })).toBeInTheDocument()
+
+    fireEvent.mouseDown(document.body)
+
+    expect(screen.queryByRole('menu', { name: 'Exportar' })).not.toBeInTheDocument()
+  })
+
+  it('se cierra al pulsar Escape', () => {
+    renderTopbar()
+    openExportMenu()
+    expect(screen.getByRole('menu', { name: 'Exportar' })).toBeInTheDocument()
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+
+    expect(screen.queryByRole('menu', { name: 'Exportar' })).not.toBeInTheDocument()
+  })
+})
+
 describe('Topbar — Exportar HTML', () => {
   beforeEach(() => {
     seedCompleteIntro()
@@ -257,6 +361,7 @@ describe('Topbar — Exportar HTML', () => {
       assetRepository: new MemoryAssetRepository(),
     })
 
+    openExportMenu()
     fireEvent.click(screen.getByText('Exportar HTML'))
 
     await waitFor(() => {
@@ -271,19 +376,28 @@ describe('Topbar — Exportar HTML', () => {
 
   it('si el usuario cancela el diálogo, no escribe nada ni muestra error', async () => {
     const htmlBundleWriter = new MemoryHtmlBundleWriter()
+    const pickExportHtmlPath = vi.fn(async () => null)
     renderTopbar({
-      pickExportHtmlPath: async () => null,
+      pickExportHtmlPath,
       htmlBundleWriter,
       assetRepository: new MemoryAssetRepository(),
     })
 
+    openExportMenu()
     fireEvent.click(screen.getByText('Exportar HTML'))
 
     await waitFor(() => {
-      expect(screen.getByText('Exportar HTML')).not.toBeDisabled()
+      expect(pickExportHtmlPath).toHaveBeenCalled()
     })
     expect(htmlBundleWriter.writtenPaths()).toEqual([])
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+
+    // El menú se cerró al elegir la opción, y reabrirlo la muestra otra vez
+    // habilitada — el hook vuelve a `status: 'idle'` tras un cancelado, no
+    // se queda "atascado" en `'exporting'`.
+    expect(screen.queryByRole('menu', { name: 'Exportar' })).not.toBeInTheDocument()
+    openExportMenu()
+    expect(screen.getByRole('menuitem', { name: 'Exportar HTML' })).not.toBeDisabled()
   })
 
   it('muestra un mensaje honesto y sin jerga si la escritura falla', async () => {
@@ -295,6 +409,7 @@ describe('Topbar — Exportar HTML', () => {
       assetRepository: new MemoryAssetRepository(),
     })
 
+    openExportMenu()
     fireEvent.click(screen.getByText('Exportar HTML'))
 
     await waitFor(() => {
@@ -320,6 +435,7 @@ describe('Topbar — Exportar SCORM', () => {
       assetRepository: new MemoryAssetRepository(),
     })
 
+    openExportMenu()
     fireEvent.click(screen.getByText('Exportar SCORM'))
 
     await waitFor(() => {
@@ -337,19 +453,26 @@ describe('Topbar — Exportar SCORM', () => {
 
   it('si el usuario cancela el diálogo, no escribe nada ni muestra error', async () => {
     const scormPackageWriter = new MemoryScormPackageWriter()
+    const pickExportScormPath = vi.fn(async () => null)
     renderTopbar({
-      pickExportScormPath: async () => null,
+      pickExportScormPath,
       scormPackageWriter,
       assetRepository: new MemoryAssetRepository(),
     })
 
+    openExportMenu()
     fireEvent.click(screen.getByText('Exportar SCORM'))
 
     await waitFor(() => {
-      expect(screen.getByText('Exportar SCORM')).not.toBeDisabled()
+      expect(pickExportScormPath).toHaveBeenCalled()
     })
     expect(scormPackageWriter.writtenPaths()).toEqual([])
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+
+    // Mismo criterio que "Exportar HTML": reabrir el menú lo muestra otra
+    // vez habilitado tras un cancelado.
+    openExportMenu()
+    expect(screen.getByRole('menuitem', { name: 'Exportar SCORM' })).not.toBeDisabled()
   })
 
   it('muestra un mensaje honesto y sin jerga si la escritura falla', async () => {
@@ -361,6 +484,7 @@ describe('Topbar — Exportar SCORM', () => {
       assetRepository: new MemoryAssetRepository(),
     })
 
+    openExportMenu()
     fireEvent.click(screen.getByText('Exportar SCORM'))
 
     await waitFor(() => {
@@ -387,6 +511,7 @@ describe('Topbar — Exportar SCORM', () => {
       assetRepository: new MemoryAssetRepository(),
     })
 
+    openExportMenu()
     fireEvent.click(screen.getByText('Exportar SCORM'))
 
     await waitFor(() => {

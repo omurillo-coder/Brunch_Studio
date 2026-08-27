@@ -22,9 +22,12 @@ describe('Canvas (montaje real de @xyflow/react)', () => {
   it('monta sin lanzar y pinta la diapositiva inicial, sin ids internos visibles', async () => {
     render(<Canvas />)
 
-    expect(await screen.findByText('Diapositiva')).toBeInTheDocument()
+    // Tarea "Numeración corta": el sitio donde antes se mostraba la
+    // etiqueta de tipo ahora muestra el código corto "D{número}" — la
+    // diapositiva de inicio sembrada por `resetProjectStore` es siempre D1.
+    expect(await screen.findByText('D1')).toBeInTheDocument()
     expect(screen.getByText('1')).toBeInTheDocument()
-    expect(screen.getByText('Sin referencia')).toBeInTheDocument()
+    expect(screen.getByText('Sin ref. oculta')).toBeInTheDocument()
 
     const startId = useProjectStore.getState().project.graph.startNodeId
     expect(screen.queryByText(startId)).not.toBeInTheDocument()
@@ -47,8 +50,11 @@ describe('Canvas (montaje real de @xyflow/react)', () => {
     render(<Canvas />)
 
     expect(await screen.findByText('Diapositiva uno')).toBeInTheDocument()
-    expect(screen.getAllByText('Diapositiva')).toHaveLength(2)
-    expect(screen.getByText('Final')).toBeInTheDocument()
+    // Tarea "Numeración corta": las tres tarjetas (dos `slide` + un `final`)
+    // muestran su código corto "D{número}" en vez de distinguirse por texto
+    // de tipo — ya no hay "Diapositiva"/"Final" en la cabecera de la
+    // tarjeta.
+    expect(screen.getAllByText(/^D\d+$/)).toHaveLength(3)
     expect(screen.getByText('El final')).toBeInTheDocument()
   })
 
@@ -79,7 +85,7 @@ describe('Canvas (montaje real de @xyflow/react)', () => {
 describe('Canvas — pin de nota interna (tarea 6) y fragmento de contenido (tarea 8)', () => {
   it('sin nota interna, no muestra el icono de pin', async () => {
     render(<Canvas />)
-    expect(await screen.findByText('Diapositiva')).toBeInTheDocument()
+    expect(await screen.findByText('D1')).toBeInTheDocument()
     expect(screen.queryByLabelText(/Nota interna/)).not.toBeInTheDocument()
   })
 
@@ -96,7 +102,7 @@ describe('Canvas — pin de nota interna (tarea 6) y fragmento de contenido (tar
 
   it('sin contenido, la tarjeta no muestra ningún fragmento de cuerpo', async () => {
     render(<Canvas />)
-    expect(await screen.findByText('Diapositiva')).toBeInTheDocument()
+    expect(await screen.findByText('D1')).toBeInTheDocument()
     expect(screen.queryByText(/./, { selector: '[class*="bodyPreview"]' })).not.toBeInTheDocument()
   })
 

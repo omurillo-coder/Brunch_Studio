@@ -165,7 +165,7 @@ describe('PlayerScreen', () => {
     expect(screen.queryByText('B')).not.toBeInTheDocument()
   })
 
-  it('el Final muestra un botón "Reintentar" que vuelve al principio', () => {
+  it('el Final muestra un botón "Volver a jugar" que vuelve al principio', () => {
     buildGraphInStore()
     renderPlayer()
 
@@ -173,22 +173,24 @@ describe('PlayerScreen', () => {
     fireEvent.click(screen.getByText('Camino A'))
     expect(screen.getByText('Fin de la experiencia')).toBeInTheDocument()
 
-    fireEvent.click(screen.getByText('Reintentar'))
+    fireEvent.click(screen.getByText('Volver a jugar'))
 
     expect(screen.getByText('Bienvenida')).toBeInTheDocument()
   })
 
-  it('"Reintentar" solo aparece en la tarjeta de Final', () => {
+  it('"Volver a jugar" solo aparece en la tarjeta de Final, con el mismo estilo de acento que "Continuar"', () => {
     buildGraphInStore()
     renderPlayer()
 
-    expect(screen.queryByText('Reintentar')).not.toBeInTheDocument()
+    expect(screen.queryByText('Volver a jugar')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByText('Continuar'))
-    expect(screen.queryByText('Reintentar')).not.toBeInTheDocument()
+    expect(screen.queryByText('Volver a jugar')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByText('Camino A'))
-    expect(screen.getByText('Reintentar')).toBeInTheDocument()
+    const replayButton = screen.getByText('Volver a jugar')
+    expect(replayButton).toBeInTheDocument()
+    expect(replayButton.className).toBe(styles.primaryButton)
   })
 
   it('"Reiniciar experiencia" vuelve al principio dentro del propio Player', () => {
@@ -213,6 +215,50 @@ describe('PlayerScreen', () => {
     fireEvent.click(screen.getByText('← Volver al editor'))
 
     expect(useProjectStore.getState().ui.previewMode).toBe(false)
+  })
+
+  describe('"Probar desde aquí" (ui.previewStartNodeId)', () => {
+    it('arranca en el nodo del override en vez de en graph.startNodeId', () => {
+      const { decisionId } = buildGraphInStore()
+      act(() => {
+        useProjectStore.getState().setPreviewMode(true, decisionId)
+      })
+
+      renderPlayer()
+
+      // Muestra directamente la diapositiva de decisión, no la de inicio
+      // ("Bienvenida").
+      expect(screen.getByText('¿Qué eliges?')).toBeInTheDocument()
+      expect(screen.queryByText('Bienvenida')).not.toBeInTheDocument()
+    })
+
+    it('"Reiniciar experiencia" vuelve al mismo nodo del override, no a graph.startNodeId', () => {
+      const { decisionId, finalId } = buildGraphInStore()
+      act(() => {
+        useProjectStore.getState().setPreviewMode(true, decisionId)
+      })
+      renderPlayer()
+
+      fireEvent.click(screen.getByText('Camino A'))
+      expect(screen.getByText('Fin de la experiencia')).toBeInTheDocument()
+      expect(finalId).toBeTruthy()
+
+      fireEvent.click(screen.getByText('↺ Reiniciar experiencia'))
+
+      expect(screen.getByText('¿Qué eliges?')).toBeInTheDocument()
+      expect(screen.queryByText('Bienvenida')).not.toBeInTheDocument()
+    })
+
+    it('sin override (botón normal "▶ Probar"), arranca en graph.startNodeId como siempre', () => {
+      buildGraphInStore()
+      act(() => {
+        useProjectStore.getState().setPreviewMode(true)
+      })
+
+      renderPlayer()
+
+      expect(screen.getByText('Bienvenida')).toBeInTheDocument()
+    })
   })
 
   it('muestra el aviso de "sin continuación" cuando el recorrido llega a un callejón sin salida', () => {
@@ -659,7 +705,7 @@ describe('PlayerScreen: botón "Salir" (vista Final)', () => {
     expect(screen.getByText('Fin de la experiencia')).toBeInTheDocument()
   }
 
-  it('aparece junto a "Reintentar", solo en la tarjeta de Final, con estilo neutro (no de peligro)', () => {
+  it('aparece junto a "Volver a jugar", solo en la tarjeta de Final, con estilo neutro (no de acento)', () => {
     buildGraphInStore()
     renderPlayer()
 
@@ -671,9 +717,9 @@ describe('PlayerScreen: botón "Salir" (vista Final)', () => {
     fireEvent.click(screen.getByText('Camino A'))
     const exitButton = screen.getByText('Salir')
     expect(exitButton).toBeInTheDocument()
-    // Estilo neutro, no el de "Reintentar" (color de peligro).
+    // Estilo neutro, no el de "Volver a jugar" (acento, ver test de abajo).
     expect(exitButton.className).toBe(styles.neutralButton)
-    expect(exitButton.className).not.toBe(styles.dangerButton)
+    expect(exitButton.className).not.toBe(styles.primaryButton)
   })
 
   it('al pulsarlo llama a window.close() y muestra el aviso de que ya se puede cerrar la pestaña', () => {
