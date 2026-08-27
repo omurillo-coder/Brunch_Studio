@@ -9,6 +9,7 @@ import {
 import type {
   Connection,
   FinalConnectionState,
+  NodeMouseHandler,
   OnBeforeDelete,
   OnSelectionChangeFunc,
   ReactFlowInstance,
@@ -114,6 +115,7 @@ export function Canvas() {
   const connect = useProjectStore((state) => state.connect)
   const deleteNode = useProjectStore((state) => state.deleteNode)
   const setSelection = useProjectStore((state) => state.setSelection)
+  const selectNode = useProjectStore((state) => state.selectNode)
   const clearSelection = useProjectStore((state) => state.clearSelection)
   const setViewport = useProjectStore((state) => state.setViewport)
   const beginNodeDrag = useProjectStore((state) => state.beginNodeDrag)
@@ -342,6 +344,54 @@ export function Canvas() {
     [setSelection],
   )
 
+  // Clic directo sobre una diapositiva: BUG reportado por el usuario ("hacen
+  // falta dos clics para seleccionar"), reproducido y diagnosticado con
+  // precisión leyendo `node_modules/@xyflow/react/dist/esm/index.js`.
+  //
+  // Causa raíz (no tiene relación con `multiSelectionKeyCode`/`onPaneClick`,
+  // ambos descartados tras revisar el código de la librería — ver más abajo):
+  // en la arquitectura "totalmente controlada" de este lienzo (sin
+  // `defaultNodes` ni `onNodesChange`, ver invariante de cabecera de este
+  // fichero), `handleNodeClick` —la función interna de `@xyflow/react` que
+  // atiende el clic sobre un nodo— hace, en este orden exacto:
+  //   1. `store.setState({ nodesSelectionActive: false })`   (notifica)
+  //   2. `addSelectedNodes([id])` → `getSelectionChanges(..., true)`, que
+  //      MUTA `nodeLookup` directamente (`item.selected = true`) sin volver
+  //      a llamar a `store.setState(...)` — su propio comentario dice
+  //      literalmente "the onNodesChange callback comes too late here :/".
+  // Como el único `set()` del gesto ocurre ANTES de la mutación, el
+  // `SelectionListener` interno (la fuente de nuestro `onSelectionChange`)
+  // se entera de un cambio pero lee `nodeLookup` en el instante en que
+  // TODAVÍA no refleja el nodo recién clicado — así que el PRIMER clic no
+  // notifica nada. La mutación queda "guardada" en `nodeLookup` sin que
+  // nadie la vea hasta el SIGUIENTE `set()` que se dispare por cualquier
+  // motivo (típicamente: el clic siguiente), momento en el que por fin se
+  // propaga — de ahí que haga falta un segundo clic. La selección por caja
+  // (Mayús+arrastrar) no sufre esto: su propio gesto sí termina con un
+  // `store.setState(...)` POSTERIOR a la mutación (`commitUserSelectionRect`),
+  // así que `onSelectionChange` sigue siendo válido y se deja tal cual para
+  // ese caso — no se toca nada de la selección por caja.
+  //
+  // Arreglo: no depender de esa notificación interna (frágil y fuera de
+  // nuestro control) para el clic directo. `onNodeClick` SIEMPRE se invoca
+  // de forma síncrona en el propio gesto de clic (después de que la
+  // librería intente su propia mutación, la vea o no nadie), así que se usa
+  // como disparador fiable y se actualiza `selection.selectedNodeIds`
+  // directamente aquí — replicando el mismo criterio "clic simple
+  // reemplaza, Mayús+clic añade/quita" que ya usa `@xyflow/react`
+  // internamente (`event.shiftKey`, coherente con `multiSelectionKeyCode`
+  // fijado a `"Shift"` más abajo). `onSelectionChange` se mantiene además
+  // para la selección por caja; si en algún gesto ambos acabaran
+  // disparándose para el mismo resultado, `setSelection`/`selectNode` son
+  // ambos idempotentes con el mismo array, así que no hay riesgo de dejar
+  // un estado inconsistente.
+  const handleNodeClick: NodeMouseHandler<CanvasFlowNode> = useCallback(
+    (event, node) => {
+      selectNode(node.id, { additive: event.shiftKey })
+    },
+    [selectNode],
+  )
+
   // Clic en el fondo del lienzo (ni un nodo ni una arista): quita el
   // resaltado de lo que hubiera seleccionado. No basta con confiar en que
   // `@xyflow/react` dispare `onSelectionChange` por su cuenta al hacer clic
@@ -494,6 +544,7 @@ export function Canvas() {
         onNodeDrag={handleNodeDrag}
         onNodeDragStop={handleNodeDragStop}
         onSelectionChange={handleSelectionChange}
+        onNodeClick={handleNodeClick}
         onPaneClick={handlePaneClick}
         onConnect={handleConnect}
         onConnectEnd={handleConnectEnd}

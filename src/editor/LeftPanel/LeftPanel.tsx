@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import type { DragEvent } from 'react'
 import { useProject, useProjectStore, useSelectedNodeIds, useViewportCenter } from '../../store'
 import { CICLOS } from '../../domain'
 import type { Node, NodePosition, NodeType } from '../../domain'
@@ -130,6 +131,80 @@ export function LeftPanel() {
   // índice de la lista vuelve a coincidir con el índice real.
   const isSearching = normalizedQuery !== ''
 
+  // Arrastrar-y-soltar (Tarea 1): alternativa a ↑/↓ para mover una
+  // diapositiva a cualquier posición de un solo gesto, no solo la de al
+  // lado. Arrastrar-y-soltar NATIVO de HTML5 (`draggable`/`onDragStart`/
+  // `onDragOver`/`onDrop`), sin librería nueva — app de escritorio (Tauri),
+  // no hace falta soporte táctil. Mismo criterio que ↑/↓: opera sobre el
+  // índice REAL dentro de `project.graph.nodes`, y por eso mismo motivo
+  // (posición ambigua sobre una lista filtrada) se deshabilita mientras el
+  // buscador tiene texto — ver `isSearching` arriba.
+  //
+  // `draggedNodeId`: id del nodo que se está arrastrando ahora mismo (o
+  // `null` si no hay ningún arrastre en curso). `dropTarget`: sobre qué fila
+  // (por índice real) está el cursor y en qué mitad (`before`/`after`),
+  // recalculado en cada `dragover` para pintar la pista visual (línea de
+  // inserción) y para calcular el índice final al soltar.
+  const [draggedNodeId, setDraggedNodeId] = useState<string | null>(null)
+  const [dropTarget, setDropTarget] = useState<{ index: number; position: 'before' | 'after' } | null>(
+    null,
+  )
+
+  function handleDragStart(event: DragEvent<HTMLLIElement>, nodeId: string) {
+    if (isSearching) {
+      event.preventDefault()
+      return
+    }
+    setDraggedNodeId(nodeId)
+    event.dataTransfer.effectAllowed = 'move'
+    // El propio id ya vale como "payload" del arrastre; no se usa para nada
+    // fuera de esta lista (no hay un `onDrop` externo que lo consuma), pero
+    // `setData` es necesario en Firefox para que el arrastre nativo funcione
+    // en absoluto.
+    event.dataTransfer.setData('text/plain', nodeId)
+  }
+
+  function handleDragOver(event: DragEvent<HTMLLIElement>, index: number) {
+    if (isSearching || draggedNodeId === null) return
+    // Imprescindible: sin `preventDefault` aquí el navegador nunca dispara
+    // `onDrop` (comportamiento por defecto de HTML5 DnD).
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'move'
+    const rect = event.currentTarget.getBoundingClientRect()
+    const position: 'before' | 'after' = event.clientY - rect.top < rect.height / 2 ? 'before' : 'after'
+    setDropTarget((current) =>
+      current?.index === index && current.position === position ? current : { index, position },
+    )
+  }
+
+  function handleDrop(event: DragEvent<HTMLLIElement>) {
+    event.preventDefault()
+    if (!isSearching && draggedNodeId !== null && dropTarget !== null) {
+      const fromIndex = project.graph.nodes.findIndex((node) => node.id === draggedNodeId)
+      if (fromIndex !== -1) {
+        // `dropTarget.index` es la posición (ORIGINAL, antes de quitar el
+        // nodo arrastrado) de la fila sobre la que se soltó; `desired` es el
+        // hueco de inserción pedido en esa misma indexación (justo antes, o
+        // justo después, de esa fila). `reorderNode` (ver
+        // `src/domain/nodeOrder.ts`) espera el índice FINAL ya con el nodo
+        // arrastrado fuera del array, así que si el hueco pedido cae después
+        // del propio `fromIndex` hay que restar uno (quitar el nodo
+        // arrastrado desplaza todo lo que iba después un puesto hacia
+        // atrás).
+        const desired = dropTarget.index + (dropTarget.position === 'after' ? 1 : 0)
+        const toIndex = desired > fromIndex ? desired - 1 : desired
+        reorderNode(draggedNodeId, toIndex)
+      }
+    }
+    setDraggedNodeId(null)
+    setDropTarget(null)
+  }
+
+  function handleDragEnd() {
+    setDraggedNodeId(null)
+    setDropTarget(null)
+  }
+
   // Botón "+ Inicio" (Tarea 1, milestone "Diapositiva de Inicio"): existe
   // siempre por consistencia visual con los otros dos botones y como red de
   // seguridad para un documento que, por lo que sea, no tuviera todavía su
@@ -204,7 +279,22 @@ export function LeftPanel() {
 
       <ul className={styles.nodeList}>
         {visibleNodes.map((node, index) => (
-          <li key={node.id} className={styles.nodeRow}>
+          <li
+            key={node.id}
+            className={[
+              styles.nodeRow,
+              draggedNodeId === node.id && styles.nodeRowDragging,
+              dropTarget?.index === index && dropTarget.position === 'before' && styles.nodeRowDropBefore,
+              dropTarget?.index === index && dropTarget.position === 'after' && styles.nodeRowDropAfter,
+            ]
+              .filter(Boolean)
+              .join(' ')}
+            draggable={!isSearching}
+            onDragStart={(event) => handleDragStart(event, node.id)}
+            onDragOver={(event) => handleDragOver(event, index)}
+            onDrop={handleDrop}
+            onDragEnd={handleDragEnd}
+          >
             {/* `focusNode` selecciona el nodo (igual que `selectNode`) y
                 además pide al lienzo que centre la vista en él, sin que
                 este componente conozca `@xyflow/react` — ver
@@ -240,18 +330,20 @@ export function LeftPanel() {
                   {START_NODE_LABEL}
                 </span>
               )}
-              <span className={styles.nodeNumber}>{node.number}</span>
               {/* "Referencia" es la etiqueta de UI del campo `title` de
                   dominio (ver el `<label>` del Inspector) — el nombre del
                   campo no cambia, solo el texto que ve el usuario. */}
               <span className={styles.nodeTitle}>{node.title.trim() || 'Sin ref. oculta'}</span>
             </button>
             {/* Reordenar (puramente organizativo, ver `reorderNode` en
-                `src/domain/nodeOrder.ts`): botones fuera del `<button>` de
-                arriba (un `<button>` dentro de otro `<button>` es HTML
+                `src/domain/nodeOrder.ts`): botones ↑/↓ fuera del `<button>`
+                de arriba (un `<button>` dentro de otro `<button>` es HTML
                 inválido), deshabilitados en los extremos de la lista real y,
                 los dos a la vez, mientras el buscador tiene texto — ver
-                `isSearching` más arriba. */}
+                `isSearching` más arriba. Se MANTIENEN a propósito junto al
+                arrastrar-y-soltar del `<li>` (Tarea 1): alternativa
+                accesible por teclado/sin ratón para quien no pueda o no
+                quiera arrastrar. */}
             <div className={styles.reorderControls}>
               <button
                 type="button"

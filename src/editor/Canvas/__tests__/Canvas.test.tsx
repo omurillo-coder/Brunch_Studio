@@ -26,7 +26,9 @@ describe('Canvas (montaje real de @xyflow/react)', () => {
     // etiqueta de tipo ahora muestra el código corto "D{número}" — la
     // diapositiva de inicio sembrada por `resetProjectStore` es siempre D1.
     expect(await screen.findByText('D1')).toBeInTheDocument()
-    expect(screen.getByText('1')).toBeInTheDocument()
+    // Tarea "Quitar el número pelado": el número solo, sin la "D" delante,
+    // ya no se pinta aparte (era redundante con "D1").
+    expect(screen.queryByText('1', { selector: 'span' })).not.toBeInTheDocument()
     expect(screen.getByText('Sin ref. oculta')).toBeInTheDocument()
 
     const startId = useProjectStore.getState().project.graph.startNodeId
@@ -166,5 +168,87 @@ describe('Canvas — botón de auto-layout ("Ordenar automáticamente")', () => 
     for (const before of positionsBefore) {
       expect(restored.find((n) => n.id === before.id)?.position).toEqual(before.position)
     }
+  })
+})
+
+/**
+ * Regresión: "hacen falta dos clics para seleccionar una diapositiva".
+ *
+ * Solo reproducible sobre el montaje REAL de `@xyflow/react` (no sobre el
+ * stub de `Canvas.wiring.test.tsx`, que invoca `onSelectionChange`
+ * directamente y por tanto no ejercita en absoluto la lógica interna de
+ * clic de la librería donde estaba el bug).
+ *
+ * Causa raíz (ver comentario largo de `handleNodeClick` en `Canvas.tsx`):
+ * en la arquitectura "totalmente controlada" de este lienzo, la propia
+ * `@xyflow/react` muta su estado interno de selección DESPUÉS del único
+ * `store.setState(...)` que dispara para ese gesto, así que el primer clic
+ * queda sin notificar y hace falta un segundo evento cualquiera (p.ej. otro
+ * clic) para que la mutación, ya vieja, se propague. El arreglo añade
+ * `onNodeClick` (que sí se invoca siempre, de forma síncrona, en el propio
+ * clic) como disparador fiable de `selection.selectedNodeIds`.
+ */
+describe('Canvas — seleccionar una diapositiva con un único clic (real @xyflow/react)', () => {
+  it('un solo clic sobre una diapositiva la selecciona de verdad (sin hacer falta un segundo clic)', async () => {
+    render(<Canvas />)
+    const startId = useProjectStore.getState().project.graph.startNodeId
+    const nodeEl = await screen.findByTestId(`rf__node-${startId}`)
+
+    fireEvent.click(nodeEl)
+
+    expect(useProjectStore.getState().selection.selectedNodeIds).toEqual([startId])
+  })
+
+  it('un solo clic selecciona incluso justo después de haber hecho clic en el fondo (onPaneClick)', async () => {
+    render(<Canvas />)
+    const startId = useProjectStore.getState().project.graph.startNodeId
+    const nodeEl = await screen.findByTestId(`rf__node-${startId}`)
+    const pane = document.querySelector('.react-flow__pane')
+    if (!pane) throw new Error('no se encontró el pane de @xyflow/react')
+
+    // Clic en el fondo primero (limpia la selección, `onPaneClick`), como en
+    // el escenario que reportó el usuario.
+    fireEvent.click(pane)
+    expect(useProjectStore.getState().selection.selectedNodeIds).toEqual([])
+
+    fireEvent.click(nodeEl)
+
+    expect(useProjectStore.getState().selection.selectedNodeIds).toEqual([startId])
+  })
+
+  it('un solo clic sobre OTRA diapositiva, con una ya seleccionada, cambia la selección a la nueva', async () => {
+    useProjectStore.getState().createNode('slide', { x: 200, y: 0 }, { title: 'Segunda' })
+    render(<Canvas />)
+    const { project } = useProjectStore.getState()
+    const startId = project.graph.startNodeId
+    const otherId = project.graph.nodes.find((n) => n.id !== startId)?.id
+    if (!otherId) throw new Error('setup inválido')
+
+    const startEl = await screen.findByTestId(`rf__node-${startId}`)
+    const otherEl = await screen.findByTestId(`rf__node-${otherId}`)
+
+    fireEvent.click(startEl)
+    expect(useProjectStore.getState().selection.selectedNodeIds).toEqual([startId])
+
+    fireEvent.click(otherEl)
+    expect(useProjectStore.getState().selection.selectedNodeIds).toEqual([otherId])
+  })
+
+  it('Mayús+clic añade la diapositiva a la selección en vez de reemplazarla', async () => {
+    useProjectStore.getState().createNode('slide', { x: 200, y: 0 }, { title: 'Segunda' })
+    render(<Canvas />)
+    const { project } = useProjectStore.getState()
+    const startId = project.graph.startNodeId
+    const otherId = project.graph.nodes.find((n) => n.id !== startId)?.id
+    if (!otherId) throw new Error('setup inválido')
+
+    const startEl = await screen.findByTestId(`rf__node-${startId}`)
+    const otherEl = await screen.findByTestId(`rf__node-${otherId}`)
+
+    fireEvent.click(startEl)
+    expect(useProjectStore.getState().selection.selectedNodeIds).toEqual([startId])
+
+    fireEvent.click(otherEl, { shiftKey: true })
+    expect(useProjectStore.getState().selection.selectedNodeIds).toEqual([startId, otherId])
   })
 })

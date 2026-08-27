@@ -2029,3 +2029,182 @@ describe('Inspector — reorganización del Inspector (Tarea 4): Color arriba de
     expect(referenceLabel.closest(`.${CSS.escape(styles.metaGroup as string)}`)).toBeNull()
   })
 })
+
+/**
+ * Campos "por rellenar" en blanco (petición de usuario): un campo de texto
+ * libre vacío (`trim() === ''`) lleva la clase `.fieldEmpty` (fondo
+ * `--bs-color-surface`, ver `Inspector.module.css`) EN VEZ de/además del
+ * `--bs-color-bg` habitual, y la pierde en cuanto tiene contenido — en vivo,
+ * sin esperar al blur (el campo se actualiza en cada `fireEvent.change`,
+ * antes de cualquier `fireEvent.blur`). Cubre cada campo de texto libre
+ * listado en el encargo; el editor de texto enriquecido (bloques de
+ * contenido / cuerpo de un Final) tiene su propia cobertura equivalente en
+ * `RichTextEditor.test.tsx` (`.editorWrapperEmpty`), reutilizado tal cual
+ * aquí sin duplicar sus tests.
+ */
+describe('Inspector — campos "por rellenar" en blanco, no en gris (petición de usuario)', () => {
+  it('Ref. oculta: vacío lleva fieldEmpty; escribir lo quita EN VIVO; borrarlo lo vuelve a poner', () => {
+    act(() => {
+      useProjectStore.getState().selectNode(startNodeId())
+    })
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    const input = screen.getByLabelText('Ref. oculta')
+    expect(input.className).toContain(styles.fieldEmpty)
+
+    fireEvent.change(input, { target: { value: 'B' } })
+    expect(input.className).not.toContain(styles.fieldEmpty)
+
+    fireEvent.change(input, { target: { value: '' } })
+    expect(input.className).toContain(styles.fieldEmpty)
+
+    // Solo espacios en blanco cuenta como vacío (mismo criterio `trim()` que
+    // usa el propio dominio al confirmar el campo).
+    fireEvent.change(input, { target: { value: '   ' } })
+    expect(input.className).toContain(styles.fieldEmpty)
+  })
+
+  it('Ref. oculta: con contenido ya guardado, NO lleva fieldEmpty al cargar el Inspector', () => {
+    act(() => {
+      useProjectStore.getState().updateNode(startNodeId(), { title: 'Bienvenida' })
+      useProjectStore.getState().selectNode(startNodeId())
+    })
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    expect(screen.getByLabelText('Ref. oculta').className).not.toContain(styles.fieldEmpty)
+  })
+
+  it('Texto del botón de continuar: vacío lleva fieldEmpty; escribir lo quita EN VIVO', () => {
+    act(() => {
+      useProjectStore.getState().selectNode(startNodeId())
+    })
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    const input = screen.getByLabelText('Texto del botón de continuar')
+    expect(input.className).toContain(styles.fieldEmpty)
+
+    fireEvent.change(input, { target: { value: 'Siguiente' } })
+    expect(input.className).not.toContain(styles.fieldEmpty)
+
+    fireEvent.change(input, { target: { value: '' } })
+    expect(input.className).toContain(styles.fieldEmpty)
+  })
+
+  it('Nombre del caso práctico interactivo (Inicio): vacío lleva fieldEmpty; escribir lo quita EN VIVO', () => {
+    act(() => {
+      useProjectStore.getState().createNode('intro', { x: 0, y: 0 })
+    })
+    const introId = useProjectStore.getState().project.graph.nodes.find((n) => n.type === 'intro')?.id
+    if (!introId) throw new Error('setup inválido')
+    act(() => {
+      useProjectStore.getState().selectNode(introId)
+    })
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    const input = screen.getByLabelText('Nombre del caso práctico interactivo')
+    expect(input.className).toContain(styles.fieldEmpty)
+
+    fireEvent.change(input, { target: { value: 'Simulación de urgencias' } })
+    expect(input.className).not.toContain(styles.fieldEmpty)
+
+    fireEvent.change(input, { target: { value: '' } })
+    expect(input.className).toContain(styles.fieldEmpty)
+  })
+
+  it('Texto de una respuesta: vacío lleva fieldEmpty; escribir lo quita EN VIVO', () => {
+    const decisionId = createSlideWithTwoResponses()
+    act(() => {
+      useProjectStore.getState().selectNode(decisionId)
+    })
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    const textarea = screen.getByLabelText('Texto de la respuesta 1')
+    expect(textarea.className).toContain(styles.fieldEmpty)
+
+    fireEvent.change(textarea, { target: { value: 'Opción correcta' } })
+    expect(textarea.className).not.toContain(styles.fieldEmpty)
+
+    fireEvent.change(textarea, { target: { value: '' } })
+    expect(textarea.className).toContain(styles.fieldEmpty)
+  })
+
+  it('Nota interna: vacía lleva fieldEmpty; escribir lo quita EN VIVO; también aplica a un Final', () => {
+    act(() => {
+      useProjectStore.getState().selectNode(startNodeId())
+    })
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    const textarea = screen.getByLabelText('Nota interna (no se exporta)')
+    expect(textarea.className).toContain(styles.fieldEmpty)
+
+    fireEvent.change(textarea, { target: { value: 'Pedir gráfico a diseño' } })
+    expect(textarea.className).not.toContain(styles.fieldEmpty)
+
+    fireEvent.change(textarea, { target: { value: '' } })
+    expect(textarea.className).toContain(styles.fieldEmpty)
+  })
+
+  it(
+    'los <select> de elección cerrada (Ciclo, Asignatura, variante de Final, operador de condición) ' +
+      'nunca llevan fieldEmpty, estén o no elegidos',
+    () => {
+      // Ciclo/Asignatura de la diapositiva de Inicio.
+      act(() => {
+        useProjectStore.getState().createNode('intro', { x: 0, y: 0 })
+      })
+      const introId = useProjectStore.getState().project.graph.nodes.find((n) => n.type === 'intro')?.id
+      if (!introId) throw new Error('setup inválido')
+      act(() => {
+        useProjectStore.getState().selectNode(introId)
+      })
+      const { unmount } = render(<Inspector filePath={TEST_FILE_PATH} />)
+
+      const cicloSelect = screen.getByLabelText('Ciclo')
+      const asignaturaSelect = screen.getByLabelText('Asignatura')
+      expect(cicloSelect.className).not.toContain(styles.fieldEmpty)
+      expect(asignaturaSelect.className).not.toContain(styles.fieldEmpty)
+      const ciclo = CICLOS[0]
+      if (!ciclo) throw new Error('El catálogo de ciclos está vacío')
+      fireEvent.change(cicloSelect, { target: { value: ciclo.id } })
+      expect(screen.getByLabelText('Asignatura').className).not.toContain(styles.fieldEmpty)
+      unmount()
+
+      // Variante de un Final.
+      act(() => {
+        useProjectStore.getState().createNode('final', { x: 100, y: 0 })
+      })
+      const finalId = useProjectStore.getState().project.graph.nodes.find((n) => n.type === 'final')?.id
+      if (!finalId) throw new Error('setup inválido')
+      act(() => {
+        useProjectStore.getState().selectNode(finalId)
+      })
+      const { unmount: unmountFinal } = render(<Inspector filePath={TEST_FILE_PATH} />)
+      expect(screen.getByLabelText('Variante').className).not.toContain(styles.fieldEmpty)
+      unmountFinal()
+
+      // Operador de una condición de visibilidad de respuesta (necesita al
+      // menos una variable en el proyecto para no mostrar el aviso "Todavía
+      // no hay variables...").
+      act(() => {
+        useProjectStore.getState().addVariable({ name: 'Puntos', type: 'number', initialValue: 0 })
+      })
+      const decisionId = createSlideWithTwoResponses()
+      const responseId = slideNode(decisionId).responses[0]?.id
+      if (!responseId) throw new Error('setup inválido')
+      act(() => {
+        useProjectStore.getState().selectNode(decisionId)
+      })
+      render(<Inspector filePath={TEST_FILE_PATH} />)
+      // Dos respuestas -> dos botones "+ Añadir condición" (uno por
+      // respuesta): se acota a la fila de la respuesta 1.
+      const responseRow = screen
+        .getByLabelText('Texto de la respuesta 1')
+        .closest(`.${CSS.escape(styles.responseRow as string)}`)
+      if (!responseRow) throw new Error('setup inválido: no se encontró la fila de la respuesta 1')
+      fireEvent.click(within(responseRow as HTMLElement).getByRole('button', { name: '+ Añadir condición' }))
+      expect(within(responseRow as HTMLElement).getByLabelText('Operador').className).not.toContain(
+        styles.fieldEmpty,
+      )
+    },
+  )
+})

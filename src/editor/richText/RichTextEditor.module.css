@@ -11,6 +11,17 @@
   border-color: var(--bs-color-accent);
 }
 
+/* Bloque de texto "por rellenar" (mismo criterio que `.fieldEmpty` de
+   `Inspector.module.css`): sin ningún texto real (ver `isEmpty` en
+   `RichTextEditor.tsx`, vía `extractPlainText`), fondo `--bs-color-surface`
+   en vez del `--bs-color-bg` habitual — blanco puro en claro, superficie
+   realzada en oscuro. Se añade junto a `.editorWrapper`, nunca lo sustituye,
+   y convive con `:focus-within` (el borde de foco cambia de color igual,
+   el fondo "vacío" no se pierde solo por enfocar el editor). */
+.editorWrapperEmpty {
+  background: var(--bs-color-surface);
+}
+
 .toolbar {
   display: flex;
   gap: var(--bs-space-1);

@@ -5,6 +5,7 @@ import { useProjectStore } from '../../../store'
 import { resetProjectStore } from '../../../store/testHelpers'
 import { serializeRichBody } from '../../richText/richTextContent'
 import { CICLOS } from '../../../domain'
+import { shortNodeLabel } from '../../Canvas/nodes/nodeTypes'
 
 beforeEach(() => {
   resetProjectStore()
@@ -95,6 +96,21 @@ describe('LeftPanel', () => {
     expect(screen.queryByText(startNode.id)).not.toBeInTheDocument()
   })
 
+  it('ya no muestra el número "pelado" (sin la "D"), redundante con el código corto', () => {
+    render(<LeftPanel />)
+    act(() => {
+      useProjectStore.getState().createNode('slide', { x: 0, y: 0 })
+    })
+
+    const nodes = useProjectStore.getState().project.graph.nodes
+    // El código corto "D{número}" sigue mostrándose (comprobado en el test
+    // anterior); lo que debe haber desaparecido es el número solo, sin la
+    // "D" delante, en un nodo de texto aparte.
+    for (const node of nodes) {
+      expect(screen.queryByText(node.number.toString(), { selector: 'span' })).not.toBeInTheDocument()
+    }
+  })
+
   it('marca en la lista, de forma discreta, cuál es la diapositiva de inicio', () => {
     render(<LeftPanel />)
     act(() => {
@@ -116,7 +132,7 @@ describe('LeftPanel', () => {
     })
     const created = lastNode()
 
-    fireEvent.click(screen.getByText(created.number.toString()))
+    fireEvent.click(screen.getByText(shortNodeLabel(created)))
 
     expect(useProjectStore.getState().selection.selectedNodeIds).toEqual([created.id])
   })
@@ -129,7 +145,7 @@ describe('LeftPanel', () => {
     })
     const created = lastNode()
 
-    fireEvent.click(screen.getByText(created.number.toString()))
+    fireEvent.click(screen.getByText(shortNodeLabel(created)))
 
     expect(useProjectStore.getState().ui.focusRequestNodeId).toBe(created.id)
   })
@@ -142,7 +158,7 @@ describe('LeftPanel', () => {
     fireEvent.click(screen.getByText('+ Diapositiva'))
     const created = lastNode()
 
-    const createdItem = screen.getByText(created.number.toString()).closest('button')
+    const createdItem = screen.getByText(shortNodeLabel(created)).closest('button')
     expect(createdItem).not.toBeNull()
     expect(createdItem).toHaveAttribute('aria-current', 'true')
 
@@ -150,16 +166,16 @@ describe('LeftPanel', () => {
     const start = useProjectStore.getState().project.graph.startNodeId
     const startNode = useProjectStore.getState().project.graph.nodes.find((n) => n.id === start)
     if (!startNode) throw new Error('No se encontró la diapositiva de inicio')
-    const startItem = screen.getByText(startNode.number.toString()).closest('button')
+    const startItem = screen.getByText(shortNodeLabel(startNode)).closest('button')
     expect(startItem).not.toHaveAttribute('aria-current')
 
     // Al seleccionar otra diapositiva, la iluminación se mueve con ella.
-    fireEvent.click(screen.getByText(startNode.number.toString()))
-    expect(screen.getByText(startNode.number.toString()).closest('button')).toHaveAttribute(
+    fireEvent.click(screen.getByText(shortNodeLabel(startNode)))
+    expect(screen.getByText(shortNodeLabel(startNode)).closest('button')).toHaveAttribute(
       'aria-current',
       'true',
     )
-    expect(screen.getByText(created.number.toString()).closest('button')).not.toHaveAttribute(
+    expect(screen.getByText(shortNodeLabel(created)).closest('button')).not.toHaveAttribute(
       'aria-current',
     )
   })
@@ -296,7 +312,7 @@ describe('LeftPanel — buscador del proyecto (fase 8)', () => {
     // tarjeta del lienzo, ver `adapter.ts`), pero el filtro debe conservar
     // la fila del `intro` (identificada por su número visible) y descartar
     // la diapositiva sin relación.
-    expect(screen.getByText(intro.number.toString())).toBeInTheDocument()
+    expect(screen.getByText(shortNodeLabel(intro))).toBeInTheDocument()
     expect(screen.queryByText('Sin relación')).not.toBeInTheDocument()
   })
 
@@ -321,14 +337,14 @@ describe('LeftPanel — buscador del proyecto (fase 8)', () => {
 
     // Búsqueda por el NOMBRE del ciclo (nunca su id/slug interno).
     fireEvent.change(searchInput(), { target: { value: ciclo.name.toLowerCase() } })
-    expect(screen.getByText(intro.number.toString())).toBeInTheDocument()
+    expect(screen.getByText(shortNodeLabel(intro))).toBeInTheDocument()
     expect(screen.queryByText('Sin relación')).not.toBeInTheDocument()
     // El id/slug interno del ciclo no debería aparecer nunca en pantalla.
     expect(screen.queryByText(ciclo.id)).not.toBeInTheDocument()
 
     // Búsqueda por el NOMBRE de la asignatura.
     fireEvent.change(searchInput(), { target: { value: asignatura.name.toLowerCase() } })
-    expect(screen.getByText(intro.number.toString())).toBeInTheDocument()
+    expect(screen.getByText(shortNodeLabel(intro))).toBeInTheDocument()
     expect(screen.queryByText('Sin relación')).not.toBeInTheDocument()
   })
 })
@@ -391,5 +407,206 @@ describe('LeftPanel — reordenar la lista de diapositivas (↑/↓)', () => {
     fireEvent.change(searchInput(), { target: { value: '' } })
     expect(screen.getByLabelText('Subir "Segunda"')).not.toBeDisabled()
     expect(screen.getByLabelText('Subir "Segunda"')).not.toHaveAttribute('title')
+  })
+})
+
+describe('LeftPanel — arrastrar-y-soltar la lista de diapositivas (Tarea 1)', () => {
+  function searchInput(): HTMLElement {
+    return screen.getByLabelText('Buscar en el proyecto')
+  }
+
+  function nodeIds(): string[] {
+    return useProjectStore.getState().project.graph.nodes.map((n) => n.id)
+  }
+
+  /** `DataTransfer` mínimo (jsdom no lo implementa): basta con lo que usa
+   *  `LeftPanel.tsx` (`setData`/`getData`/`effectAllowed`/`dropEffect`). */
+  function makeDataTransfer() {
+    const store: Record<string, string> = {}
+    return {
+      effectAllowed: '',
+      dropEffect: '',
+      setData: (format: string, value: string) => {
+        store[format] = value
+      },
+      getData: (format: string) => store[format] ?? '',
+    }
+  }
+
+  /** Fila (`<li>`) de la lista del nodo dado, localizada por su código corto
+   *  "D{número}" (`shortNodeLabel`, único por nodo). */
+  function rowFor(node: { number: number }): HTMLElement {
+    const row = screen.getByText(shortNodeLabel(node)).closest('li')
+    if (!row) throw new Error(`No se encontró la fila de ${shortNodeLabel(node)}`)
+    return row
+  }
+
+  /** Sustituye `getBoundingClientRect` por un rectángulo fijo y conocido:
+   *  en jsdom, sin layout real, el rectángulo por defecto (`src/test/setup.ts`)
+   *  es el mismo tamaño fijo para TODOS los elementos, lo que no permite
+   *  distinguir la mitad superior de la inferior de una fila concreta al
+   *  calcular `before`/`after` en `handleDragOver`. */
+  function stubRect(row: HTMLElement, top: number, height: number) {
+    row.getBoundingClientRect = () =>
+      ({
+        top,
+        height,
+        bottom: top + height,
+        left: 0,
+        right: 200,
+        width: 200,
+        x: 0,
+        y: top,
+        toJSON() {
+          return {}
+        },
+      }) as DOMRect
+  }
+
+  /**
+   * Despacha un evento de arrastre nativo directamente (`dispatchEvent`, en
+   * vez de `fireEvent.drag*` de Testing Library): jsdom NO implementa la
+   * clase `DragEvent` (solo `Event`/`MouseEvent`), así que
+   * `@testing-library/dom` cae a un `Event` genérico para estos tipos —
+   * que sí admite `dataTransfer` (tiene un caso especial, ver
+   * `node_modules/@testing-library/dom/dist/events.js`), pero DESCARTA
+   * silenciosamente `clientY` (no es una propiedad reconocida del
+   * constructor `Event`, y Testing Library no la reenvía "a mano" para
+   * estos eventos). Sin `clientY` de verdad, `handleDragOver` no podría
+   * distinguir nunca "soltar antes" de "soltar después". Aquí se define
+   * `clientY`/`dataTransfer` directamente sobre el evento con
+   * `Object.defineProperty` (permitido porque `Event`/`MouseEvent` los
+   * declaran como propiedades normales del prototipo, sobreescribibles por
+   * instancia) y se despacha envuelto en `act` (que Testing Library aplica
+   * automáticamente dentro de `fireEvent`, pero no al llamar
+   * `dispatchEvent` directamente).
+   */
+  function dispatchDrag(
+    type: 'dragstart' | 'dragover' | 'drop' | 'dragend',
+    target: HTMLElement,
+    options: { dataTransfer: ReturnType<typeof makeDataTransfer>; clientY?: number },
+  ) {
+    const event = new Event(type, { bubbles: true, cancelable: true })
+    Object.defineProperty(event, 'dataTransfer', { value: options.dataTransfer, configurable: true })
+    if (options.clientY !== undefined) {
+      Object.defineProperty(event, 'clientY', { value: options.clientY, configurable: true })
+    }
+    act(() => {
+      target.dispatchEvent(event)
+    })
+  }
+
+  it('arrastrar el primer nodo y soltarlo DESPUÉS de un nodo no adyacente lo reordena a esa posición (reorderNode con el índice esperado)', () => {
+    render(<LeftPanel />)
+    act(() => {
+      useProjectStore.getState().createNode('slide', { x: 0, y: 0 }, { title: 'Segunda' })
+      useProjectStore.getState().createNode('slide', { x: 0, y: 0 }, { title: 'Tercera' })
+    })
+    // Orden inicial real: [Inicio(0), Segunda(1), Tercera(2)].
+    const [inicioId, segundaId, terceraId] = nodeIds()
+    if (!inicioId || !segundaId || !terceraId) throw new Error('setup inválido')
+    const inicio = useProjectStore.getState().project.graph.nodes[0]
+    const tercera = useProjectStore.getState().project.graph.nodes[2]
+    if (!inicio || !tercera) throw new Error('setup inválido')
+
+    const dataTransfer = makeDataTransfer()
+    const draggedRow = rowFor(inicio)
+    const targetRow = rowFor(tercera)
+    stubRect(targetRow, 100, 40)
+
+    dispatchDrag('dragstart', draggedRow, { dataTransfer })
+    // clientY=135 cae en la mitad INFERIOR del rectángulo simulado
+    // (top:100, height:40 → mitad en 120) → "after" — soltar DESPUÉS de
+    // "Tercera", no adyacente al origen ("Inicio" estaba en el índice 0).
+    dispatchDrag('dragover', targetRow, { dataTransfer, clientY: 135 })
+    dispatchDrag('drop', targetRow, { dataTransfer })
+
+    // "Inicio" pasa a ir justo después de "Tercera": [Segunda, Tercera,
+    // Inicio] — no es un simple intercambio con el vecino, confirma que
+    // llega a una posición no adyacente.
+    expect(nodeIds()).toEqual([segundaId, terceraId, inicioId])
+  })
+
+  it('arrastrar el último nodo y soltarlo ANTES del primero lo reordena a esa posición', () => {
+    render(<LeftPanel />)
+    act(() => {
+      useProjectStore.getState().createNode('slide', { x: 0, y: 0 }, { title: 'Segunda' })
+      useProjectStore.getState().createNode('slide', { x: 0, y: 0 }, { title: 'Tercera' })
+    })
+    const [inicioId, segundaId, terceraId] = nodeIds()
+    if (!inicioId || !segundaId || !terceraId) throw new Error('setup inválido')
+    const inicio = useProjectStore.getState().project.graph.nodes[0]
+    const tercera = useProjectStore.getState().project.graph.nodes[2]
+    if (!inicio || !tercera) throw new Error('setup inválido')
+
+    const dataTransfer = makeDataTransfer()
+    const draggedRow = rowFor(tercera)
+    const targetRow = rowFor(inicio)
+    stubRect(targetRow, 100, 40)
+
+    dispatchDrag('dragstart', draggedRow, { dataTransfer })
+    // clientY=105 cae en la mitad SUPERIOR del rectángulo simulado
+    // (top:100, height:40 → mitad en 120) → "before".
+    dispatchDrag('dragover', targetRow, { dataTransfer, clientY: 105 })
+    dispatchDrag('drop', targetRow, { dataTransfer })
+
+    // "Tercera" pasa a ir justo antes de "Inicio": [Tercera, Inicio,
+    // Segunda].
+    expect(nodeIds()).toEqual([terceraId, inicioId, segundaId])
+  })
+
+  it('muestra una pista visual durante el arrastre (opacidad reducida en el ítem arrastrado)', () => {
+    render(<LeftPanel />)
+    act(() => {
+      useProjectStore.getState().createNode('slide', { x: 0, y: 0 }, { title: 'Segunda' })
+    })
+    const inicio = useProjectStore.getState().project.graph.nodes[0]
+    if (!inicio) throw new Error('setup inválido')
+
+    const dataTransfer = makeDataTransfer()
+    const row = rowFor(inicio)
+    expect(row.className).not.toMatch(/nodeRowDragging/)
+
+    dispatchDrag('dragstart', row, { dataTransfer })
+    expect(row.className).toMatch(/nodeRowDragging/)
+
+    dispatchDrag('dragend', row, { dataTransfer })
+    expect(row.className).not.toMatch(/nodeRowDragging/)
+  })
+
+  it('con texto de búsqueda activo, el arrastre está deshabilitado y no reordena', () => {
+    render(<LeftPanel />)
+    const startId = useProjectStore.getState().project.graph.startNodeId
+    act(() => {
+      // Título explícito en las tres (en vez del "Sin ref. oculta" por
+      // defecto de la de inicio): así una búsqueda con una letra común a
+      // las tres mantiene las tres filas visibles, imprescindible para
+      // poder localizarlas y simular el gesto de arrastre completo.
+      useProjectStore.getState().updateNode(startId, { title: 'Primera' })
+      useProjectStore.getState().createNode('slide', { x: 0, y: 0 }, { title: 'Segunda' })
+      useProjectStore.getState().createNode('slide', { x: 0, y: 0 }, { title: 'Tercera' })
+    })
+    const before = nodeIds()
+    const inicio = useProjectStore.getState().project.graph.nodes[0]
+    const tercera = useProjectStore.getState().project.graph.nodes[2]
+    if (!inicio || !tercera) throw new Error('setup inválido')
+
+    // "e" aparece en las tres: Prim-e-ra, S-e-gunda, T-e-rc-e-ra.
+    fireEvent.change(searchInput(), { target: { value: 'e' } })
+    expect(screen.getByText('Primera')).toBeInTheDocument()
+    expect(screen.getByText('Segunda')).toBeInTheDocument()
+    expect(screen.getByText('Tercera')).toBeInTheDocument()
+
+    const draggedRow = rowFor(inicio)
+    const targetRow = rowFor(tercera)
+    expect(draggedRow).toHaveAttribute('draggable', 'false')
+    expect(targetRow).toHaveAttribute('draggable', 'false')
+
+    const dataTransfer = makeDataTransfer()
+    dispatchDrag('dragstart', draggedRow, { dataTransfer })
+    dispatchDrag('dragover', targetRow, { dataTransfer })
+    dispatchDrag('drop', targetRow, { dataTransfer })
+
+    expect(nodeIds()).toEqual(before)
   })
 })

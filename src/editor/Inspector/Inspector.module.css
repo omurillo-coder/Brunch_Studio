@@ -141,6 +141,26 @@
   font-size: var(--bs-font-size-md);
 }
 
+/* Campo de texto libre "por rellenar" (petición de usuario: los campos
+   vacíos del Inspector deben verse en blanco, no en el gris `--bs-color-bg`
+   habitual — así el diseñador instruccional identifica de un vistazo qué le
+   falta por completar). Se añade JUNTO a `.input`/`.textarea` (nunca la
+   sustituye) cuando el valor en edición está vacío (`trim() === ''`,
+   recalculado en cada pulsación — ver `fieldClassName` en `Inspector.tsx`).
+
+   Reutiliza `--bs-color-surface` (ya definido en `tokens.css`, no se toca
+   ese fichero aquí — lo edita otro proceso en paralelo) en vez de inventar
+   un token nuevo: en claro es blanco puro (#ffffff), justo lo pedido; en
+   oscuro es la superficie más clara ya disponible del sistema (#232327,
+   más clara que el `--bs-color-bg` #1c1c1f de un campo relleno), un
+   "blanco" coherente sin deslumbrar. Nunca se aplica a `.select` (los
+   desplegables de elección cerrada — Ciclo/Asignatura/variante de
+   Final/operador de condición/variable/operación/destino — quedan fuera de
+   este cambio, ver comentario de `fieldClassName`). */
+.fieldEmpty {
+  background: var(--bs-color-surface);
+}
+
 .select:focus {
   border-color: var(--bs-color-accent);
 }

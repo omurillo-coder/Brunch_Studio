@@ -125,6 +125,17 @@
   --bs-color-slide-gray-bg: #cdb598;
   --bs-color-slide-red-bg: #f59f84;
 
+  /* Tarea "Contraste de texto": color de texto de las nueve tarjetas de
+     arriba (Inicio/Final/7 colores de diapositiva, `NodeCard.module.css`).
+     En claro es literalmente `--bs-color-text` (el "negro" #1b1b1f de este
+     archivo): comprobado con la fórmula WCAG de más abajo que da mejor
+     contraste que blanco en las nueve combinaciones (7.55:1–15.12:1 con
+     negro, 1.14:1–2.27:1 con blanco) — mismo valor que ya usaban estas
+     tarjetas por defecto, así que no cambia nada visualmente en claro. Se
+     REDEFINE a blanco puro en el bloque de modo oscuro más abajo — ver ese
+     comentario para el porqué. */
+  --bs-color-card-text: var(--bs-color-text);
+
   /* Espaciado */
   --bs-space-1: 4px;
   --bs-space-2: 8px;
@@ -216,6 +227,31 @@
     --bs-color-slide-cyan-bg: #174f4d;
     --bs-color-slide-gray-bg: #493a27;
     --bs-color-slide-red-bg: #522314;
+    /* Tarea "Contraste de texto": en claro `--bs-color-card-text` es
+       `--bs-color-text` (ver su definición en `:root` de arriba) porque el
+       negro daba mejor contraste que blanco sobre las nueve tarjetas de
+       fondo claro; en OSCURO ocurre lo contrario — comprobado con la misma
+       fórmula WCAG que el resto de este archivo, blanco puro (#ffffff) da
+       mejor contraste que negro (#1b1b1f) en las nueve tarjetas de fondo
+       oscuro (final/intro/7 colores de diapositiva de arriba):
+       - Final  #1d2b3f: negro 1.20:1, blanco 14.29:1
+       - Inicio #16301f: negro 1.21:1, blanco 14.22:1
+       - Amarillo #524514: negro 1.82:1, blanco 9.46:1
+       - Naranja  #523114: negro 1.48:1, blanco 11.61:1
+       - Rosa     #521434: negro 1.23:1, blanco 13.92:1
+       - Morado   #321452: negro 1.11:1, blanco 15.47:1
+       - Cian     #174f4d: negro 1.85:1, blanco 9.28:1
+       - Gris     #493a27: negro 1.57:1, blanco 10.95:1
+       - Rojo     #522314: negro 1.32:1, blanco 13.05:1
+       El propio `--bs-color-text` oscuro (#ededef, definido arriba en este
+       mismo bloque) YA daba AAA de sobra en las nueve (7.94:1–13.23:1, ver
+       comentario de la paleta de arriba), pero blanco puro es siempre un
+       poco mejor todavía (diferencia de +1.3 a +2.2 según la tarjeta), así
+       que esta tarjeta usa una regla propia en vez de depender siempre de
+       `--bs-color-text` global — mismo criterio que ya siguen
+       `--bs-color-final-bg`/`--bs-color-intro-bg`/la paleta de `slide` con
+       sus propios fondos por modo. */
+    --bs-color-card-text: #ffffff;
     --bs-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
   }
 }

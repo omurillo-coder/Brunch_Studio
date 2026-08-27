@@ -136,6 +136,35 @@
   background: var(--bs-color-slide-red-bg);
 }
 
+/* Tarea "Contraste de texto": color del texto principal de la tarjeta
+   (`.title`, que no fija su propio `color` y por tanto hereda el de aquí —
+   `.type`/`.number`/`.startMark`/`.bodyPreview`/`.responseText` sí fijan el
+   suyo propio con los tokens muted/faint/accent habituales y quedan fuera de
+   este ajuste). En CLARO, `--bs-color-card-text` es el mismo
+   `--bs-color-text` casi negro de siempre (comprobado: negro da mejor
+   contraste que blanco en las 9 combinaciones de fondo claro, 7.55:1–15.12:1
+   — ver tabla en el informe de esta tarea), así que estas nueve tarjetas ya
+   estaban bien con el texto por defecto y no cambian visualmente en claro.
+   En OSCURO (ver el bloque `@media (prefers-color-scheme: dark)` de
+   `tokens.css`) el token pasa a blanco puro: comprobado que blanco da mejor
+   contraste que negro en las 9 combinaciones de fondo oscuro (9.28:1–15.47:1
+   con blanco, frente a 1.11:1–1.85:1 con negro) — y también algo mejor que
+   el `--bs-color-text` oscuro por defecto (#ededef, ya AAA de sobra en las
+   nueve, pero un poco por debajo de blanco puro en todas). De ahí esta regla
+   específica en vez de depender siempre de `--bs-color-text` global, tal
+   como pide la tarea. */
+.cardFinal,
+.cardIntro,
+.cardSlideYellow,
+.cardSlideOrange,
+.cardSlidePink,
+.cardSlidePurple,
+.cardSlideCyan,
+.cardSlideGray,
+.cardSlideRed {
+  color: var(--bs-color-card-text);
+}
+
 /* Insignia de aviso (punto 1): un indicador pequeño y barato, no un icono
    con librería aparte. Círculo sólido en la esquina superior derecha de la
    tarjeta, con "!" — `title` en el propio `<span>` (ver `nodeTypes.tsx`)
@@ -175,11 +204,6 @@
   padding: 1px 6px;
 }
 
-.number {
-  font-size: var(--bs-font-size-xs);
-  color: var(--bs-color-text-faint);
-}
-
 /* Marca discreta de "esta es la diapositiva de inicio". Deliberadamente
    sobria (texto pequeño con el color de acento, sin badge grande de color
    sólido) para no competir visualmente con el título del nodo. */
@@ -196,7 +220,7 @@
    cuando era el último elemento) para que se lea como el texto principal de
    la cabecera; al ser el único elemento `flex: 1 1 auto`, ocupa el espacio
    sobrante y empuja el resto de insignias (`.type` con el código corto
-   "D{número}", `.startMark`, `.number`) hacia la derecha de la fila. */
+   "D{número}", `.startMark`) hacia la derecha de la fila. */
 .title {
   flex: 1 1 auto;
   min-width: 0;

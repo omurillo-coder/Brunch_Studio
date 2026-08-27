@@ -56,11 +56,11 @@ export const START_NODE_LABEL = 'Inicio'
  * como en la fila de la lista del panel izquierdo (`LeftPanel.tsx`, que
  * importa y reutiliza esta misma función en vez de duplicarla). Vale para
  * los tres tipos de nodo por igual — incluidos `intro`/`final` — porque
- * conceptualmente, para el usuario, "todo son diapositivas numeradas". NO
- * sustituye el campo `number` en sí, que sigue mostrándose aparte sin
- * cambios (`.number` aquí, `.nodeNumber` en `LeftPanel`). Acepta cualquier
- * objeto con `number` (nodo de dominio o `CanvasNodeData`) para no acoplarse
- * a un tipo concreto.
+ * conceptualmente, para el usuario, "todo son diapositivas numeradas". Ya NO
+ * se muestra el campo `number` "pelado" aparte (sin la "D"): era redundante
+ * con este mismo código corto, que ya sirve de referencia — eliminado tanto
+ * aquí como en `LeftPanel`. Acepta cualquier objeto con `number` (nodo de
+ * dominio o `CanvasNodeData`) para no acoplarse a un tipo concreto.
  */
 export function shortNodeLabel(node: { number: number }): string {
   return `D${node.number}`
@@ -170,7 +170,6 @@ function Header({ data }: { data: CanvasNodeData }) {
           {START_NODE_LABEL}
         </span>
       )}
-      <span className={styles.number}>{data.number}</span>
       <PinBadge data={data} />
     </div>
   )

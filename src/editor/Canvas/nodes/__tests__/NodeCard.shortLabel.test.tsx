@@ -57,6 +57,12 @@ describe('NodeCard — cabecera: código corto y orden (referencia primero)', ()
     // La antigua etiqueta traducida ya no se pinta en ninguna tarjeta.
     expect(screen.queryByText('Diapositiva')).not.toBeInTheDocument()
     expect(screen.queryByText('Final')).not.toBeInTheDocument()
+    // Tarea "Quitar el número pelado": el número solo, sin la "D" delante,
+    // ya no se pinta aparte en ningún nodo de texto propio (era redundante
+    // con "D{número}").
+    for (const node of [intro, slideStart, final]) {
+      expect(screen.queryByText(node.number.toString(), { selector: 'span' })).not.toBeInTheDocument()
+    }
   })
 
   it('en el DOM, la referencia/título aparece ANTES que el código corto "D{número}"', async () => {

@@ -143,6 +143,63 @@ describe('Canvas — cableado con @xyflow/react (ReactFlow stub)', () => {
     warnSpy.mockRestore()
   })
 
+  // Regresión "dos clics para seleccionar" (ver diagnóstico completo en el
+  // comentario de `handleNodeClick` en `Canvas.tsx` y el escenario real
+  // reproducido en `Canvas.test.tsx`). Este test de cableado comprueba, con
+  // el stub, la parte que SÍ le corresponde a este fichero: que
+  // `onNodeClick` (el arreglo) y `onSelectionChange`/`onPaneClick` (que
+  // `@xyflow/react` puede disparar en el mismo gesto real, aunque el stub no
+  // los encadene automáticamente) no se pisan entre sí si llegan a
+  // dispararse ambos para el mismo clic — el resultado final es el mismo
+  // nodo seleccionado, no un estado a medias ni vacío.
+  it('onNodeClick selecciona el nodo; que además se dispare onSelectionChange con el mismo nodo no lo deja en un estado inconsistente', () => {
+    render(<Canvas />)
+    const start = startSlide()
+
+    act(() => {
+      capturedProps?.onNodeClick?.(
+        { shiftKey: false } as never,
+        { id: start.id } as never,
+      )
+    })
+    expect(useProjectStore.getState().selection.selectedNodeIds).toEqual([start.id])
+
+    // `@xyflow/react` también podría (más tarde, o en el mismo flush) llamar
+    // a `onSelectionChange` con el resultado ya correcto una vez su propio
+    // `nodeLookup` interno se resincroniza con nuestro `nodes` prop — debe
+    // seguir siendo el mismo nodo, no limpiar ni duplicar la selección.
+    act(() => {
+      capturedProps?.onSelectionChange?.({ nodes: [{ id: start.id } as never], edges: [] })
+    })
+    expect(useProjectStore.getState().selection.selectedNodeIds).toEqual([start.id])
+  })
+
+  it('onNodeClick con Mayús añade el nodo a la selección en vez de reemplazarla', () => {
+    render(<Canvas />)
+    const start = startSlide()
+    act(() => {
+      useProjectStore.getState().createNode('slide', { x: 100, y: 0 })
+    })
+    const other = otherNodeOfType('slide')
+
+    act(() => {
+      capturedProps?.onNodeClick?.({ shiftKey: false } as never, { id: start.id } as never)
+    })
+    expect(useProjectStore.getState().selection.selectedNodeIds).toEqual([start.id])
+
+    act(() => {
+      capturedProps?.onNodeClick?.({ shiftKey: true } as never, { id: other.id } as never)
+    })
+    expect(useProjectStore.getState().selection.selectedNodeIds).toEqual([start.id, other.id])
+
+    // Mayús+clic sobre un nodo YA seleccionado lo QUITA de la selección
+    // (toggle), igual que hace `selectNode({ additive: true })`.
+    act(() => {
+      capturedProps?.onNodeClick?.({ shiftKey: true } as never, { id: other.id } as never)
+    })
+    expect(useProjectStore.getState().selection.selectedNodeIds).toEqual([start.id])
+  })
+
   it('onSelectionChange sincroniza `selection.selectedNodeIds` en el store', () => {
     render(<Canvas />)
     const start = startSlide()

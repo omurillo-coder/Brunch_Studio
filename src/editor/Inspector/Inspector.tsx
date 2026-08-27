@@ -95,6 +95,42 @@ function nodeOptionLabel(node: Node): string {
   return `${NODE_TYPE_LABEL[node.type]} ${node.number} — ${title}`
 }
 
+/**
+ * Clase CSS de un campo de texto libre (`.input`/`.textarea`) del Inspector
+ * según si está vacío o no — petición de usuario: "los campos por rellenar
+ * deberían estar en blanco, no en gris [...] para saber exactamente lo que
+ * tienes que rellenar". Añade `.fieldEmpty` (ver `Inspector.module.css`,
+ * fondo `--bs-color-surface` en vez del `--bs-color-bg` habitual) cuando
+ * `value.trim() === ''` — mismo criterio de "vacío" que ya usa el resto del
+ * dominio para estos campos (p.ej. `ContinueSection.commitPending`,
+ * `InternalNoteField.commitPending`: `trim() === ''` decide si se guarda
+ * `null`).
+ *
+ * Recibe SIEMPRE el estado local en edición (`title`/`label`/`caseName`/
+ * `text`/`value`, no el último valor confirmado en el store) porque cada uno
+ * de esos componentes ya re-renderiza en cada pulsación (`onChange`) — así
+ * el fondo cambia EN VIVO mientras se escribe o se borra, no solo al cargar
+ * el Inspector o al perder el foco.
+ *
+ * Deliberadamente NO existe una variante para `.select`: los desplegables
+ * de elección cerrada (Ciclo, Asignatura, variante de Final, operador de
+ * condición, variable, operación, valor booleano, y los `<select>` de
+ * destino de nodo) no son "campos de texto libre a rellenar" en el mismo
+ * sentido — se quedan con su fondo `--bs-color-bg` de siempre.
+ */
+function fieldClassName(base: string | undefined, value: string): string {
+  // `base` viaja como `string | undefined` porque el módulo CSS se tipa vía
+  // `CSSModuleClasses` (`Record<string, string>`) con `noUncheckedIndexedAccess`
+  // activo (mismo motivo que el resto del archivo hace `as string` al pasar
+  // una clase de este módulo a una API que exige `string`, p.ej.
+  // `CSS.escape(styles.metaGroup as string)` en los tests) — en la práctica
+  // nunca es `undefined` (la clase existe siempre en el CSS compilado), así
+  // que aquí se normaliza con `?? ''` en vez de forzar el cast en cada punto
+  // de llamada.
+  const safeBase = base ?? ''
+  return value.trim() === '' ? `${safeBase} ${styles.fieldEmpty}` : safeBase
+}
+
 /** Respuestas de una diapositiva, siempre en el orden fijo interno A→B→C→D
  *  (la letra nunca se muestra; solo ordena) — el array interno conserva el
  *  orden de creación, que puede no coincidir con el orden de letra tras
@@ -1367,7 +1403,7 @@ function ContinueSection({
         </label>
         <input
           id={labelFieldId}
-          className={styles.input}
+          className={fieldClassName(styles.input, label)}
           type="text"
           value={label}
           placeholder={DEFAULT_CONTINUE_LABEL}
@@ -1537,7 +1573,7 @@ function IntroSection({ node, allNodes }: { node: IntroNode; allNodes: Node[] })
         </label>
         <input
           id={caseNameFieldId}
-          className={styles.input}
+          className={fieldClassName(styles.input, caseName)}
           type="text"
           value={caseName}
           onChange={(event) => setCaseName(event.target.value)}
@@ -1696,7 +1732,7 @@ function ResponseRow({
         </label>
         <textarea
           id={textFieldId}
-          className={styles.textarea}
+          className={fieldClassName(styles.textarea, text)}
           rows={3}
           value={text}
           onChange={(event) => setText(event.target.value)}
@@ -1947,7 +1983,7 @@ function InternalNoteField({ node }: { node: Node }) {
       </label>
       <textarea
         id={fieldId}
-        className={styles.textarea}
+        className={fieldClassName(styles.textarea, value)}
         rows={3}
         value={value}
         onChange={(event) => setValue(event.target.value)}
@@ -2196,7 +2232,7 @@ function NodeFields({
       <input
         id="inspector-node-title"
         ref={titleInputRef}
-        className={styles.input}
+        className={fieldClassName(styles.input, title)}
         type="text"
         value={title}
         // Mismo corrector nativo del sistema/navegador que `RichTextEditor`

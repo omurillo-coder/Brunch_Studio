@@ -1,7 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import type { JSONContent } from '@tiptap/core'
 import { EditorContent, useEditor, useEditorState } from '@tiptap/react'
-import { RICH_TEXT_EXTENSIONS, parseRichBody, serializeRichBody } from './richTextContent'
+import {
+  RICH_TEXT_EXTENSIONS,
+  extractPlainText,
+  parseRichBody,
+  serializeRichBody,
+} from './richTextContent'
 import styles from './RichTextEditor.module.css'
 
 export interface RichTextEditorProps {
@@ -169,6 +174,7 @@ export function RichTextEditor({ body, onCommit, ariaLabelledBy }: RichTextEdito
           canDeleteTable: false,
           canMergeCells: false,
           canSplitCell: false,
+          isEmpty: true,
         }
       }
       return {
@@ -177,6 +183,17 @@ export function RichTextEditor({ body, onCommit, ariaLabelledBy }: RichTextEdito
         bulletList: ctx.editor.isActive('bulletList'),
         orderedList: ctx.editor.isActive('orderedList'),
         highlight: ctx.editor.isActive('highlight'),
+        // "Vacío" = sin ningún carácter de texto real, aunque haya un
+        // párrafo vacío por defecto (el documento inicial que siembra
+        // `createNode`/`duplicateNode`) — mismo criterio que ya usa el
+        // resto de la app para un cuerpo Tiptap (`LeftPanel`, `adapter.ts`,
+        // `diagnostics.ts`): reutiliza `extractPlainText`, no uno nuevo.
+        // `useEditorState` re-evalúa este selector en cada transacción
+        // (cada pulsación), así que el fondo "por rellenar" del
+        // `.editorWrapper` (ver más abajo y `RichTextEditor.module.css`)
+        // se actualiza EN VIVO mientras se escribe o se borra todo el
+        // contenido — sin esperar a un blur.
+        isEmpty: extractPlainText(ctx.editor.getJSON()).trim() === '',
         // Estado de la tabla en la posición actual del cursor (fase 9,
         // tablas editables): controla tanto si el botón "Insertar tabla" se
         // deshabilita (no tiene sentido anidar tablas) como si aparece la
@@ -239,6 +256,7 @@ export function RichTextEditor({ body, onCommit, ariaLabelledBy }: RichTextEdito
   ]
 
   const isInTable = toolbarState?.isInTable ?? false
+  const isEmpty = toolbarState?.isEmpty ?? true
 
   /**
    * Acciones de la barra contextual de tabla (fase 9): solo visible cuando
@@ -302,7 +320,7 @@ export function RichTextEditor({ body, onCommit, ariaLabelledBy }: RichTextEdito
   ]
 
   return (
-    <div className={styles.editorWrapper}>
+    <div className={isEmpty ? `${styles.editorWrapper} ${styles.editorWrapperEmpty}` : styles.editorWrapper}>
       <div className={styles.toolbar} role="toolbar" aria-label="Formato de texto">
         {buttons.map((button) => (
           <button

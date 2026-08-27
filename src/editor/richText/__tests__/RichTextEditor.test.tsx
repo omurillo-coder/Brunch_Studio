@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { RichTextEditor } from '../RichTextEditor'
 import { parseRichBody } from '../richTextContent'
+import styles from '../RichTextEditor.module.css'
 
 /**
  * Espera al `requestAnimationFrame` que `editor.chain().focus()` programa
@@ -552,5 +553,68 @@ describe('RichTextEditor: corrector ortotipográfico nativo (fase 8)', () => {
       expect(editable.getAttribute('spellcheck')).toBe('false')
     })
     expect(editable.getAttribute('aria-labelledby')).toBe('etiqueta-externa')
+  })
+})
+
+/**
+ * Fondo "por rellenar" cuando el editor no tiene ningún texto real (petición
+ * de usuario, ver `Inspector.module.css`/`fieldClassName` en
+ * `Inspector.tsx`): `.editorWrapperEmpty` se añade a `.editorWrapper`
+ * mientras `extractPlainText(editor.getJSON()).trim() === ''` — mismo
+ * criterio de "vacío" que el resto de la app usa para un cuerpo Tiptap
+ * (`LeftPanel`, `adapter.ts`, `diagnostics.ts`), no uno nuevo. El tercer test
+ * confirma que se actualiza EN VIVO (sin blur) al vaciar el editor, vía el
+ * mismo mecanismo `useEditorState` que ya reacciona en vivo al estado de
+ * negrita/cursiva de la barra (ver "RichTextEditor: atajos de teclado"
+ * arriba) — aquí seleccionando todo el texto (`Mod-a` -> `selectAll`, ver
+ * `baseKeymap` de `@tiptap/core`) y borrándolo con Retroceso, el único modo
+ * fiable de "escribir/borrar" disponible en jsdom (que no simula una
+ * selección de texto real ni inserción de texto por teclado, ver nota de los
+ * tests de atajos arriba).
+ */
+describe('RichTextEditor: fondo "por rellenar" cuando está vacío (petición de usuario)', () => {
+  it('un documento sin texto real (solo el párrafo vacío por defecto) lleva el fondo "vacío"', async () => {
+    render(<RichTextEditor body="" onCommit={vi.fn()} />)
+
+    await waitFor(() => {
+      const wrapper = document.querySelector(`.${styles.editorWrapper}`)
+      expect(wrapper).not.toBeNull()
+    })
+    const wrapper = document.querySelector(`.${styles.editorWrapper}`) as HTMLElement
+    expect(wrapper.classList.contains(styles.editorWrapperEmpty as string)).toBe(true)
+  })
+
+  it('un documento con texto real NO lleva el fondo "vacío"', async () => {
+    render(<RichTextEditor body="Hola mundo" onCommit={vi.fn()} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Hola mundo')).toBeInTheDocument()
+    })
+    const wrapper = document.querySelector(`.${styles.editorWrapper}`) as HTMLElement
+    expect(wrapper.classList.contains(styles.editorWrapperEmpty as string)).toBe(false)
+  })
+
+  it('seleccionar todo el texto y borrarlo aplica el fondo "vacío" EN VIVO, sin esperar al blur', async () => {
+    render(<RichTextEditor body="Hola mundo" onCommit={vi.fn()} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Hola mundo')).toBeInTheDocument()
+    })
+    const editable = document.querySelector('[contenteditable="true"]') as HTMLElement
+    editable.focus()
+    await waitOneFrame()
+
+    const wrapper = document.querySelector(`.${styles.editorWrapper}`) as HTMLElement
+    expect(wrapper.classList.contains(styles.editorWrapperEmpty as string)).toBe(false)
+
+    fireEvent.keyDown(editable, { key: 'a', code: 'KeyA', ctrlKey: true })
+    fireEvent.keyDown(editable, { key: 'Backspace', code: 'Backspace' })
+
+    await waitFor(() => {
+      expect(wrapper.classList.contains(styles.editorWrapperEmpty as string)).toBe(true)
+    })
+    // Sigue enfocado: el cambio de fondo no depende de perder el foco (a
+    // diferencia del commit en el store, que sí espera al blur).
+    expect(editable).toHaveFocus()
   })
 })
