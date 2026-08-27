@@ -69,13 +69,12 @@
   overflow-y: auto;
 }
 
-/* Fila de un nodo: el botón principal (`.nodeItem`) más los controles de
-   reordenar (`.reorderControls`), lado a lado — ver comentario de
-   `isSearching`/`reorderNode` en `LeftPanel.tsx`. También el elemento
-   `draggable` del arrastrar-y-soltar (Tarea 1): `cursor: grab` cuando el
-   arrastre está habilitado (buscador vacío, ver `[draggable='true']` más
-   abajo), `default` en caso contrario para no sugerir una interacción que no
-   está disponible mientras se filtra. */
+/* Fila de un nodo: el botón principal (`.nodeItem`), arrastrable — ver
+   comentario de `isSearching`/`reorderNode` en `LeftPanel.tsx`. El elemento
+   `draggable` del arrastrar-y-soltar: `cursor: grab` cuando el arrastre está
+   habilitado (buscador vacío, ver `[draggable='true']` más abajo), `default`
+   en caso contrario para no sugerir una interacción que no está disponible
+   mientras se filtra. */
 .nodeRow {
   display: flex;
   align-items: center;
@@ -168,36 +167,4 @@
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-}
-
-/* Controles de reordenar (↑/↓): mismo estilo visual que
-   `.contentBlockMoveButton` de `Inspector.module.css` (bloques de contenido
-   de una diapositiva), pero en columna en vez de en fila porque aquí
-   acompañan a una fila estrecha del panel izquierdo, no a una cabecera
-   horizontal. */
-.reorderControls {
-  flex: 0 0 auto;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-
-.reorderButton {
-  padding: 0 var(--bs-space-1);
-  border: 1px solid var(--bs-color-border);
-  border-radius: var(--bs-radius-sm);
-  background: var(--bs-color-bg);
-  color: var(--bs-color-text);
-  font-size: var(--bs-font-size-xs);
-  line-height: 1.4;
-  cursor: pointer;
-}
-
-.reorderButton:hover:not(:disabled) {
-  border-color: var(--bs-color-accent);
-}
-
-.reorderButton:disabled {
-  cursor: default;
-  opacity: 0.4;
 }

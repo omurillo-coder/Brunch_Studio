@@ -349,68 +349,7 @@ describe('LeftPanel — buscador del proyecto (fase 8)', () => {
   })
 })
 
-describe('LeftPanel — reordenar la lista de diapositivas (↑/↓)', () => {
-  function searchInput(): HTMLElement {
-    return screen.getByLabelText('Buscar en el proyecto')
-  }
-
-  it('↑/↓ mueven un nodo una posición dentro de graph.nodes', () => {
-    render(<LeftPanel />)
-    act(() => {
-      useProjectStore.getState().createNode('slide', { x: 0, y: 0 }, { title: 'Segunda' })
-    })
-    const segunda = lastNode()
-    // Recién creada, "Segunda" está al final de la lista (índice 1: la
-    // diapositiva de inicio nace en el índice 0).
-    expect(useProjectStore.getState().project.graph.nodes.map((n) => n.id).at(-1)).toBe(segunda.id)
-
-    fireEvent.click(screen.getByLabelText('Subir "Segunda"'))
-
-    expect(useProjectStore.getState().project.graph.nodes[0]?.id).toBe(segunda.id)
-
-    fireEvent.click(screen.getByLabelText('Bajar "Segunda"'))
-
-    expect(useProjectStore.getState().project.graph.nodes.map((n) => n.id).at(-1)).toBe(segunda.id)
-  })
-
-  it('el ↑ del primero de la lista y el ↓ del último están deshabilitados', () => {
-    render(<LeftPanel />)
-    act(() => {
-      useProjectStore.getState().createNode('slide', { x: 0, y: 0 }, { title: 'Segunda' })
-    })
-
-    // La diapositiva de inicio nace en el índice 0: su ↑ está deshabilitado.
-    expect(screen.getByLabelText('Subir "Sin ref. oculta"')).toBeDisabled()
-    // "Segunda" queda última: su ↓ está deshabilitado.
-    expect(screen.getByLabelText('Bajar "Segunda"')).toBeDisabled()
-    // Los extremos opuestos de cada una siguen activos.
-    expect(screen.getByLabelText('Bajar "Sin ref. oculta"')).not.toBeDisabled()
-    expect(screen.getByLabelText('Subir "Segunda"')).not.toBeDisabled()
-  })
-
-  it('con texto de búsqueda activo, los controles se deshabilitan con un tooltip explicativo', () => {
-    render(<LeftPanel />)
-    act(() => {
-      useProjectStore.getState().createNode('slide', { x: 0, y: 0 }, { title: 'Segunda' })
-    })
-
-    fireEvent.change(searchInput(), { target: { value: 'segunda' } })
-
-    const upSegunda = screen.getByLabelText('Subir "Segunda"')
-    const downSegunda = screen.getByLabelText('Bajar "Segunda"')
-    expect(upSegunda).toBeDisabled()
-    expect(downSegunda).toBeDisabled()
-    expect(upSegunda).toHaveAttribute('title', 'Borra la búsqueda para reordenar')
-    expect(downSegunda).toHaveAttribute('title', 'Borra la búsqueda para reordenar')
-
-    // Se reactivan en cuanto se borra la búsqueda.
-    fireEvent.change(searchInput(), { target: { value: '' } })
-    expect(screen.getByLabelText('Subir "Segunda"')).not.toBeDisabled()
-    expect(screen.getByLabelText('Subir "Segunda"')).not.toHaveAttribute('title')
-  })
-})
-
-describe('LeftPanel — arrastrar-y-soltar la lista de diapositivas (Tarea 1)', () => {
+describe('LeftPanel — arrastrar-y-soltar la lista de diapositivas (único mecanismo de reordenar)', () => {
   function searchInput(): HTMLElement {
     return screen.getByLabelText('Buscar en el proyecto')
   }

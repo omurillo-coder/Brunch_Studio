@@ -119,25 +119,27 @@ export function LeftPanel() {
 
   const [searchQuery, setSearchQuery] = useState('')
   const normalizedQuery = searchQuery.trim().toLowerCase()
-  // Reordenar (↑/↓, ver `reorderNode` en `src/domain/nodeOrder.ts`) opera
-  // sobre el índice REAL dentro de `project.graph.nodes`, mientras que con un
-  // buscador activo `visibleNodes` es un SUBCONJUNTO filtrado: "subir/bajar"
-  // dentro de esa vista parcial sería ambiguo respecto a la posición real en
-  // el array completo (¿un puesto en la lista filtrada, o hasta el hueco
-  // entre los dos nodos ocultos más cercanos?). Se opta por deshabilitar los
-  // controles mientras el buscador tiene texto, en vez de intentar resolver
-  // esa ambigüedad — se reactivan en cuanto se borra la búsqueda, momento en
-  // el que `visibleNodes` vuelve a ser exactamente `project.graph.nodes` y el
+  // Reordenar (arrastrar-y-soltar, ver más abajo; `reorderNode` en
+  // `src/domain/nodeOrder.ts`) opera sobre el índice REAL dentro de
+  // `project.graph.nodes`, mientras que con un buscador activo
+  // `visibleNodes` es un SUBCONJUNTO filtrado: soltar dentro de esa vista
+  // parcial sería ambiguo respecto a la posición real en el array completo
+  // (¿un puesto en la lista filtrada, o hasta el hueco entre los dos nodos
+  // ocultos más cercanos?). Se opta por deshabilitar el arrastre mientras el
+  // buscador tiene texto, en vez de intentar resolver esa ambigüedad — se
+  // reactiva en cuanto se borra la búsqueda, momento en el que
+  // `visibleNodes` vuelve a ser exactamente `project.graph.nodes` y el
   // índice de la lista vuelve a coincidir con el índice real.
   const isSearching = normalizedQuery !== ''
 
-  // Arrastrar-y-soltar (Tarea 1): alternativa a ↑/↓ para mover una
-  // diapositiva a cualquier posición de un solo gesto, no solo la de al
-  // lado. Arrastrar-y-soltar NATIVO de HTML5 (`draggable`/`onDragStart`/
-  // `onDragOver`/`onDrop`), sin librería nueva — app de escritorio (Tauri),
-  // no hace falta soporte táctil. Mismo criterio que ↑/↓: opera sobre el
-  // índice REAL dentro de `project.graph.nodes`, y por eso mismo motivo
-  // (posición ambigua sobre una lista filtrada) se deshabilita mientras el
+  // Arrastrar-y-soltar para mover una diapositiva a cualquier posición de la
+  // lista, de un solo gesto — NATIVO de HTML5 (`draggable`/`onDragStart`/
+  // `onDragOver`/`onDrop`), sin librería nueva: app de escritorio (Tauri), no
+  // hace falta soporte táctil. Verificado a mano en navegador real (además de
+  // los tests) que el reordenado funciona de forma fiable en cualquier
+  // posición antes de retirar los botones ↑/↓ que existían como alternativa
+  // — el arrastre es ahora el único mecanismo de reordenar. Mismo criterio de
+  // índice REAL dentro de `project.graph.nodes`, deshabilitado mientras el
   // buscador tiene texto — ver `isSearching` arriba.
   //
   // `draggedNodeId`: id del nodo que se está arrastrando ahora mismo (o
@@ -335,43 +337,6 @@ export function LeftPanel() {
                   campo no cambia, solo el texto que ve el usuario. */}
               <span className={styles.nodeTitle}>{node.title.trim() || 'Sin ref. oculta'}</span>
             </button>
-            {/* Reordenar (puramente organizativo, ver `reorderNode` en
-                `src/domain/nodeOrder.ts`): botones ↑/↓ fuera del `<button>`
-                de arriba (un `<button>` dentro de otro `<button>` es HTML
-                inválido), deshabilitados en los extremos de la lista real y,
-                los dos a la vez, mientras el buscador tiene texto — ver
-                `isSearching` más arriba. Se MANTIENEN a propósito junto al
-                arrastrar-y-soltar del `<li>` (Tarea 1): alternativa
-                accesible por teclado/sin ratón para quien no pueda o no
-                quiera arrastrar. */}
-            <div className={styles.reorderControls}>
-              <button
-                type="button"
-                className={styles.reorderButton}
-                onClick={(event) => {
-                  event.stopPropagation()
-                  reorderNode(node.id, index - 1)
-                }}
-                disabled={isSearching || index === 0}
-                aria-label={`Subir "${node.title.trim() || 'Sin ref. oculta'}"`}
-                title={isSearching ? 'Borra la búsqueda para reordenar' : undefined}
-              >
-                ↑
-              </button>
-              <button
-                type="button"
-                className={styles.reorderButton}
-                onClick={(event) => {
-                  event.stopPropagation()
-                  reorderNode(node.id, index + 1)
-                }}
-                disabled={isSearching || index === visibleNodes.length - 1}
-                aria-label={`Bajar "${node.title.trim() || 'Sin ref. oculta'}"`}
-                title={isSearching ? 'Borra la búsqueda para reordenar' : undefined}
-              >
-                ↓
-              </button>
-            </div>
           </li>
         ))}
         {normalizedQuery && visibleNodes.length === 0 && (
