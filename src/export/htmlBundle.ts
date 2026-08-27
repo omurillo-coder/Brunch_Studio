@@ -72,6 +72,22 @@ const EXPORTED_TEXTS: ExportedTexts = {
 const NOSCRIPT_MESSAGE =
   'Esta experiencia interactiva necesita JavaScript. Actívalo en tu navegador para poder reproducirla.'
 
+/**
+ * Datos del modo revisión profes ("Exportar revisión profes") que viajan
+ * embebidos en el bundle cuando está activo. `buildTeacherReviewBundle`
+ * (`src/export/teacherReviewExport.ts`) es quien las produce (textos fijos +
+ * la imagen del pingüino ya convertida a `data:` URI EN TIEMPO DE
+ * EXPORTACIÓN, mismo motivo que `resolveIntroCatalogNames` más abajo: este
+ * módulo puede hacer `fetch` de un asset propio de la app, el runtime JS
+ * vanilla embebido no) y las pasa a `buildHtmlBundle` — este archivo no las
+ * conoce más que como texto opaco.
+ */
+export interface TeacherReviewBundleOptions {
+  welcomeText: string
+  completionText: string
+  penguinDataUri: string
+}
+
 /** Forma del JSON embebido que lee el runtime del HTML exportado. */
 interface ExportBundle {
   project: ProjectDocument
@@ -94,6 +110,15 @@ interface ExportBundle {
    */
   introCicloName: string | null
   introAsignaturaName: string | null
+  /**
+   * Bandera de "modo revisión profes" (ver `exportedPlayerScript.ts`,
+   * sección "Modo revisión profes"), y los datos que ese modo necesita.
+   * Ausentes (no `false`/`null`) en el export HTML/SCORM normal —
+   * `serializeBundle`/`JSON.stringify` omite del todo un campo `undefined`,
+   * así que un HTML exportado normal no lleva ni rastro de estas dos claves.
+   */
+  reviewMode?: true
+  teacherReview?: TeacherReviewBundleOptions
 }
 
 /** Escapa texto para insertarlo como contenido/atributo de HTML. */
@@ -244,8 +269,24 @@ function buildAssetUris(assets: ExportAssetMap): Record<string, string> {
  * Determinista: el mismo documento con los mismos assets produce byte a byte
  * el mismo HTML (no se incluye fecha de exportación ni nada variable), lo que
  * permite comparar exportaciones y hace los tests estables.
+ *
+ * `teacherReview` (opcional): presente ÚNICAMENTE cuando quien llama es
+ * `buildTeacherReviewBundle` (`src/export/teacherReviewExport.ts`) — activa
+ * el "modo revisión profes" embebiendo `reviewMode: true` y estos datos en
+ * el bundle. El export HTML normal (`useHtmlExport`) y el SCORM
+ * (`useScormExport`) no lo pasan nunca, así que su HTML generado no lleva
+ * ni la bandera ni estos datos (ver `ExportBundle.reviewMode`/
+ * `teacherReview` más arriba). Todo lo demás de esta función —
+ * `bodyHtml`/`assetUris`/`texts`/nombres de portada/el propio wrapper
+ * HTML— es exactamente lo mismo para los tres tipos de export: no hay
+ * ninguna rama especial aquí más allá de esta única clave añadida al JSON
+ * embebido.
  */
-export function buildHtmlBundle(project: ProjectDocument, assets: ExportAssetMap): string {
+export function buildHtmlBundle(
+  project: ProjectDocument,
+  assets: ExportAssetMap,
+  teacherReview?: TeacherReviewBundleOptions,
+): string {
   const introNames = resolveIntroCatalogNames(project)
   const bundle: ExportBundle = {
     project: stripEditorOnlyFields(project),
@@ -255,6 +296,7 @@ export function buildHtmlBundle(project: ProjectDocument, assets: ExportAssetMap
     texts: EXPORTED_TEXTS,
     introCicloName: introNames.cicloName,
     introAsignaturaName: introNames.asignaturaName,
+    ...(teacherReview ? { reviewMode: true as const, teacherReview } : {}),
   }
 
   const title = project.metadata.name.trim() || 'Experiencia interactiva'

@@ -119,6 +119,25 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
   var EXIT_BUTTON_LABEL = 'Salir';
   var EXIT_MESSAGE = 'Ya puedes cerrar esta pestaña.';
 
+  // Modo revisión profes ("Exportar revisión profes"): activo únicamente
+  // cuando el bundle embebido trae \`reviewMode\`/\`teacherReview\` (ver
+  // \`buildTeacherReviewBundle\` en \`src/export/teacherReviewExport.ts\`).
+  // Cuando está activo, la capa de pintado de más abajo (\`render\`/
+  // \`buildCard\`) añade una pantalla de bienvenida antes del recorrido,
+  // "Diapositiva {número}" en cada tarjeta, un indicador de progreso + lista
+  // de cobertura con salto directo, y una pantalla de felicitación al
+  // alcanzar el 100% — ver la sección "Modo revisión profes" más abajo, justo
+  // antes de \`render\`. El motor de recorrido de arriba
+  // (\`getInitialState\`/\`getView\`/\`advance\`/\`choose\`/\`restart\`) no cambia EN
+  // ABSOLUTO: solo se envuelve su resultado, nunca se reimplementa. Ausente
+  // (\`undefined\`, \`!!undefined === false\`) en el export HTML/SCORM normal —
+  // este mismo script sirve a los tres — y este modo nunca se activa desde
+  // "Probar" dentro de la app, que usa \`PlayerScreen.tsx\`, un componente
+  // de la interfaz de edición totalmente distinto que nunca importa este
+  // archivo.
+  var reviewMode = !!bundle.reviewMode;
+  var teacherReview = bundle.teacherReview || null;
+
   // -------------------------------------------------------------------------
   // SCORM 2004 4ª edición (no-op silencioso fuera de un LMS; ver cabecera
   // del archivo)
@@ -818,11 +837,276 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
     return card;
   }
 
+  // -------------------------------------------------------------------------
+  // Modo revisión profes: capa de presentación, ver \`reviewMode\`/
+  // \`teacherReview\` arriba. Nada de lo de aquí abajo toca \`getInitialState\`/
+  // \`getView\`/\`advance\`/\`choose\`/\`restart\` (motor de recorrido, sección de
+  // arriba): solo lee su resultado (\`state\`, \`getView(state)\`) para decidir
+  // qué pintar ALREDEDOR de la tarjeta que ya construye \`buildCard\`, y usa
+  // \`setState\` (la misma función que ya usan \`advance\`/\`choose\`/\`restart\`)
+  // para saltar de una diapositiva a otra desde la lista de cobertura.
+  // -------------------------------------------------------------------------
+
+  var REVIEW_STORAGE_PREFIX = 'brunch-teacher-review:';
+
+  /** Namespacing por \`project.metadata.id\` (UUID único del documento): dos
+   *  proyectos distintos revisados desde el mismo navegador nunca mezclan su
+   *  progreso, aunque un HTML exportado con \`file://\` pueda compartir origen
+   *  de almacenamiento con otro según el navegador. Limitación residual
+   *  conocida y documentada (no resuelta aquí, caso raro): si DOS personas
+   *  revisan la MISMA copia exacta del archivo exportado en el MISMO
+   *  navegador del MISMO ordenador, comparten esta misma clave y por tanto
+   *  el mismo progreso guardado. */
+  function reviewStorageKey() {
+    var projectId = project.metadata && project.metadata.id ? project.metadata.id : 'unknown';
+    return REVIEW_STORAGE_PREFIX + projectId;
+  }
+
+  /** Nunca lanza: sin \`localStorage\` disponible (modo privado agresivo,
+   *  cuota agotada, \`file://\` en un navegador que lo bloquee del todo) el
+   *  modo revisión sigue funcionando en memoria durante esta sesión, solo
+   *  sin persistir entre recargas. */
+  function loadReviewProgress() {
+    try {
+      var raw = window.localStorage.getItem(reviewStorageKey());
+      if (!raw) {
+        return { visited: [], completed: false };
+      }
+      var parsed = JSON.parse(raw);
+      return {
+        visited: Array.isArray(parsed.visited) ? parsed.visited : [],
+        completed: !!parsed.completed,
+      };
+    } catch (error) {
+      return { visited: [], completed: false };
+    }
+  }
+
+  function saveReviewProgress(progress) {
+    try {
+      window.localStorage.setItem(reviewStorageKey(), JSON.stringify(progress));
+    } catch (error) {
+      // Silencioso a propósito, ver \`loadReviewProgress\`.
+    }
+  }
+
+  var reviewProgress = reviewMode ? loadReviewProgress() : { visited: [], completed: false };
+  // Todos los nodos del proyecto, por \`number\` ascendente — Inicio + todas
+  // las diapositivas + TODOS los finales, cada uno cuenta igual (mismo
+  // criterio que el denominador del progreso, ver \`reviewPercent\`).
+  var allNodesByNumber = reviewMode
+    ? project.graph.nodes.slice().sort(function (a, b) {
+        return a.number - b.number;
+      })
+    : [];
+  var totalReviewNodeCount = allNodesByNumber.length;
+
+  function isNodeVisited(nodeId) {
+    return reviewProgress.visited.indexOf(nodeId) !== -1;
+  }
+
+  /** Marca \`nodeId\` como visitado (idempotente) y persiste. Saltar desde la
+   *  lista de cobertura cuenta igual que llegar por el camino normal: ambos
+   *  pasan por aquí, ninguno se distingue del otro. */
+  function markNodeVisited(nodeId) {
+    if (!nodeId || isNodeVisited(nodeId)) {
+      return;
+    }
+    reviewProgress.visited.push(nodeId);
+    saveReviewProgress(reviewProgress);
+  }
+
+  function reviewPercent() {
+    if (totalReviewNodeCount === 0) {
+      return 0;
+    }
+    return Math.round((reviewProgress.visited.length / totalReviewNodeCount) * 100);
+  }
+
+  /** "Diapositiva {número}" (palabra completa, nunca la abreviatura "D{número}"
+   *  del editor) — prominente, en la parte de arriba de la tarjeta, antes del
+   *  propio contenido. La referencia que el profesor usa en su hoja de
+   *  validación externa. */
+  function buildReviewSlideLabel(number) {
+    var label = el('p', 'reviewSlideLabel');
+    label.textContent = 'Diapositiva ' + number;
+    return label;
+  }
+
+  /** Pantalla de bienvenida (texto fijo del bundle, ver \`teacherReview.welcomeText\`
+   *  en \`src/export/teacherReviewExport.ts\`), mostrada ANTES de la diapositiva
+   *  de Inicio real cada vez que se abre el archivo — no se persiste que ya
+   *  se vio, a diferencia del progreso de cobertura. Un salto de línea del
+   *  texto original es un párrafo aparte, para respetarlos tal cual. */
+  function buildWelcomeCard() {
+    var card = el('section', 'card');
+    var lines = (teacherReview.welcomeText || '').split('\\n');
+    for (var i = 0; i < lines.length; i += 1) {
+      var paragraph = el('p', 'body');
+      paragraph.textContent = lines[i];
+      card.appendChild(paragraph);
+    }
+    var button = el('button', 'primaryButton');
+    button.type = 'button';
+    button.textContent = texts.defaultContinueLabel;
+    button.addEventListener('click', function () {
+      welcomeDismissed = true;
+      render();
+    });
+    card.appendChild(button);
+    return card;
+  }
+
+  var welcomeDismissed = false;
+  var completionOverlay = null;
+
+  /** Construye (una única vez) el overlay de felicitación al 100%: texto fijo
+   *  + imagen del pingüino (ya embebida como \`data:\` URI en tiempo de
+   *  exportación, ver \`teacherReview.penguinDataUri\`) + "Continuar", que solo
+   *  cierra el overlay — deja seguir navegando con normalidad por si el
+   *  profesor quiere revisar algo de nuevo. */
+  function ensureCompletionOverlay() {
+    if (completionOverlay) {
+      return completionOverlay;
+    }
+    var overlay = el('div', 'reviewOverlayBackdrop');
+    var card = el('section', 'card');
+
+    var message = el('p', 'body');
+    message.textContent = teacherReview.completionText || '';
+    card.appendChild(message);
+
+    if (teacherReview.penguinDataUri) {
+      var image = el('img', 'reviewPenguin');
+      image.src = teacherReview.penguinDataUri;
+      image.alt = 'Pingüino felicitando por haber completado la revisión';
+      card.appendChild(image);
+    }
+
+    var button = el('button', 'primaryButton');
+    button.type = 'button';
+    button.textContent = texts.defaultContinueLabel;
+    button.addEventListener('click', function () {
+      overlay.style.display = 'none';
+    });
+    card.appendChild(button);
+
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+    completionOverlay = overlay;
+    return overlay;
+  }
+
+  function showCompletionOverlay() {
+    ensureCompletionOverlay().style.display = 'flex';
+  }
+
+  /** Si el progreso ACABA de llegar al 100% (y todavía no se había mostrado
+   *  la felicitación ni una sola vez, ver \`reviewProgress.completed\`
+   *  persistido), la muestra y lo recuerda para no repetirla en cargas
+   *  futuras. */
+  function maybeShowCompletion() {
+    if (reviewProgress.completed) {
+      return;
+    }
+    if (totalReviewNodeCount === 0 || reviewProgress.visited.length < totalReviewNodeCount) {
+      return;
+    }
+    reviewProgress.completed = true;
+    saveReviewProgress(reviewProgress);
+    showCompletionOverlay();
+  }
+
+  var reviewIndicator = null;
+  var reviewPanelOpen = false;
+
+  /** Indicador de progreso persistente (esquina superior derecha, siempre
+   *  visible) + lista de cobertura desplegable. Vive fuera de \`root\` (que
+   *  \`render\` vacía en cada pintado) para no reconstruirse entera cada vez;
+   *  solo su CONTENIDO se actualiza, ver \`updateReviewIndicator\`. */
+  function ensureReviewIndicator() {
+    if (reviewIndicator) {
+      return reviewIndicator;
+    }
+    var wrapper = el('div', 'reviewIndicator');
+
+    var button = el('button', 'reviewIndicatorButton');
+    button.type = 'button';
+    button.setAttribute('aria-haspopup', 'true');
+    button.addEventListener('click', function () {
+      reviewPanelOpen = !reviewPanelOpen;
+      updateReviewIndicator();
+    });
+    wrapper.appendChild(button);
+
+    var panel = el('div', 'reviewPanel');
+    wrapper.appendChild(panel);
+
+    document.body.appendChild(wrapper);
+    reviewIndicator = { wrapper: wrapper, button: button, panel: panel };
+    return reviewIndicator;
+  }
+
+  /** Salta directamente a \`nodeId\` (lista de cobertura, tarea "salto
+   *  directo"): sin rejugar el árbol de decisiones para llegar hasta ahí.
+   *  Reutiliza \`setState\`, la MISMA función que \`advance\`/\`choose\`/\`restart\`
+   *  — un salto cuenta igual que llegar por el camino normal, sin ninguna
+   *  distinción de estado. */
+  function jumpToReviewNode(nodeId) {
+    reviewPanelOpen = false;
+    setState({ currentNodeId: nodeId, totalPoints: state.totalPoints, variables: state.variables });
+  }
+
+  function buildReviewPanelItemHandler(nodeId) {
+    return function () {
+      jumpToReviewNode(nodeId);
+    };
+  }
+
+  function updateReviewIndicator() {
+    var indicator = ensureReviewIndicator();
+    var percent = reviewPercent();
+    indicator.button.textContent = percent + '% revisado';
+    indicator.panel.style.display = reviewPanelOpen ? 'flex' : 'none';
+
+    indicator.panel.textContent = '';
+    for (var i = 0; i < allNodesByNumber.length; i += 1) {
+      var node = allNodesByNumber[i];
+      var visited = isNodeVisited(node.id);
+      var item = el('button', visited ? 'reviewPanelItem reviewPanelItemVisited' : 'reviewPanelItem');
+      item.type = 'button';
+      item.textContent = (visited ? '✓ ' : '') + 'Diapositiva ' + node.number;
+      item.addEventListener('click', buildReviewPanelItemHandler(node.id));
+      indicator.panel.appendChild(item);
+    }
+  }
+
   var state = getInitialState();
 
   function render() {
     root.textContent = '';
-    root.appendChild(buildCard(getView(state)));
+
+    if (reviewMode && !welcomeDismissed) {
+      root.appendChild(buildWelcomeCard());
+      updateReviewIndicator();
+      return;
+    }
+
+    var view = getView(state);
+    if (reviewMode) {
+      markNodeVisited(view.node ? view.node.id : null);
+    }
+
+    var card = buildCard(view);
+    if (reviewMode && view.node) {
+      card.insertBefore(buildReviewSlideLabel(view.node.number), card.firstChild);
+    }
+    root.appendChild(card);
+
+    if (reviewMode) {
+      updateReviewIndicator();
+      maybeShowCompletion();
+    }
   }
 
   function setState(next) {

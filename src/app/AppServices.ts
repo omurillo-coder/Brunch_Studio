@@ -51,6 +51,17 @@ export interface AppServices {
    * con extensión `.zip`. Mismo patrón que `pickExportHtmlPath`.
    */
   pickExportScormPath: (suggestedName?: string) => Promise<string | null>
+  /**
+   * Abre el diálogo nativo de "Guardar como…" para elegir dónde escribir el
+   * `index.html` autónomo de la exportación "revisión profes"; `null` si el
+   * usuario cancela. `suggestedName` (normalmente el nombre del proyecto)
+   * preselecciona el nombre de archivo propuesto, con extensión `.html`.
+   * Mismo patrón que `pickExportHtmlPath`; diálogo aparte (en vez de
+   * reutilizar `pickExportHtmlPath`) para que el nombre de archivo propuesto
+   * distinga este tipo de export del HTML normal y no se sobrescriban entre
+   * sí por accidente.
+   */
+  pickExportTeacherReviewPath: (suggestedName?: string) => Promise<string | null>
   /** Importa/lee assets binarios (imagen/audio) de un `.brunch`. */
   assetRepository: AssetRepository
   /** Escribe en disco el HTML autónomo generado por `src/export`. */

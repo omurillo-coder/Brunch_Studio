@@ -368,4 +368,105 @@ button:focus-visible {
   font-weight: 600;
   color: var(--bs-color-text);
 }
+
+/* ---------------------------------------------------------------------
+   Modo revisión profes ("Exportar revisión profes"): clases pintadas
+   ÚNICAMENTE por \`exportedPlayerScript.ts\` cuando \`bundle.reviewMode\` está
+   activo (ver su sección "Modo revisión profes"). Compartir esta misma hoja
+   con el export HTML/SCORM normal es intencional (una sola fuente de
+   verdad de estilos para los tres); estas reglas simplemente no se aplican
+   nunca a nada en un export normal porque ese script no crea elementos con
+   estas clases.
+   --------------------------------------------------------------------- */
+
+/* "Diapositiva {número}", grande y bien visible, antes del propio
+   contenido de la tarjeta — la referencia que el profesor usa en su hoja
+   de validación externa. */
+.reviewSlideLabel {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--bs-color-accent);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+/* Indicador de progreso persistente (esquina superior derecha) + lista de
+   cobertura desplegable. */
+.reviewIndicator {
+  position: fixed;
+  top: var(--bs-space-4);
+  right: var(--bs-space-4);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--bs-space-2);
+}
+
+.reviewIndicatorButton {
+  padding: var(--bs-space-2) var(--bs-space-4);
+  border: 1px solid var(--bs-color-border);
+  border-radius: 999px;
+  background: var(--bs-color-surface);
+  color: var(--bs-color-text);
+  font-size: var(--bs-font-size-sm);
+  font-weight: 600;
+  box-shadow: var(--bs-shadow-sm);
+}
+
+.reviewPanel {
+  display: none;
+  flex-direction: column;
+  gap: var(--bs-space-1);
+  width: 240px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: var(--bs-space-2);
+  border: 1px solid var(--bs-color-border);
+  border-radius: var(--bs-radius-md);
+  background: var(--bs-color-surface);
+  box-shadow: var(--bs-shadow-sm);
+}
+
+.reviewPanelItem {
+  display: block;
+  width: 100%;
+  padding: var(--bs-space-2);
+  border: none;
+  border-radius: var(--bs-radius-sm);
+  background: transparent;
+  color: var(--bs-color-text);
+  font-size: var(--bs-font-size-sm);
+  text-align: left;
+}
+
+.reviewPanelItem:hover {
+  background: var(--bs-color-bg);
+}
+
+.reviewPanelItemVisited {
+  color: var(--bs-color-text-muted);
+  font-weight: 600;
+}
+
+/* Pantalla de felicitación al llegar al 100%. */
+.reviewOverlayBackdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  align-items: center;
+  justify-content: center;
+  padding: var(--bs-space-4);
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 2000;
+}
+
+.reviewPenguin {
+  display: block;
+  width: 100%;
+  max-width: 220px;
+  height: auto;
+  margin: 0 auto;
+}
 `

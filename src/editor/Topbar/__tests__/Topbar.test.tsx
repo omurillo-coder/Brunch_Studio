@@ -16,6 +16,25 @@ import { CICLOS } from '../../../domain'
 const TEST_FILE_PATH = '/tmp/topbar-test.brunch'
 
 /**
+ * "Exportar revisión profes" resuelve la imagen del pingüino de
+ * felicitación con `fetch()` (ver `resolveCompletionPenguinDataUri` en
+ * `src/export/teacherReviewExport.ts`, mismo patrón que
+ * `src/domain/spellingDictionary.ts`). En jsdom no hay ningún servidor real
+ * detrás de la URL que resuelve Vite para el `?url` de la imagen, así que se
+ * mockea `fetch` globalmente para estos tests — nada más de este archivo
+ * depende de `fetch` (los dobles en memoria de assets/escritura no lo usan).
+ */
+vi.stubGlobal(
+  'fetch',
+  vi.fn(async () =>
+    new Response(new Uint8Array([137, 80, 78, 71]).buffer, {
+      status: 200,
+      headers: { 'content-type': 'image/png' },
+    }),
+  ),
+)
+
+/**
  * `Topbar` recibe `filePath` desde fase 1 del Milestone 3 (lo necesita
  * "Exportar HTML" para leer los assets a embeber) y consume `AppServices`
  * para el diálogo de guardado y la escritura del archivo, así que se envuelve
@@ -312,18 +331,13 @@ describe('Topbar — menú "Exportar"', () => {
     expect(screen.queryByRole('menu', { name: 'Exportar' })).not.toBeInTheDocument()
   })
 
-  it('muestra las tres opciones; "Exportar revisión profes" está deshabilitada', () => {
+  it('muestra las tres opciones, todas habilitadas', () => {
     renderTopbar()
     openExportMenu()
 
     expect(screen.getByRole('menuitem', { name: 'Exportar HTML' })).toBeInTheDocument()
     expect(screen.getByRole('menuitem', { name: 'Exportar SCORM' })).toBeInTheDocument()
-
-    const teacherReviewItem = screen.getByRole('menuitem', {
-      name: 'Exportar revisión profes (próximamente)',
-    })
-    expect(teacherReviewItem).toBeDisabled()
-    expect(teacherReviewItem).toHaveAttribute('title', 'Todavía por definir')
+    expect(screen.getByRole('menuitem', { name: 'Exportar revisión profes' })).not.toBeDisabled()
   })
 
   it('se cierra al hacer clic fuera', () => {
@@ -415,6 +429,97 @@ describe('Topbar — Exportar HTML', () => {
     await waitFor(() => {
       expect(screen.getByRole('alert')).toHaveTextContent(
         'No se ha podido exportar la experiencia. Prueba con otra carpeta u otro nombre de archivo.',
+      )
+    })
+    expect(htmlBundleWriter.writtenPaths()).toEqual([])
+  })
+})
+
+describe('Topbar — Exportar revisión profes', () => {
+  beforeEach(() => {
+    seedCompleteIntro()
+  })
+
+  it('pide la ruta, genera el HTML con reviewMode activo y lo escribe', async () => {
+    const htmlBundleWriter = new MemoryHtmlBundleWriter()
+    const pickExportTeacherReviewPath = vi.fn(async () => '/tmp/revision-profes.html')
+    renderTopbar({
+      pickExportTeacherReviewPath,
+      htmlBundleWriter,
+      assetRepository: new MemoryAssetRepository(),
+    })
+
+    openExportMenu()
+    fireEvent.click(screen.getByText('Exportar revisión profes'))
+
+    await waitFor(() => {
+      expect(screen.getByText('Revisión para profes exportada.')).toBeInTheDocument()
+    })
+
+    expect(pickExportTeacherReviewPath).toHaveBeenCalledWith('Untitled')
+    expect(htmlBundleWriter.writtenPaths()).toEqual(['/tmp/revision-profes.html'])
+    const written = htmlBundleWriter.read('/tmp/revision-profes.html')
+    expect(written).toContain('<!doctype html>')
+    expect(written).toContain('"reviewMode":true')
+  })
+
+  it('bloquea con la portada incompleta, sin abrir el selector de guardado', async () => {
+    act(() => {
+      useProjectStore.getState().updateNode(
+        useProjectStore.getState().project.graph.nodes.find((node) => node.type === 'intro')!.id,
+        { caseName: '' },
+      )
+    })
+    const pickExportTeacherReviewPath = vi.fn(async () => '/tmp/revision-profes.html')
+    renderTopbar({
+      pickExportTeacherReviewPath,
+      htmlBundleWriter: new MemoryHtmlBundleWriter(),
+      assetRepository: new MemoryAssetRepository(),
+    })
+
+    openExportMenu()
+    fireEvent.click(screen.getByText('Exportar revisión profes'))
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent('Escribe el nombre del caso práctico')
+    })
+    expect(pickExportTeacherReviewPath).not.toHaveBeenCalled()
+  })
+
+  it('si el usuario cancela el diálogo, no escribe nada ni muestra error', async () => {
+    const htmlBundleWriter = new MemoryHtmlBundleWriter()
+    const pickExportTeacherReviewPath = vi.fn(async () => null)
+    renderTopbar({
+      pickExportTeacherReviewPath,
+      htmlBundleWriter,
+      assetRepository: new MemoryAssetRepository(),
+    })
+
+    openExportMenu()
+    fireEvent.click(screen.getByText('Exportar revisión profes'))
+
+    await waitFor(() => {
+      expect(pickExportTeacherReviewPath).toHaveBeenCalled()
+    })
+    expect(htmlBundleWriter.writtenPaths()).toEqual([])
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('muestra un mensaje honesto y sin jerga si la escritura falla', async () => {
+    const htmlBundleWriter = new MemoryHtmlBundleWriter()
+    htmlBundleWriter.failNextWrite()
+    renderTopbar({
+      pickExportTeacherReviewPath: async () => '/tmp/revision-profes.html',
+      htmlBundleWriter,
+      assetRepository: new MemoryAssetRepository(),
+    })
+
+    openExportMenu()
+    fireEvent.click(screen.getByText('Exportar revisión profes'))
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        'No se ha podido exportar la revisión para profes. Prueba con otra carpeta u otro nombre de archivo.',
       )
     })
     expect(htmlBundleWriter.writtenPaths()).toEqual([])

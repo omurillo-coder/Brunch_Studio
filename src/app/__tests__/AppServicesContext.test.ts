@@ -55,6 +55,22 @@ describe('pickSaveProjectPath (diálogo nativo)', () => {
   })
 })
 
+describe('pickExportTeacherReviewPath (diálogo nativo)', () => {
+  it('propone el nombre saneado + sufijo + extensión .html como defaultPath', async () => {
+    await defaultAppServices.pickExportTeacherReviewPath('Mi: escenario')
+
+    expect(save).toHaveBeenCalledWith(
+      expect.objectContaining({ defaultPath: 'Mi escenario - revisión profes.html' }),
+    )
+  })
+
+  it('sin nombre sugerido, no fija defaultPath', async () => {
+    await defaultAppServices.pickExportTeacherReviewPath()
+
+    expect(save).toHaveBeenCalledWith(expect.objectContaining({ defaultPath: undefined }))
+  })
+})
+
 /**
  * `getInitialOpenPath` (tarea "abrir un `.brunch` desde Finder/Explorador"):
  * consulta al backend Rust (`take_pending_open_path`, ver

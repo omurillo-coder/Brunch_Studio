@@ -7,7 +7,7 @@ import {
   useSelectedNodeIds,
 } from '../../store'
 import type { SaveStatus } from '../../store'
-import { useHtmlExport, useScormExport } from '../../export'
+import { useHtmlExport, useScormExport, useTeacherReviewExport } from '../../export'
 import styles from './Topbar.module.css'
 
 /**
@@ -102,6 +102,7 @@ export function Topbar({
   const selectedNodeIds = useSelectedNodeIds()
   const htmlExport = useHtmlExport(filePath)
   const scormExport = useScormExport(filePath)
+  const teacherReviewExport = useTeacherReviewExport(filePath)
   const [exportMenuOpen, setExportMenuOpen] = useState(false)
   const exportMenuRef = useRef<HTMLDivElement>(null)
 
@@ -227,21 +228,24 @@ export function Topbar({
           </button>
           {exportMenuOpen && (
             <div className={styles.exportMenu} role="menu" aria-label="Exportar">
-              {/* "Exportar revisión profes": su lógica todavía no está
-                  definida (el usuario la explicará más adelante) — se deja
-                  aquí visible pero DESHABILITADA, sin ninguna acción real
-                  detrás. Cuando se defina, el hueco natural es un hook
-                  `useTeacherReviewExport(filePath)` análogo a
-                  `useHtmlExport`/`useScormExport` de arriba, cableado igual
-                  que ellos (estado + mensaje bajo el botón "Exportar"). */}
+              {/* "Exportar revisión profes": HTML autónomo pensado para que
+                  un profesor sin el programa revise TODA la experiencia
+                  ramificada — mismo cableado (estado + mensaje bajo el botón
+                  "Exportar") que "Exportar HTML"/"Exportar SCORM" de abajo,
+                  vía `useTeacherReviewExport(filePath)`. */}
               <button
                 type="button"
                 role="menuitem"
                 className={styles.exportMenuItem}
-                disabled
-                title="Todavía por definir"
+                onClick={() => {
+                  setExportMenuOpen(false)
+                  void teacherReviewExport.exportTeacherReview()
+                }}
+                disabled={teacherReviewExport.status === 'exporting'}
               >
-                Exportar revisión profes (próximamente)
+                {teacherReviewExport.status === 'exporting'
+                  ? 'Exportando…'
+                  : 'Exportar revisión profes'}
               </button>
               <button
                 type="button"
@@ -296,6 +300,18 @@ export function Topbar({
             }
           >
             {scormExport.message}
+          </span>
+        )}
+        {/* Mismo criterio de mensaje honesto y sin jerga que "Exportar
+            HTML"/"Exportar SCORM" de arriba. */}
+        {teacherReviewExport.message && (
+          <span
+            role={teacherReviewExport.status === 'error' ? 'alert' : 'status'}
+            className={
+              teacherReviewExport.status === 'error' ? styles.exportError : styles.exportStatus
+            }
+          >
+            {teacherReviewExport.message}
           </span>
         )}
         {/* "Probar desde aquí": mismo estilo visual que "▶ Probar", pero

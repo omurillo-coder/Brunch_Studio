@@ -21,6 +21,13 @@ const HTML_FILE_FILTERS = [{ name: 'Página web', extensions: ['html'] }]
 /** Filtro del diálogo de guardado de la exportación a paquete SCORM. */
 const SCORM_FILE_FILTERS = [{ name: 'Paquete SCORM', extensions: ['zip'] }]
 
+/** Filtro del diálogo de guardado de la exportación "revisión profes"; mismo
+ *  filtro que `HTML_FILE_FILTERS` (también produce un `index.html`
+ *  autónomo), constante aparte para que el nombre de archivo propuesto
+ *  (`pickExportTeacherReviewPathWithNativeDialog`) pueda distinguirse del
+ *  export HTML normal sin acoplar los dos diálogos. */
+const TEACHER_REVIEW_FILE_FILTERS = [{ name: 'Página web', extensions: ['html'] }]
+
 /** Filtro del diálogo de abrir para importar un archivo Twee (ver `src/import/twee`). */
 const TWEE_FILE_FILTERS = [{ name: 'Archivo Twee', extensions: ['twee', 'tw'] }]
 
@@ -88,6 +95,16 @@ async function pickExportScormPathWithNativeDialog(suggestedName?: string): Prom
   return path ?? null
 }
 
+async function pickExportTeacherReviewPathWithNativeDialog(
+  suggestedName?: string,
+): Promise<string | null> {
+  const defaultPath = suggestedName
+    ? `${sanitizeFileName(suggestedName)} - revisión profes.html`
+    : undefined
+  const path = await save({ filters: TEACHER_REVIEW_FILE_FILTERS, defaultPath })
+  return path ?? null
+}
+
 async function pickImportTweePathWithNativeDialog(): Promise<string | null> {
   const selected = await open({ filters: TWEE_FILE_FILTERS, multiple: false, directory: false })
   return typeof selected === 'string' ? selected : null
@@ -146,6 +163,7 @@ export const defaultAppServices: AppServices = {
   pickImportAssetPath: pickImportAssetPathWithNativeDialog,
   pickExportHtmlPath: pickExportHtmlPathWithNativeDialog,
   pickExportScormPath: pickExportScormPathWithNativeDialog,
+  pickExportTeacherReviewPath: pickExportTeacherReviewPathWithNativeDialog,
   assetRepository: new TauriAssetRepository(),
   htmlBundleWriter: new TauriHtmlBundleWriter(),
   scormPackageWriter: new TauriScormPackageWriter(),
