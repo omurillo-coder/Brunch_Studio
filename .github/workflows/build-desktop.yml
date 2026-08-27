@@ -1,0 +1,59 @@
+name: Build de escritorio (Windows + macOS)
+
+# Compila Brunch Studio en runners reales de Windows y macOS (necesario:
+# WebView2 en Windows, y el stack nativo de Tauri para macOS, no se pueden
+# compilar de forma fiable cruzando desde otro sistema operativo). Se
+# dispara manualmente (botón "Run workflow" en la pestaña Actions de
+# GitHub) o en cada push a `main` — un solo push genera los dos
+# instaladores a la vez, cada uno como su propio artefacto descargable.
+#
+# El runner `macos-latest` de GitHub Actions es Apple Silicon (arm64): el
+# `.dmg` resultante es para Mac con chip Apple (M1 en adelante), igual que
+# los que se venían generando a mano en local. No se genera build para
+# Intel — si hiciera falta, se añadiría un `target: universal-apple-darwin`
+# a `tauri-apps/tauri-action` en el job de macOS.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-latest
+            artifact-name: brunch-studio-windows
+            artifact-paths: |
+              src-tauri/target/release/bundle/msi/*.msi
+              src-tauri/target/release/bundle/nsis/*.exe
+          - platform: macos-latest
+            artifact-name: brunch-studio-macos
+            artifact-paths: |
+              src-tauri/target/release/bundle/dmg/*.dmg
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - name: Checkout del repositorio
+        uses: actions/checkout@v4
+
+      - name: Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Instalar dependencias del frontend
+        run: npm ci
+
+      - name: Compilar el instalador
+        uses: tauri-apps/tauri-action@v0
+
+      - name: Subir el instalador como artefacto descargable
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact-name }}
+          path: ${{ matrix.artifact-paths }}
+          if-no-files-found: error
