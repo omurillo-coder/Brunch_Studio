@@ -18,13 +18,25 @@ beforeEach(() => {
 })
 
 describe('shortNodeLabel', () => {
-  it('devuelve "D" + el número, para varios números', () => {
-    expect(shortNodeLabel({ number: 1 })).toBe('D1')
-    expect(shortNodeLabel({ number: 35 })).toBe('D35')
-    expect(shortNodeLabel({ number: 100 })).toBe('D100')
+  it('devuelve "D" + el número, para varios números, cuando el tipo no es `intro`', () => {
+    expect(shortNodeLabel({ number: 1, type: 'slide' })).toBe('D1')
+    expect(shortNodeLabel({ number: 35, type: 'final' })).toBe('D35')
+    expect(shortNodeLabel({ number: 100, type: 'slide' })).toBe('D100')
+    // Sin tipo (llamada "pelada", compatibilidad con el uso histórico de
+    // esta función): se trata igual que no-`intro`.
+    expect(shortNodeLabel({ number: 7 })).toBe('D7')
   })
 
-  it('funciona igual para los tres tipos de nodo (intro/slide/final): solo depende de `number`', () => {
+  it('milestone "Inicio siempre es D1": devuelve "INICIO" para un nodo `intro`, sea cual sea su `number`', () => {
+    // El propio dominio ya garantiza que un `intro` siempre nace con
+    // `number: 1` (ver `src/domain/project.ts`/`migration.ts`), pero
+    // `shortNodeLabel` no debe depender de eso: comprobado explícitamente
+    // con un `number` distinto de 1 para no acoplar ambas garantías.
+    expect(shortNodeLabel({ number: 1, type: 'intro' })).toBe('INICIO')
+    expect(shortNodeLabel({ number: 7, type: 'intro' })).toBe('INICIO')
+  })
+
+  it('funciona igual para `slide`/`final`: "D" + `number`; distinto para `intro`: siempre "INICIO"', () => {
     useProjectStore.getState().createNode('intro', { x: -260, y: 0 })
     useProjectStore.getState().createNode('final', { x: 200, y: 0 }, { title: 'Final' })
     const nodes = useProjectStore.getState().project.graph.nodes
@@ -33,7 +45,7 @@ describe('shortNodeLabel', () => {
     const final = nodes.find((n) => n.type === 'final')
     if (!intro || !slide || !final) throw new Error('setup inválido')
 
-    expect(shortNodeLabel(intro)).toBe(`D${intro.number}`)
+    expect(shortNodeLabel(intro)).toBe('INICIO')
     expect(shortNodeLabel(slide)).toBe(`D${slide.number}`)
     expect(shortNodeLabel(final)).toBe(`D${final.number}`)
   })

@@ -16,6 +16,18 @@
   font-size: var(--bs-font-size-sm);
   color: var(--bs-color-text);
   transition: opacity 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+  /* Tarea "Contraste de texto" (bug real, ver comentario más abajo junto a
+     `.cardFinal, .cardIntro, .cardSlideYellow, ...`): valor por defecto de
+     los tonos secundarios usados por `.bodyPreview`/`.responseText`/
+     `.startMark`, que sobre el fondo NEUTRO de esta tarjeta (sin ninguna
+     clase de color) siguen siendo los muted/faint/accent de siempre. Las
+     nueve tarjetas con fondo de color propio REDEFINEN estas tres variables
+     más abajo para que ese mismo texto secundario use
+     `--bs-color-card-text` en vez de quedarse con un tono fijo pensado solo
+     para este fondo neutro. */
+  --bs-card-text-muted: var(--bs-color-text-muted);
+  --bs-card-text-faint: var(--bs-color-text-faint);
+  --bs-card-text-accent: var(--bs-color-accent);
 }
 
 /* `@xyflow/react` añade `.selected` al wrapper del nodo; nuestro estilo de
@@ -136,23 +148,46 @@
   background: var(--bs-color-slide-red-bg);
 }
 
-/* Tarea "Contraste de texto": color del texto principal de la tarjeta
-   (`.title`, que no fija su propio `color` y por tanto hereda el de aquí —
-   `.type`/`.number`/`.startMark`/`.bodyPreview`/`.responseText` sí fijan el
-   suyo propio con los tokens muted/faint/accent habituales y quedan fuera de
-   este ajuste). En CLARO, `--bs-color-card-text` es el mismo
-   `--bs-color-text` casi negro de siempre (comprobado: negro da mejor
-   contraste que blanco en las 9 combinaciones de fondo claro, 7.55:1–15.12:1
-   — ver tabla en el informe de esta tarea), así que estas nueve tarjetas ya
-   estaban bien con el texto por defecto y no cambian visualmente en claro.
-   En OSCURO (ver el bloque `@media (prefers-color-scheme: dark)` de
-   `tokens.css`) el token pasa a blanco puro: comprobado que blanco da mejor
-   contraste que negro en las 9 combinaciones de fondo oscuro (9.28:1–15.47:1
-   con blanco, frente a 1.11:1–1.85:1 con negro) — y también algo mejor que
-   el `--bs-color-text` oscuro por defecto (#ededef, ya AAA de sobra en las
-   nueve, pero un poco por debajo de blanco puro en todas). De ahí esta regla
-   específica en vez de depender siempre de `--bs-color-text` global, tal
-   como pide la tarea. */
+/* Tarea "Contraste de texto" — BUG REAL reportado por el usuario ("no se lee
+   el texto al colorear una diapositiva"), diagnosticado y arreglado de
+   verdad en esta pasada (la anterior solo calculó el contraste WCAG sobre
+   papel para `.title` y lo dio por bueno sin comprobación visual; no lo
+   estaba: ver los demás elementos de texto de la tarjeta más abajo).
+
+   `color: var(--bs-color-card-text)` aquí fija el texto PRINCIPAL de la
+   tarjeta (`.title`, que no fija su propio `color` y por tanto hereda el de
+   aquí). En CLARO, `--bs-color-card-text` es el mismo `--bs-color-text` casi
+   negro de siempre (comprobado: negro da mejor contraste que blanco en las 9
+   combinaciones de fondo claro, 7.55:1–15.12:1 — ver tabla en `tokens.css`),
+   así que estas nueve tarjetas ya estaban bien con el texto por defecto y no
+   cambian visualmente en claro. En OSCURO (ver el bloque `@media
+   (prefers-color-scheme: dark)` de `tokens.css`) el token pasa a blanco
+   puro: comprobado que blanco da mejor contraste que negro en las 9
+   combinaciones de fondo oscuro (9.28:1–15.47:1 con blanco, frente a
+   1.11:1–1.85:1 con negro).
+
+   Lo que la pasada anterior NO cubrió (el bug real): `.type` (badge
+   "D{número}"), `.bodyPreview` (vista previa de contenido) y
+   `.responseText`/`.startMark` NO heredan `color` — cada uno fija el SUYO
+   PROPIO con un tono muted/faint/accent fijo, pensado solo para el fondo
+   neutro por defecto de la tarjeta (`--bs-color-surface`). `.type` tiene su
+   propio fondo opaco (`--bs-color-bg`, ver su regla más abajo) así que no
+   sufre el problema — se lee sobre SU chip, no sobre el color de la
+   diapositiva. Pero `.bodyPreview` y `.responseText` se pintan DIRECTAMENTE
+   sobre el fondo de color de la tarjeta, sin ningún fondo propio, y
+   `--bs-color-text-faint`/`--bs-color-text-muted` no dan contraste
+   suficiente sobre varios de estos fondos saturados (comprobado visualmente
+   con capturas de pantalla en claro y oscuro sobre los 9 fondos — ver
+   informe de esta tarea) — ahí es donde de verdad "no se leía el texto".
+
+   Arreglo: en vez de repetir estas 9 clases para cada elemento afectado, se
+   REDEFINEN aquí las tres variables `--bs-card-text-*` (declaradas con su
+   valor neutro en `.card` de arriba) a `--bs-color-card-text` — mismo tono
+   ya comprobado con AAA para `.title`. `.bodyPreview`/`.responseText`/
+   `.startMark` las consultan en vez de los tokens fijos (ver sus reglas más
+   abajo), así que heredan automáticamente el contraste correcto en las 9
+   tarjetas, sin tocar el fondo NEUTRO (que sigue usando su tono muted/faint
+   de siempre, ya con contraste de sobra sobre blanco/gris oscuro). */
 .cardFinal,
 .cardIntro,
 .cardSlideYellow,
@@ -163,6 +198,9 @@
 .cardSlideGray,
 .cardSlideRed {
   color: var(--bs-color-card-text);
+  --bs-card-text-muted: var(--bs-color-card-text);
+  --bs-card-text-faint: var(--bs-color-card-text);
+  --bs-card-text-accent: var(--bs-color-card-text);
 }
 
 /* Insignia de aviso (punto 1): un indicador pequeño y barato, no un icono
@@ -204,15 +242,52 @@
   padding: 1px 6px;
 }
 
+/* Cabecera EXCLUSIVA del nodo `intro` (milestone "Inicio siempre es D1",
+   `IntroHeader` en `nodeTypes.tsx`) — sustituye a `.header` para este tipo,
+   nunca conviven en la misma tarjeta. Centrada (a diferencia de `.header`,
+   alineada a la izquierda): sin título que empujar hacia la izquierda, el
+   único contenido es "INICIO" (+ el pin de nota interna si lo hay), así que
+   centrarlo se lee mejor que dejarlo pegado a un borde. */
+.introHeader {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--bs-space-2);
+  padding: var(--bs-space-3);
+  border-bottom: 1px solid var(--bs-color-border);
+}
+
+/* "INICIO" (`shortNodeLabel` para un `intro`, nunca "D1"): GRANDE y
+   prominente a propósito — es el único dato que necesita esta tarjeta para
+   identificarse de un vistazo (junto al resumen de ciclo/asignatura/caso de
+   `.bodyPreview`), así que debe leerse claramente más grande que cualquier
+   otro texto de la tarjeta, incluido `.title` (que ni siquiera se pinta
+   aquí, ver `IntroHeader`). Sin `color` propio: hereda el de la tarjeta
+   (`--bs-color-card-text` vía `.cardIntro`, mismo criterio que `.title`),
+   así que siempre tiene el contraste correcto en claro y en oscuro. */
+.introLabel {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  line-height: 1;
+}
+
 /* Marca discreta de "esta es la diapositiva de inicio". Deliberadamente
    sobria (texto pequeño con el color de acento, sin badge grande de color
-   sólido) para no competir visualmente con el título del nodo. */
+   sólido) para no competir visualmente con el título del nodo.
+   `--bs-card-text-accent` (ver `.card`/`.cardFinal, .cardIntro, ...` arriba):
+   turquesa de acento de siempre sobre el fondo neutro, pero
+   `--bs-color-card-text` sobre cualquiera de las 9 tarjetas con fondo de
+   color propio — este elemento SÍ puede aparecer sobre una `slide`
+   coloreada que sea `startNodeId` (documento sin `intro` todavía), y el
+   turquesa fijo no siempre contrasta lo suficiente ahí (bug real, ver
+   comentario de esa regla). */
 .startMark {
   flex: 0 0 auto;
   font-size: var(--bs-font-size-xs);
   font-weight: 600;
   letter-spacing: 0.02em;
-  color: var(--bs-color-accent);
+  color: var(--bs-card-text-accent);
 }
 
 /* Tarea "Orden de la tarjeta": pintado PRIMERO en el DOM (ver `Header` en
@@ -242,12 +317,18 @@
 
 /* Fragmento corto de contenido (tarea 8), más discreto que el título:
    tamaño menor y color apagado. Truncado a 2 líneas con elipsis para que un
-   fragmento largo nunca rompa el ancho compacto de la tarjeta. */
+   fragmento largo nunca rompa el ancho compacto de la tarjeta.
+   `--bs-card-text-faint` (ver `.card`/`.cardFinal, .cardIntro, ...` arriba):
+   el mismo faint apagado de siempre sobre el fondo neutro, pero
+   `--bs-color-card-text` sobre cualquiera de las 9 tarjetas con fondo de
+   color propio — ESTE era el elemento realmente ilegible del bug reportado
+   por el usuario (se pinta directamente sobre el color de la tarjeta, sin
+   ningún fondo propio, a diferencia de `.type`). */
 .bodyPreview {
   padding: 0 var(--bs-space-3) var(--bs-space-2);
   font-size: 10.5px;
   line-height: 1.35;
-  color: var(--bs-color-text-faint);
+  color: var(--bs-card-text-faint);
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -274,22 +355,29 @@
 
 /* Punto de viñeta de una respuesta. Sustituye al antiguo círculo con la
    letra (A/B/C/D): las letras siguen existiendo en el dominio como criterio
-   de orden, pero nunca se muestran al usuario. */
+   de orden, pero nunca se muestran al usuario. Mismo criterio de variable
+   que `.responseText` justo abajo — consistencia visual entre el punto y el
+   texto que acompaña. */
 .responseBullet {
   flex: 0 0 auto;
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: var(--bs-color-text-faint);
+  background: var(--bs-card-text-faint);
 }
 
+/* `--bs-card-text-muted` (ver `.card`/`.cardFinal, .cardIntro, ...` arriba):
+   el mismo muted de siempre sobre el fondo neutro, pero
+   `--bs-color-card-text` sobre cualquiera de las 9 tarjetas con fondo de
+   color propio — se pinta directamente sobre ese fondo (sin uno propio como
+   `.type`), mismo bug real que `.bodyPreview`. */
 .responseText {
   flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-  color: var(--bs-color-text-muted);
+  color: var(--bs-card-text-muted);
 }
 
 /* Handles: puntos discretos con el color de acento, en vez del estilo por

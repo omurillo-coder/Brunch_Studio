@@ -65,9 +65,13 @@ describe('LeftPanel', () => {
     fireEvent.click(screen.getByText('+ Inicio'))
 
     expect(useProjectStore.getState().project.graph.nodes.length).toBe(before + 1)
-    const created = lastNode()
-    expect(created.type).toBe('intro')
-    expect(useProjectStore.getState().selection.selectedNodeIds).toEqual([created.id])
+    // No se puede usar `lastNode()` aquí: el Inicio siempre se crea con
+    // `number: 1` (el más BAJO, no el más alto), así que se busca
+    // explícitamente por tipo en vez de por "número más alto".
+    const created = useProjectStore.getState().project.graph.nodes.find((node) => node.type === 'intro')
+    expect(created).toBeDefined()
+    expect(created?.type).toBe('intro')
+    expect(useProjectStore.getState().selection.selectedNodeIds).toEqual([created?.id])
   })
 
   it('"+ Inicio" se deshabilita en cuanto el proyecto ya tiene una diapositiva de Inicio', () => {
@@ -300,7 +304,10 @@ describe('LeftPanel — buscador del proyecto (fase 8)', () => {
     act(() => {
       useProjectStore.getState().createNode('intro', { x: 0, y: 0 })
     })
-    const intro = lastNode()
+    // No se puede usar `lastNode()`: el Inicio siempre se crea con
+    // `number: 1` (el más bajo), así que se busca explícitamente por tipo.
+    const intro = useProjectStore.getState().project.graph.nodes.find((node) => node.type === 'intro')
+    if (!intro) throw new Error('No se ha creado el nodo intro')
     act(() => {
       useProjectStore.getState().updateNode(intro.id, { caseName: 'Simulación de urgencias' })
       useProjectStore.getState().createNode('slide', { x: 0, y: 0 }, { title: 'Sin relación' })
@@ -326,7 +333,10 @@ describe('LeftPanel — buscador del proyecto (fase 8)', () => {
     act(() => {
       useProjectStore.getState().createNode('intro', { x: 0, y: 0 })
     })
-    const intro = lastNode()
+    // No se puede usar `lastNode()`: el Inicio siempre se crea con
+    // `number: 1` (el más bajo), así que se busca explícitamente por tipo.
+    const intro = useProjectStore.getState().project.graph.nodes.find((node) => node.type === 'intro')
+    if (!intro) throw new Error('No se ha creado el nodo intro')
     act(() => {
       useProjectStore.getState().updateNode(intro.id, {
         cicloId: ciclo.id,
@@ -349,27 +359,37 @@ describe('LeftPanel — buscador del proyecto (fase 8)', () => {
   })
 })
 
-describe('LeftPanel — arrastrar-y-soltar la lista de diapositivas (único mecanismo de reordenar)', () => {
+describe('LeftPanel — arrastrar-y-soltar la lista de diapositivas (único mecanismo de reordenar, Pointer Events)', () => {
+  // Este mecanismo sustituye una primera versión basada en arrastre NATIVO
+  // de HTML5 (`draggable`/`ondrag*`) que resultó no funcionar en absoluto en
+  // la app de escritorio empaquetada de verdad (Tauri/WKWebView en macOS) —
+  // ver el comentario extenso sobre `draggedNodeId` en `LeftPanel.tsx` para
+  // el diagnóstico completo. Ahora usa Pointer Events
+  // (`onPointerDown`/`onPointerMove`/`onPointerUp`), que jsdom SÍ implementa
+  // como clase nativa (`PointerEvent`, a diferencia de `DragEvent`, que
+  // jsdom no soporta en absoluto — de ahí que el test anterior de este
+  // archivo necesitara construir eventos a mano con `Object.defineProperty`).
+  // Gracias a eso, `fireEvent.pointerDown/Move/Up` de Testing Library
+  // funciona aquí sin ningún truco: `@testing-library/dom` mapea esos tres
+  // nombres a `PointerEvent` (ver `event-map.js`) y jsdom respeta
+  // `pointerId`/`clientX`/`clientY`/`isPrimary`/`button` en el constructor.
+  //
+  // Lo único que jsdom NO implementa es `Element.prototype.setPointerCapture`/
+  // `releasePointerCapture` (ninguno de los dos métodos existe, solo la
+  // clase `PointerEvent` en sí) — por eso `LeftPanel.tsx` los invoca con `?.`
+  // (encadenamiento opcional): en producción capturan el puntero de verdad,
+  // aquí son un no-op silencioso. No hace falta simular la captura para
+  // verificar la lógica de reordenar: estos tests despachan cada evento
+  // directamente sobre el elemento que la captura real mantendría como
+  // destino, así que el resultado observable es el mismo con o sin captura
+  // real.
+
   function searchInput(): HTMLElement {
     return screen.getByLabelText('Buscar en el proyecto')
   }
 
   function nodeIds(): string[] {
     return useProjectStore.getState().project.graph.nodes.map((n) => n.id)
-  }
-
-  /** `DataTransfer` mínimo (jsdom no lo implementa): basta con lo que usa
-   *  `LeftPanel.tsx` (`setData`/`getData`/`effectAllowed`/`dropEffect`). */
-  function makeDataTransfer() {
-    const store: Record<string, string> = {}
-    return {
-      effectAllowed: '',
-      dropEffect: '',
-      setData: (format: string, value: string) => {
-        store[format] = value
-      },
-      getData: (format: string) => store[format] ?? '',
-    }
   }
 
   /** Fila (`<li>`) de la lista del nodo dado, localizada por su código corto
@@ -384,7 +404,8 @@ describe('LeftPanel — arrastrar-y-soltar la lista de diapositivas (único meca
    *  en jsdom, sin layout real, el rectángulo por defecto (`src/test/setup.ts`)
    *  es el mismo tamaño fijo para TODOS los elementos, lo que no permite
    *  distinguir la mitad superior de la inferior de una fila concreta al
-   *  calcular `before`/`after` en `handleDragOver`. */
+   *  calcular `before`/`after`, ni distinguir una fila de otra en el "hit
+   *  test" manual de `findDropTargetAt`. */
   function stubRect(row: HTMLElement, top: number, height: number) {
     row.getBoundingClientRect = () =>
       ({
@@ -402,37 +423,27 @@ describe('LeftPanel — arrastrar-y-soltar la lista de diapositivas (único meca
       }) as DOMRect
   }
 
-  /**
-   * Despacha un evento de arrastre nativo directamente (`dispatchEvent`, en
-   * vez de `fireEvent.drag*` de Testing Library): jsdom NO implementa la
-   * clase `DragEvent` (solo `Event`/`MouseEvent`), así que
-   * `@testing-library/dom` cae a un `Event` genérico para estos tipos —
-   * que sí admite `dataTransfer` (tiene un caso especial, ver
-   * `node_modules/@testing-library/dom/dist/events.js`), pero DESCARTA
-   * silenciosamente `clientY` (no es una propiedad reconocida del
-   * constructor `Event`, y Testing Library no la reenvía "a mano" para
-   * estos eventos). Sin `clientY` de verdad, `handleDragOver` no podría
-   * distinguir nunca "soltar antes" de "soltar después". Aquí se define
-   * `clientY`/`dataTransfer` directamente sobre el evento con
-   * `Object.defineProperty` (permitido porque `Event`/`MouseEvent` los
-   * declaran como propiedades normales del prototipo, sobreescribibles por
-   * instancia) y se despacha envuelto en `act` (que Testing Library aplica
-   * automáticamente dentro de `fireEvent`, pero no al llamar
-   * `dispatchEvent` directamente).
-   */
-  function dispatchDrag(
-    type: 'dragstart' | 'dragover' | 'drop' | 'dragend',
-    target: HTMLElement,
-    options: { dataTransfer: ReturnType<typeof makeDataTransfer>; clientY?: number },
-  ) {
-    const event = new Event(type, { bubbles: true, cancelable: true })
-    Object.defineProperty(event, 'dataTransfer', { value: options.dataTransfer, configurable: true })
-    if (options.clientY !== undefined) {
-      Object.defineProperty(event, 'clientY', { value: options.clientY, configurable: true })
+  /** Da a CADA fila de la lista (en su orden real actual) un rectángulo
+   *  distinto y contiguo, como en un listado vertical de verdad — necesario
+   *  porque `findDropTargetAt` (a diferencia del antiguo `handleDragOver`,
+   *  que confiaba en el "hit testing" nativo del navegador) compara la
+   *  coordenada Y contra el rectángulo de TODAS las filas, no solo el de la
+   *  fila destino; sin rectángulos distintos para cada una, todas
+   *  compartirían el mismo rectángulo por defecto y la primera de la lista
+   *  "ganaría" siempre el hit test. */
+  function stubAllRowRects(rowHeight = 40) {
+    for (const [index, node] of useProjectStore.getState().project.graph.nodes.entries()) {
+      stubRect(rowFor(node), index * rowHeight, rowHeight)
     }
-    act(() => {
-      target.dispatchEvent(event)
-    })
+  }
+
+  /** Opciones comunes de un evento de puntero de ratón simulado: un único
+   *  `pointerId` para todo el gesto (imprescindible, `handlePointerMove`/
+   *  `handlePointerUp` ignoran cualquier evento cuyo `pointerId` no
+   *  coincida con el que inició el arrastre), botón principal, puntero
+   *  "primario" (no un gesto multi-táctil). */
+  function pointerOpts(clientX: number, clientY: number) {
+    return { pointerId: 1, isPrimary: true, button: 0, clientX, clientY }
   }
 
   it('arrastrar el primer nodo y soltarlo DESPUÉS de un nodo no adyacente lo reordena a esa posición (reorderNode con el índice esperado)', () => {
@@ -445,20 +456,22 @@ describe('LeftPanel — arrastrar-y-soltar la lista de diapositivas (único meca
     const [inicioId, segundaId, terceraId] = nodeIds()
     if (!inicioId || !segundaId || !terceraId) throw new Error('setup inválido')
     const inicio = useProjectStore.getState().project.graph.nodes[0]
-    const tercera = useProjectStore.getState().project.graph.nodes[2]
-    if (!inicio || !tercera) throw new Error('setup inválido')
+    if (!inicio) throw new Error('setup inválido')
 
-    const dataTransfer = makeDataTransfer()
+    // Rectángulos de 40px cada una: Inicio [0,40), Segunda [40,80), Tercera
+    // [80,120).
+    stubAllRowRects()
     const draggedRow = rowFor(inicio)
-    const targetRow = rowFor(tercera)
-    stubRect(targetRow, 100, 40)
 
-    dispatchDrag('dragstart', draggedRow, { dataTransfer })
-    // clientY=135 cae en la mitad INFERIOR del rectángulo simulado
-    // (top:100, height:40 → mitad en 120) → "after" — soltar DESPUÉS de
-    // "Tercera", no adyacente al origen ("Inicio" estaba en el índice 0).
-    dispatchDrag('dragover', targetRow, { dataTransfer, clientY: 135 })
-    dispatchDrag('drop', targetRow, { dataTransfer })
+    fireEvent.pointerDown(draggedRow, pointerOpts(0, 10))
+    // clientY=110 cae en la mitad INFERIOR del rectángulo de "Tercera"
+    // (top:80, height:40 → mitad en 100) → "after" — soltar DESPUÉS de
+    // "Tercera", no adyacente al origen ("Inicio" estaba en el índice 0). El
+    // desplazamiento vertical (100px) supera de sobra el umbral de
+    // activación (5px), así que este único `pointermove` ya confirma el
+    // arrastre y calcula el destino en el mismo evento.
+    fireEvent.pointerMove(draggedRow, pointerOpts(0, 110))
+    fireEvent.pointerUp(draggedRow, pointerOpts(0, 110))
 
     // "Inicio" pasa a ir justo después de "Tercera": [Segunda, Tercera,
     // Inicio] — no es un simple intercambio con el vecino, confirma que
@@ -474,20 +487,19 @@ describe('LeftPanel — arrastrar-y-soltar la lista de diapositivas (único meca
     })
     const [inicioId, segundaId, terceraId] = nodeIds()
     if (!inicioId || !segundaId || !terceraId) throw new Error('setup inválido')
-    const inicio = useProjectStore.getState().project.graph.nodes[0]
     const tercera = useProjectStore.getState().project.graph.nodes[2]
-    if (!inicio || !tercera) throw new Error('setup inválido')
+    if (!tercera) throw new Error('setup inválido')
 
-    const dataTransfer = makeDataTransfer()
+    // Mismos rectángulos que en el test anterior: Inicio [0,40), Segunda
+    // [40,80), Tercera [80,120).
+    stubAllRowRects()
     const draggedRow = rowFor(tercera)
-    const targetRow = rowFor(inicio)
-    stubRect(targetRow, 100, 40)
 
-    dispatchDrag('dragstart', draggedRow, { dataTransfer })
-    // clientY=105 cae en la mitad SUPERIOR del rectángulo simulado
-    // (top:100, height:40 → mitad en 120) → "before".
-    dispatchDrag('dragover', targetRow, { dataTransfer, clientY: 105 })
-    dispatchDrag('drop', targetRow, { dataTransfer })
+    fireEvent.pointerDown(draggedRow, pointerOpts(0, 100))
+    // clientY=10 cae en la mitad SUPERIOR del rectángulo de "Inicio"
+    // (top:0, height:40 → mitad en 20) → "before".
+    fireEvent.pointerMove(draggedRow, pointerOpts(0, 10))
+    fireEvent.pointerUp(draggedRow, pointerOpts(0, 10))
 
     // "Tercera" pasa a ir justo antes de "Inicio": [Tercera, Inicio,
     // Segunda].
@@ -502,15 +514,47 @@ describe('LeftPanel — arrastrar-y-soltar la lista de diapositivas (único meca
     const inicio = useProjectStore.getState().project.graph.nodes[0]
     if (!inicio) throw new Error('setup inválido')
 
-    const dataTransfer = makeDataTransfer()
     const row = rowFor(inicio)
     expect(row.className).not.toMatch(/nodeRowDragging/)
 
-    dispatchDrag('dragstart', row, { dataTransfer })
+    fireEvent.pointerDown(row, pointerOpts(0, 0))
+    // Desplazamiento (20px) por encima del umbral de activación (5px): ya
+    // es un arrastre de verdad.
+    fireEvent.pointerMove(row, pointerOpts(0, 20))
     expect(row.className).toMatch(/nodeRowDragging/)
 
-    dispatchDrag('dragend', row, { dataTransfer })
+    // `pointercancel` (en vez de soltar sobre un destino): mismo criterio
+    // que el antiguo test con `dragend`, solo interesa que la pista visual
+    // desaparezca al terminar el gesto, sin comprobar aquí ningún
+    // reordenamiento.
+    fireEvent.pointerCancel(row, { pointerId: 1 })
     expect(row.className).not.toMatch(/nodeRowDragging/)
+  })
+
+  it('un pointerdown+pointerup sin superar el umbral de movimiento NO reordena y deja que el clic normal siga funcionando', () => {
+    render(<LeftPanel />)
+    act(() => {
+      useProjectStore.getState().createNode('slide', { x: 0, y: 0 }, { title: 'Segunda' })
+    })
+    const before = nodeIds()
+    const inicio = useProjectStore.getState().project.graph.nodes[0]
+    if (!inicio) throw new Error('setup inválido')
+
+    const row = rowFor(inicio)
+    fireEvent.pointerDown(row, pointerOpts(0, 0))
+    // Movimiento de 1px en cada eje (~1.4px de distancia): por debajo del
+    // umbral de activación (5px), no debería considerarse un arrastre.
+    fireEvent.pointerMove(row, pointerOpts(1, 1))
+    expect(row.className).not.toMatch(/nodeRowDragging/)
+    fireEvent.pointerUp(row, pointerOpts(1, 1))
+
+    expect(nodeIds()).toEqual(before)
+    expect(row.className).not.toMatch(/nodeRowDragging/)
+
+    // El clic normal de la fila (selección) sigue funcionando después de
+    // este gesto sin arrastre real.
+    fireEvent.click(screen.getByText(shortNodeLabel(inicio)))
+    expect(useProjectStore.getState().selection.selectedNodeIds).toEqual([inicio.id])
   })
 
   it('con texto de búsqueda activo, el arrastre está deshabilitado y no reordena', () => {
@@ -538,14 +582,15 @@ describe('LeftPanel — arrastrar-y-soltar la lista de diapositivas (único meca
 
     const draggedRow = rowFor(inicio)
     const targetRow = rowFor(tercera)
-    expect(draggedRow).toHaveAttribute('draggable', 'false')
-    expect(targetRow).toHaveAttribute('draggable', 'false')
+    expect(draggedRow).toHaveAttribute('data-draggable', 'false')
+    expect(targetRow).toHaveAttribute('data-draggable', 'false')
 
-    const dataTransfer = makeDataTransfer()
-    dispatchDrag('dragstart', draggedRow, { dataTransfer })
-    dispatchDrag('dragover', targetRow, { dataTransfer })
-    dispatchDrag('drop', targetRow, { dataTransfer })
+    stubAllRowRects()
+    fireEvent.pointerDown(draggedRow, pointerOpts(0, 0))
+    fireEvent.pointerMove(draggedRow, pointerOpts(0, 200))
+    fireEvent.pointerUp(draggedRow, pointerOpts(0, 200))
 
     expect(nodeIds()).toEqual(before)
+    expect(draggedRow.className).not.toMatch(/nodeRowDragging/)
   })
 })

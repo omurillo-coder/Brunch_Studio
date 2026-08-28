@@ -2223,7 +2223,12 @@ function NodeFields({
   // Extraído a una variable (en vez de repetir el JSX) porque Tarea 4 lo
   // sitúa en dos posiciones distintas del árbol según el tipo de nodo (ver
   // más abajo): dentro del grupo "sobre esta diapositiva en sí" para una
-  // `slide`, en su posición de siempre para `final`/`intro`.
+  // `slide`, en su posición de siempre para `final`. Milestone "Inicio
+  // siempre es D1": NUNCA se renderiza para un `intro` (ver más abajo) — el
+  // Inicio no necesita esta referencia interna, su identidad ya es clara por
+  // sí misma (ciclo/asignatura/caso + ser el único punto de partida del
+  // proyecto). Antes de este milestone se mostraba también para `intro`
+  // como "una nota interna más"; ya no.
   const referenceField = (
     <div>
       <label className={styles.label} htmlFor="inspector-node-title">
@@ -2268,7 +2273,14 @@ function NodeFields({
         </div>
       ) : (
         <>
-          {referenceField}
+          {/* Milestone "Inicio siempre es D1": "Ref. oculta" ya NO se
+              muestra para un `intro` — decisión deliberada (antes se
+              consideraba "solo una nota interna más" y se dejaba visible
+              también ahí, ver historial de este comentario): el Inicio no
+              necesita esa referencia interna, su identidad ya es clara por
+              sí misma (ciclo/asignatura/caso + ser el único punto de partida
+              del proyecto). Sigue exactamente igual para `final`. */}
+          {node.type !== 'intro' && referenceField}
           {node.type === 'final' && (
             <>
               <FinalVariantSection node={node} />
@@ -2286,13 +2298,7 @@ function NodeFields({
           )}
           {/* Diapositiva de Inicio (Tarea 2, milestone "Diapositiva de
               Inicio"): ciclo/asignatura/nombre de caso/destino, ver
-              `IntroSection`. La "Ref. oculta" (campo `title`) de arriba se
-              deja visible también para un `intro` — decisión deliberada, no
-              un olvido: es solo una nota interna más (nunca se exporta como
-              tal, ver su comentario más arriba) y mantenerla consistente en
-              los tres tipos de nodo no aporta confusión ni complejidad,
-              mientras que ocultarla sería una excepción sin beneficio
-              claro. */}
+              `IntroSection`. */}
           {node.type === 'intro' && <IntroSection node={node} allNodes={allNodes} />}
           <InternalNoteField node={node} />
         </>

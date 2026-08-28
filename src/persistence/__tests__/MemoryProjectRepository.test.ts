@@ -21,9 +21,14 @@ describe('MemoryProjectRepository', () => {
     expect(intro).toBeDefined()
     expect(reopened.graph.startNodeId).toBe(intro?.id)
     expect(intro?.type === 'intro' ? intro.targetNodeId : undefined).toBe(document.graph.startNodeId)
-    expect(
-      reopened.graph.nodes.find((node) => node.id === document.graph.startNodeId),
-    ).toEqual(document.graph.nodes.find((node) => node.id === document.graph.startNodeId))
+    expect(intro?.number).toBe(1)
+    // El Inicio sintetizado siempre ocupa el número 1 (ver
+    // `ensureIntroNode`/`shiftNodeNumbersForNewIntro`), así que el resto de
+    // nodos del documento original desplaza su `number` una unidad hacia
+    // arriba — el resto de campos se conserva igual.
+    const originalNode = document.graph.nodes.find((node) => node.id === document.graph.startNodeId)
+    const migratedNode = reopened.graph.nodes.find((node) => node.id === document.graph.startNodeId)
+    expect(migratedNode).toEqual({ ...originalNode, number: (originalNode?.number ?? 0) + 1 })
   })
 
   it('guardar sobrescribe el documento y abrir devuelve la versión nueva', async () => {

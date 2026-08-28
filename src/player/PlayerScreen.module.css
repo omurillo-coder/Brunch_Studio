@@ -152,16 +152,55 @@
   color: var(--bs-color-text);
 }
 
+/* Espacio EXTRA (además del `gap` normal entre opciones que hereda de aquí
+   abajo, `.options`) antes de la primera respuesta: separa visualmente el
+   bloque de CONTENIDO de la diapositiva (texto/imagen/audio/vídeo, pintado
+   por `SlideContent` justo antes de este `<div>` en `PlayerScreen.tsx`) del
+   bloque de OPCIONES a elegir, dos secciones distintas de la tarjeta que
+   antes quedaban con el mismo espaciado que cualquier otro salto de línea
+   dentro de la tarjeta (`gap` de `.card`) y por tanto no se percibían como
+   bloques diferenciados. `margin-top` se SUMA al `gap` de `.card` (no lo
+   sustituye: en flexbox el margen de un hijo no colapsa con el `gap` del
+   contenedor ni con el margen del hijo anterior), así el resultado final es
+   el `gap` de siempre más este extra, sin tocar la separación entre el resto
+   de bloques de contenido entre sí. */
 .options {
   display: flex;
   flex-direction: column;
   gap: var(--bs-space-2);
+  margin-top: var(--bs-space-2);
 }
 
+/*
+ * Una opción de una decisión (punto + texto + su imagen/audio adjuntos, si
+ * los tiene): el borde/fondo/redondeo de "tarjeta" vive en ESTE contenedor
+ * (antes vivía en `.optionButton`, ver abajo), precisamente para que la
+ * imagen/audio de `.optionMedia` -- que por accesibilidad no puede ir
+ * anidada DENTRO del `<button>`, ver comentario de `ResponseOption` en
+ * PlayerScreen.tsx -- quede visualmente DENTRO del límite de esa tarjeta en
+ * vez de aparecer como un elemento suelto justo debajo/después de ella. Bug
+ * reportado: con el borde en `.optionButton`, la imagen de una respuesta
+ * quedaba fuera de ese borde, percibida como "a continuación" de la opción
+ * en vez de "parte de" ella, aunque en el DOM ya fuera descendiente de este
+ * mismo `<div>`. Traducción literal en `exportedStyles.ts`.
+ */
 .option {
   display: flex;
   flex-direction: column;
   gap: var(--bs-space-2);
+  border: 1px solid var(--bs-color-border);
+  border-radius: var(--bs-radius-md);
+  background: var(--bs-color-bg);
+  padding: var(--bs-space-3);
+}
+
+/* Hover: el borde ahora vive en `.option` (ver arriba), así que el cambio de
+   color al pasar el ratón por el botón se aplica al contenedor entero vía
+   `:has()` -- ya usado en el resto del proyecto, ver `.templateOption` en
+   `HomeScreen.module.css` -- para que TODA la tarjeta (texto + imagen/audio)
+   reaccione junta, no solo la fila de texto. */
+.option:has(.optionButton:hover:not(:disabled)) {
+  border-color: var(--bs-color-accent);
 }
 
 .optionMedia {
@@ -169,29 +208,30 @@
   flex-direction: column;
   align-items: flex-start;
   gap: var(--bs-space-2);
-  padding-left: var(--bs-space-3);
 }
 
 .optionMedia .media {
   max-height: 180px;
 }
 
+/* Fila de punto + texto de la opción: ya NO lleva borde/fondo/redondeo
+   propios (ver `.option` arriba, que ahora hace de tarjeta visual) -- sin
+   `background`/`border` para que se perciba como una única superficie
+   continua con `.optionMedia`, sin costura entre ambas. Mismo padding
+   horizontal de siempre para que el texto quede alineado con el padding de
+   `.option`; sin padding propio adicional (lo pone `.option`) más que el
+   necesario para separar la fila del `gap` compartido. */
 .optionButton {
   display: flex;
   align-items: center;
   gap: var(--bs-space-3);
-  padding: var(--bs-space-3);
-  border: 1px solid var(--bs-color-border);
-  border-radius: var(--bs-radius-md);
-  background: var(--bs-color-bg);
+  padding: 0;
+  border: none;
+  background: none;
   color: var(--bs-color-text);
   font-size: var(--bs-font-size-md);
   text-align: left;
   width: 100%;
-}
-
-.optionButton:hover:not(:disabled) {
-  border-color: var(--bs-color-accent);
 }
 
 .optionButton:disabled {

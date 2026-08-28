@@ -361,9 +361,68 @@ describe('parseOrMigrateProjectDocument — documento ya en forma nueva', () => 
     expect(parsed.graph.nodes).toHaveLength(document.graph.nodes.length + 1)
     expect(intro.targetNodeId).toBe(document.graph.startNodeId)
     expect(parsed.graph.startNodeId).toBe(intro.id)
-    // El resto del documento (la diapositiva original) se conserva intacto.
+    // El resto del documento (la diapositiva original) se conserva intacto
+    // EXCEPTO su `number`: milestone "Inicio siempre es D1", el intro
+    // sintetizado se queda con el 1 y esta diapositiva (la única del
+    // documento, `number: 1` en el original) desplaza el suyo a 2.
     const originalSlide = parsed.graph.nodes.find((node) => node.id === document.graph.startNodeId)
-    expect(originalSlide).toEqual(document.graph.nodes[0])
+    expect(originalSlide).toEqual({ ...document.graph.nodes[0], number: 2 })
+  })
+
+  it('milestone "Inicio siempre es D1": el intro sintetizado nace SIEMPRE con number 1, desplazando el resto de nodos del documento antiguo sin colisiones', () => {
+    // Documento legacy con `number` deliberadamente altos y no correlativos
+    // (12/13, en vez de 1/2), para comprobar que el desplazamiento suma
+    // exactamente 1 a cada uno en vez de renumerar desde cero.
+    const legacy = {
+      ...legacyBase(),
+      graph: {
+        nodes: [
+          {
+            id: START_ID,
+            number: 5,
+            type: 'start',
+            position: { x: 0, y: 0 },
+            title: '',
+            body: '',
+            targetNodeId: CONTENT_ID,
+          },
+          {
+            id: CONTENT_ID,
+            number: 12,
+            type: 'content',
+            position: { x: 200, y: 0 },
+            title: 'Bienvenida',
+            body: '',
+            targetNodeId: FINAL_ID,
+          },
+          {
+            id: FINAL_ID,
+            number: 13,
+            type: 'final',
+            position: { x: 400, y: 0 },
+            title: 'Fin',
+            body: '',
+          },
+        ],
+      },
+    }
+
+    const migrated = parseOrMigrateProjectDocument(legacy)
+    const intro = introNodeOf(migrated)
+    expect(intro.number).toBe(1)
+
+    // El `start` (number 5) se descarta en la migración legacy (nunca
+    // sobrevive como nodo propio, ver `legacyNodeToNode`); `content`/`final`
+    // desplazan su number una unidad hacia arriba: 12->13, 13->14.
+    const otherNumbers = migrated.graph.nodes
+      .filter((node) => node.type !== 'intro')
+      .map((node) => node.number)
+      .sort((a, b) => a - b)
+    expect(otherNumbers).toEqual([13, 14])
+
+    // Nunca dos nodos con el mismo number.
+    const allNumbers = migrated.graph.nodes.map((node) => node.number)
+    expect(new Set(allNumbers).size).toBe(allNumbers.length)
   })
 })
 

@@ -70,11 +70,12 @@
 }
 
 /* Fila de un nodo: el botón principal (`.nodeItem`), arrastrable — ver
-   comentario de `isSearching`/`reorderNode` en `LeftPanel.tsx`. El elemento
-   `draggable` del arrastrar-y-soltar: `cursor: grab` cuando el arrastre está
-   habilitado (buscador vacío, ver `[draggable='true']` más abajo), `default`
-   en caso contrario para no sugerir una interacción que no está disponible
-   mientras se filtra. */
+   comentario de `isSearching`/`reorderNode`/Pointer Events en
+   `LeftPanel.tsx`. `data-draggable` (NO el atributo HTML5 `draggable`: este
+   mecanismo ya no usa arrastre nativo, ver ese mismo comentario) refleja si
+   el arrastre está habilitado ahora mismo (buscador vacío): `cursor: grab`
+   en ese caso, `default` en caso contrario para no sugerir una interacción
+   que no está disponible mientras se filtra. */
 .nodeRow {
   display: flex;
   align-items: center;
@@ -82,19 +83,25 @@
   cursor: default;
 }
 
-.nodeRow[draggable='true'] {
+.nodeRow[data-draggable='true'] {
   cursor: grab;
 }
 
-.nodeRow[draggable='true']:active {
+.nodeRow[data-draggable='true']:active {
   cursor: grabbing;
 }
 
 /* Pista visual del arrastre (Tarea 1): el ítem que se está arrastrando se
    atenúa (mismo criterio que `.cardDimmed` del lienzo, `NodeCard.module.css`)
-   para dejar claro cuál es el elemento "levantado" de la lista. */
+   para dejar claro cuál es el elemento "levantado" de la lista.
+   `user-select: none` (propiedad ESTÁNDAR, sin prefijo: no hace falta
+   `-webkit-user-select` en las versiones de WebKit relevantes para esta
+   app) evita que el gesto de Pointer Events, que ya no es un arrastre
+   nativo reconocido por el motor como tal, se malinterprete como una
+   selección de texto mientras el puntero se mueve sobre las demás filas. */
 .nodeRowDragging {
   opacity: 0.4;
+  user-select: none;
 }
 
 /* Línea de inserción: dónde quedaría el ítem si se soltara ahora mismo,

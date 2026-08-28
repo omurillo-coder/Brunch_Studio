@@ -523,6 +523,32 @@ describe('buildHtmlBundle — comportamiento del HTML generado (jsdom)', () => {
     expect(card.querySelector('.optionButton img')).toBeNull()
   })
 
+  it('la imagen de una respuesta es descendiente del .option de ESA respuesta, no un hermano suelto después de él', () => {
+    // Traducción del mismo contrato de estructura que fija
+    // `PlayerScreen.test.tsx` para la app: aunque la imagen no puede ir
+    // DENTRO del <button> (ver test de arriba), sí debe quedar dentro del
+    // mismo `.option` que agrupa visualmente esa respuesta (ver
+    // `exportedStyles.ts`, que traslada el borde de "tarjeta" de
+    // `.optionButton` a `.option` para que se perciba como una única
+    // unidad) — nunca como hijo directo de `.options` (la lista completa).
+    runExportedBundle(buildHtmlBundle(sampleProject(), sampleAssets))
+    clickButton('Empezar el caso')
+
+    const card = currentCard()
+    const img = card.querySelector('img')
+    if (!img) throw new Error('No se encontró ninguna imagen de respuesta.')
+
+    const optionContainer = img.closest('.option')
+    expect(optionContainer).not.toBeNull()
+    expect(optionContainer?.querySelector('.optionButton')?.textContent).toContain(
+      'Avisar al responsable',
+    )
+
+    const optionsList = card.querySelector('.options')
+    expect(optionsList?.contains(img)).toBe(true)
+    expect([...(optionsList?.children ?? [])]).not.toContain(img)
+  })
+
   it('acumula la puntuación de la respuesta elegida y la muestra en el Final', () => {
     runExportedBundle(buildHtmlBundle(sampleProject(), sampleAssets))
     clickButton('Empezar el caso')

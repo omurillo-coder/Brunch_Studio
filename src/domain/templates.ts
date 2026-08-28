@@ -28,17 +28,25 @@ import type { ProjectDocument } from './schemas'
  * la función `build` y añadir una entrada al array.
  *
  * Milestone "Diapositiva de Inicio": LAS TRES plantillas (incluida "En
- * blanco", que hasta ahora era un simple alias de `createProject`) terminan
- * su `build` con `seedIntroNode` (ver más abajo), que añade la portada
- * obligatoria (nodo `intro`) y la conecta a lo que hasta entonces era el
- * primer nodo/inicio de la plantilla. Es el ÚNICO cambio de las tres — el
- * resto de nodos y conexiones de cada plantilla se construye exactamente
- * igual que antes de este milestone, usando `project.graph.startNodeId`
- * "de siempre" (una `SlideNode`) como ancla, y solo al final se antepone la
- * portada. `createProject` en sí NO se toca (ver su propio comentario en
+ * blanco", que hasta ahora era un simple alias de `createProject`) llaman a
+ * `seedIntroNode` (ver más abajo), que añade la portada obligatoria (nodo
+ * `intro`) y la conecta a lo que hasta entonces era el primer nodo/inicio de
+ * la plantilla. `createProject` en sí NO se toca (ver su propio comentario en
  * `src/domain/project.ts`): sigue sin `intro`, deliberadamente, para no
  * afectar a quien la usa como bloque de construcción de bajo nivel fuera de
  * estas plantillas.
+ *
+ * Milestone "Inicio siempre es D1": `seedIntroNode` se llama justo DESPUÉS de
+ * `createProject` (que siempre siembra su única diapositiva con `number: 1`,
+ * a fecha de hoy no configurable) y ANTES de crear el resto de nodos propios
+ * de cada plantilla (decisión, finales, diapositiva de encuentro...) — nunca
+ * al final, como en la versión anterior de este archivo. Así el `intro`
+ * ocupa el 1 desplazando solo esa única diapositiva inicial (que pasa a ser
+ * el 2), y todos los nodos que la plantilla crea DESPUÉS ya reciben su
+ * número correlativo de forma natural con `nextNodeNumber`, sin que haga
+ * falta ningún desplazamiento adicional sobre ellos. "En blanco" no tiene
+ * ningún nodo más que crear, así que su orden no cambia: sigue siendo
+ * `seedIntroNode(createProject(...))` tal cual.
  */
 export interface ProjectTemplate {
   /** Identificador estable, usado como `value` del selector en la UI. */
@@ -112,10 +120,12 @@ function updateSlideTitleAndBody(
  * el punto de partida (`project.graph.startNodeId`) y desplazando el inicio
  * del proyecto para que sea la propia portada recién creada.
  *
- * Aplicado como ÚLTIMO paso de las tres plantillas: el resto de cada una se
- * construye exactamente igual que antes de existir el nodo `intro`, y solo
- * al final se antepone la portada — así el código de cada plantilla no
- * necesita saber nada sobre `intro`, ni antes ni durante su construcción.
+ * Aplicado justo después de `createProject` en las tres plantillas (ver
+ * comentario de cabecera del archivo, milestone "Inicio siempre es D1"): el
+ * resto de cada plantilla (decisión, finales, diapositiva de encuentro...) se
+ * construye DESPUÉS, así que ningún nodo creado a partir de aquí necesita
+ * desplazar su número — solo la única diapositiva que crea `createProject`
+ * se ve afectada (pasa de 1 a 2).
  *
  * `createNode(..., 'intro', ...)` ya deja `graph.startNodeId` apuntando al
  * nodo nuevo (ver comentario de esa función en `src/domain/project.ts`),
@@ -156,6 +166,10 @@ function buildBlankTemplate(projectName: string): ProjectDocument {
 function buildSimpleDecisionTemplate(projectName: string): ProjectDocument {
   let project = createProject(projectName)
   const startId = project.graph.startNodeId
+  // Milestone "Inicio siempre es D1": el intro se siembra AQUÍ, antes de
+  // crear el resto de nodos de la plantilla (decisión, dos finales) — ver
+  // comentario de cabecera del archivo.
+  project = seedIntroNode(project)
 
   project = updateSlideTitleAndBody(
     project,
@@ -196,7 +210,7 @@ function buildSimpleDecisionTemplate(projectName: string): ProjectDocument {
     body: 'Has llegado a un final alternativo del escenario.',
   })
 
-  return seedIntroNode(project)
+  return project
 }
 
 /**
@@ -207,6 +221,9 @@ function buildSimpleDecisionTemplate(projectName: string): ProjectDocument {
 function buildBranchWithReunionTemplate(projectName: string): ProjectDocument {
   let project = createProject(projectName)
   const startId = project.graph.startNodeId
+  // Milestone "Inicio siempre es D1": mismo criterio que
+  // `buildSimpleDecisionTemplate`, ver comentario de cabecera del archivo.
+  project = seedIntroNode(project)
 
   project = updateSlideTitleAndBody(
     project,
@@ -253,7 +270,7 @@ function buildBranchWithReunionTemplate(projectName: string): ProjectDocument {
     body: 'Has completado el recorrido de ejemplo.',
   })
 
-  return seedIntroNode(project)
+  return project
 }
 
 /**

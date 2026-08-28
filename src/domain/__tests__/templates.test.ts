@@ -71,6 +71,18 @@ describe('PROJECT_TEMPLATES', () => {
     }
   })
 
+  it('milestone "Inicio siempre es D1": las tres plantillas nacen con el Inicio en number 1, y ningún otro nodo repite ese número', () => {
+    for (const id of ['blank', 'simple-decision', 'branch-reunion']) {
+      const project = getProjectTemplate(id).build('Proyecto de prueba')
+      const intro = introOf(project)
+      expect(intro.number).toBe(1)
+
+      // Nunca dos nodos con el mismo `number`.
+      const numbers = project.graph.nodes.map((node) => node.number)
+      expect(new Set(numbers).size).toBe(numbers.length)
+    }
+  })
+
   it('las plantillas con estructura ("Decisión simple", "Ramificación con reencuentro") no generan ningún aviso de validateProject', () => {
     for (const id of ['simple-decision', 'branch-reunion']) {
       const project = getProjectTemplate(id).build('Proyecto de prueba')
@@ -114,7 +126,13 @@ describe('plantilla "En blanco"', () => {
     const slide = fromTemplate.graph.nodes.find((node) => node.id !== intro.id)
 
     expect(slide?.type).toBe(referenceNode?.type)
-    expect(slide?.number).toBe(referenceNode?.number)
+    // Milestone "Inicio siempre es D1": el intro se queda con el 1 y esta
+    // diapositiva (la única que crea `createProject`, `number: 1` ahí)
+    // desplaza su número una unidad hacia arriba al pasar a ser la segunda
+    // del proyecto, en vez de conservar el mismo número que en
+    // `fromCreateProject`.
+    expect(intro.number).toBe(1)
+    expect(slide?.number).toBe((referenceNode?.number ?? 0) + 1)
     expect(slide?.title).toBe(referenceNode?.title)
     // Misma diapositiva de siempre (mismo único bloque de texto vacío),
     // ahora precedida por la portada en vez de ser ella misma el inicio.

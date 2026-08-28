@@ -34,6 +34,15 @@ import styles from './NodeCard.module.css'
  * `createProject` de bajo nivel, ver su comentario), `graph.startNodeId`
  * sigue pudiendo apuntar a una `SlideNode` normal, marcada con la etiqueta
  * discreta de siempre en su cabecera (`data.isStart`).
+ *
+ * Milestone "Inicio siempre es D1": un `intro` ya NO muestra título/Ref.
+ * oculta en su tarjeta (ese campo se oculta también en el Inspector, ver
+ * `NodeFields` en `Inspector.tsx` — ya no aporta nada: la identidad de un
+ * `intro` es su propio ciclo/asignatura/caso, siempre único en el proyecto).
+ * En su lugar, `shortNodeLabel` devuelve `'INICIO'` (nunca `'D1'`) para este
+ * tipo, pintado en `IntroHeader` (más abajo) en tamaño grande y prominente
+ * — sustituye por completo a `Header`, que sigue siendo exclusivo de
+ * `slide`/`final`.
  */
 
 /** Exportado para que otros componentes del lienzo (p.ej. `ConnectionMenu`,
@@ -52,18 +61,32 @@ export const START_NODE_LABEL = 'Inicio'
 /**
  * Código corto "D{número}" (Tarea "Numeración corta"): sustituye a
  * `NODE_TYPE_LABEL[type]` en el sitio donde se identifica visualmente cada
- * nodo, tanto en la cabecera de la tarjeta del lienzo (`Header` más abajo)
- * como en la fila de la lista del panel izquierdo (`LeftPanel.tsx`, que
- * importa y reutiliza esta misma función en vez de duplicarla). Vale para
- * los tres tipos de nodo por igual — incluidos `intro`/`final` — porque
- * conceptualmente, para el usuario, "todo son diapositivas numeradas". Ya NO
- * se muestra el campo `number` "pelado" aparte (sin la "D"): era redundante
- * con este mismo código corto, que ya sirve de referencia — eliminado tanto
- * aquí como en `LeftPanel`. Acepta cualquier objeto con `number` (nodo de
- * dominio o `CanvasNodeData`) para no acoplarse a un tipo concreto.
+ * nodo, tanto en la cabecera de la tarjeta del lienzo (`Header`/`IntroHeader`
+ * más abajo) como en la fila de la lista del panel izquierdo
+ * (`LeftPanel.tsx`, que importa y reutiliza esta misma función en vez de
+ * duplicarla — al cambiar aquí, `LeftPanel` hereda el cambio sin tocar ese
+ * archivo). Acepta cualquier objeto con `number` (nodo de dominio, con
+ * `type`, o `CanvasNodeData`, con `nodeType`) para no acoplarse a un tipo
+ * concreto — de ahí que el discriminador se acepte con cualquiera de los dos
+ * nombres de campo. Ya NO se muestra el campo `number` "pelado" aparte (sin
+ * la "D"): era redundante con este mismo código corto, que ya sirve de
+ * referencia.
+ *
+ * Milestone "Inicio siempre es D1": para un nodo `intro` devuelve siempre
+ * `'INICIO'`, nunca `'D1'` — aunque el propio dominio ya garantiza que un
+ * `intro` nace con `number: 1` (ver `src/domain/project.ts`/`migration.ts`),
+ * esta función no depende de ese número en absoluto: un `intro` se identifica
+ * por ser el único punto de partida del proyecto, no por su posición en la
+ * numeración. Para `slide`/`final` el comportamiento no cambia: `"D" +
+ * number`.
  */
-export function shortNodeLabel(node: { number: number }): string {
-  return `D${node.number}`
+export function shortNodeLabel(node: {
+  number: number
+  type?: NodeType
+  nodeType?: NodeType
+}): string {
+  const type = node.type ?? node.nodeType
+  return type === 'intro' ? 'INICIO' : `D${node.number}`
 }
 
 /** Máximo de respuestas que se resumen dentro de la tarjeta. El propio
@@ -184,6 +207,29 @@ function BodyPreview({ data }: { data: CanvasNodeData }) {
   return <div className={styles.bodyPreview}>{data.bodyPreview}</div>
 }
 
+/**
+ * Cabecera EXCLUSIVA de la tarjeta de Inicio (`intro`, milestone "Inicio
+ * siempre es D1") — sustituye por completo a `Header` para este tipo, nunca
+ * se usa junto a ella. Dos diferencias deliberadas frente a `Header`:
+ * - SIN título/Ref. oculta: ya no aplica a un `intro` (ver comentario de
+ *   cabecera del módulo y `NodeFields` en `Inspector.tsx`) — lo único que
+ *   necesita esta tarjeta para identificarse es "INICIO" más el resumen de
+ *   ciclo/asignatura/caso que ya pinta `BodyPreview` debajo.
+ * - "INICIO" (`shortNodeLabel`, nunca `'D1'` para este tipo) en
+ *   `.introLabel`, GRANDE y prominente (más grande que cualquier otro texto
+ *   de la tarjeta, incluido el título de una `slide`/`final`) en vez del
+ *   badge pequeño `.type` de `Header` — es el dato principal de la tarjeta,
+ *   no una insignia secundaria.
+ */
+function IntroHeader({ data }: { data: CanvasNodeData }) {
+  return (
+    <div className={styles.introHeader}>
+      <span className={styles.introLabel}>{shortNodeLabel(data)}</span>
+      <PinBadge data={data} />
+    </div>
+  )
+}
+
 /** Handle de entrada único, compartido por diapositivas y finales. */
 function InHandle() {
   return (
@@ -274,12 +320,14 @@ export function FinalNodeView({ data }: NodeProps<CanvasFlowNode>) {
  * - `BodyPreview` pinta aquí el resumen de ciclo/asignatura/caso resuelto a
  *   nombres legibles (`introSummaryFor` en `adapter.ts`), nunca el `content`
  *   de una diapositiva normal (un `intro` no tiene).
+ * - Cabecera propia (`IntroHeader`, no `Header`): sin título/Ref. oculta,
+ *   con "INICIO" en tamaño grande — ver comentario de `IntroHeader`.
  */
 export function IntroNodeView({ data }: NodeProps<CanvasFlowNode>) {
   return (
     <div className={cardClassName(data)}>
       <NoOutgoingBadge data={data} />
-      <Header data={data} />
+      <IntroHeader data={data} />
       <BodyPreview data={data} />
       <OutHandle />
     </div>

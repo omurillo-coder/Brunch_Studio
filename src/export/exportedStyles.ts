@@ -283,35 +283,54 @@ button:focus-visible {
   border-color: var(--bs-color-accent-hover);
 }
 
+/* Traducción literal de \`.options\` en \`src/player/PlayerScreen.module.css\`:
+   \`margin-top\` extra (se SUMA al \`gap\` de \`.card\`, no lo sustituye —
+   en flexbox el margen de un hijo no colapsa con el \`gap\` del contenedor) que
+   separa visualmente el bloque de CONTENIDO de la diapositiva del bloque de
+   OPCIONES a elegir. Ver el comentario completo en ese archivo. */
 .options {
   display: flex;
   flex-direction: column;
   gap: var(--bs-space-2);
+  margin-top: var(--bs-space-2);
 }
 
+/* Traducción literal de \`.option\` en \`src/player/PlayerScreen.module.css\`:
+   el borde/fondo/redondeo de "tarjeta" vive aquí (no en \`.optionButton\`) para
+   que la imagen/audio de \`.optionMedia\` — que por accesibilidad no puede ir
+   anidada dentro del \`<button>\` — quede visualmente DENTRO del límite de esa
+   tarjeta en vez de aparecer como un elemento suelto después de ella. Ver el
+   comentario completo (con el porqué del bug) en ese archivo. */
 .option {
   display: flex;
   flex-direction: column;
   gap: var(--bs-space-2);
+  border: 1px solid var(--bs-color-border);
+  border-radius: var(--bs-radius-md);
+  background: var(--bs-color-bg);
+  padding: var(--bs-space-3);
 }
 
-/* Opción de una decisión: punto + texto. Nunca una letra A/B/C/D. */
+/* Hover: el borde vive en \`.option\` (ver arriba), así que el cambio de color
+   se aplica al contenedor entero vía \`:has()\` para que toda la tarjeta
+   (texto + imagen/audio) reaccione junta. */
+.option:has(.optionButton:hover:not(:disabled)) {
+  border-color: var(--bs-color-accent);
+}
+
+/* Opción de una decisión: punto + texto. Nunca una letra A/B/C/D. Ya NO
+   lleva borde/fondo/redondeo propios (ver \`.option\` arriba). */
 .optionButton {
   display: flex;
   align-items: center;
   gap: var(--bs-space-3);
   width: 100%;
-  padding: var(--bs-space-3);
-  border: 1px solid var(--bs-color-border);
-  border-radius: var(--bs-radius-md);
-  background: var(--bs-color-bg);
+  padding: 0;
+  border: none;
+  background: none;
   color: var(--bs-color-text);
   font-size: var(--bs-font-size-md);
   text-align: left;
-}
-
-.optionButton:hover:not(:disabled) {
-  border-color: var(--bs-color-accent);
 }
 
 .optionButton:disabled {
@@ -337,7 +356,6 @@ button:focus-visible {
   flex-direction: column;
   align-items: flex-start;
   gap: var(--bs-space-2);
-  padding-left: var(--bs-space-3);
 }
 
 .optionMedia .media {

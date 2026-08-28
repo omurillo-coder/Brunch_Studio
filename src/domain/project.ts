@@ -1,5 +1,5 @@
 import { produce } from 'immer'
-import { createId, nextNodeNumber } from './id'
+import { createId, nextNodeNumber, shiftNodeNumbersForNewIntro } from './id'
 import { connect } from './graph'
 import type {
   FinalNode,
@@ -214,6 +214,17 @@ function findNodeIndex(project: ProjectDocument, nodeId: string): number {
  * puede haber un `intro`) — una portada recién añadida a un proyecto ya
  * empezado pasa a ser su punto de partida real de inmediato, sin paso
  * intermedio en el que el proyecto se quede sin inicio válido.
+ *
+ * Milestone "Inicio siempre es D1": un nodo `intro` SIEMPRE nace con
+ * `number: 1`, sea cual sea el estado del proyecto en ese momento — nunca
+ * usa `nextNodeNumber` como el resto de tipos. Si el proyecto ya tenía otros
+ * nodos numerados, TODOS desplazan su `number` una unidad hacia arriba (ver
+ * `shiftNodeNumbersForNewIntro` en `src/domain/id.ts`, misma función que usa
+ * `ensureIntroNode` en `src/domain/migration.ts` para el caso equivalente en
+ * un documento antiguo) antes de insertar el `intro` — así nunca hay dos
+ * nodos con el mismo `number`. Efecto secundario deliberado y aceptado
+ * (petición explícita de usuario): este camino puede renumerar nodos ya
+ * existentes del proyecto, ver el comentario de esa función para el porqué.
  */
 export function createNode(
   project: ProjectDocument,
@@ -227,7 +238,8 @@ export function createNode(
     )
   }
 
-  const number = nextNodeNumber(project.graph.nodes.map((node) => node.number))
+  const number =
+    type === 'intro' ? 1 : nextNodeNumber(project.graph.nodes.map((node) => node.number))
   const title = extra.title ?? ''
   const body = extra.body ?? ''
   const common = { id: createId(), number, position, title }
@@ -258,6 +270,13 @@ export function createNode(
   }
 
   return produce(project, (draft) => {
+    if (newNode.type === 'intro') {
+      // Desplaza el `number` de todos los nodos ya existentes ANTES de
+      // insertar el `intro` (que se queda con el 1) — ver comentario de
+      // `createNode` y de `shiftNodeNumbersForNewIntro` en
+      // `src/domain/id.ts`.
+      draft.graph.nodes = shiftNodeNumbersForNewIntro(draft.graph.nodes)
+    }
     draft.graph.nodes.push(newNode)
     if (newNode.type === 'intro') {
       draft.graph.startNodeId = newNode.id

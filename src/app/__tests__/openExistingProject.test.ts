@@ -54,11 +54,15 @@ describe('openExistingProject', () => {
     expect(intro).toBeDefined()
     expect(document.graph.startNodeId).toBe(intro?.id)
     expect(intro?.type === 'intro' ? intro.targetNodeId : undefined).toBe(original.graph.startNodeId)
+    expect(intro?.number).toBe(1)
     // El nodo original (que antes era el punto de partida) sigue presente,
-    // sin ningún otro cambio.
-    expect(document.graph.nodes.find((node) => node.id === original.graph.startNodeId)).toEqual(
-      original.graph.nodes.find((node) => node.id === original.graph.startNodeId),
-    )
+    // sin ningún otro cambio salvo su `number` — el Inicio sintetizado
+    // siempre ocupa el 1 (ver `ensureIntroNode`/`shiftNodeNumbersForNewIntro`
+    // en `src/domain/migration.ts`/`id.ts`), así que el resto de nodos del
+    // documento antiguo desplaza su número una unidad hacia arriba.
+    const originalNode = original.graph.nodes.find((node) => node.id === original.graph.startNodeId)
+    const migratedNode = document.graph.nodes.find((node) => node.id === original.graph.startNodeId)
+    expect(migratedNode).toEqual({ ...originalNode, number: (originalNode?.number ?? 0) + 1 })
   })
 
   it('propaga el rechazo si el repositorio no puede abrir la ruta', async () => {

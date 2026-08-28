@@ -136,3 +136,74 @@ describe('Contraste de texto — las 9 combinaciones de tarjeta, en claro y en o
     expect(cardTextRuleMatch?.[1]).toMatch(/color:\s*var\(--bs-color-card-text\)/)
   })
 })
+
+/**
+ * BUG REAL reportado por el usuario ("no se lee el texto sobre los colores
+ * de las diapositivas"), no cubierto por el bloque de arriba: la pasada
+ * anterior solo comprobó/arregló `.title` (que hereda `color` de la
+ * tarjeta), pero `.bodyPreview` (vista previa de contenido) y
+ * `.responseText` (texto de una respuesta) se pintan DIRECTAMENTE sobre el
+ * fondo de color de la tarjeta con su propio tono muted/faint FIJO, pensado
+ * solo para el fondo neutro por defecto — sin contraste garantizado sobre
+ * las 9 tarjetas de fondo propio. `.startMark` (marca "Inicio") tiene el
+ * mismo problema con el turquesa de acento. `.type` (badge "D{número}") NO
+ * lo tiene: pinta sobre su PROPIO fondo opaco (`--bs-color-bg`), nunca sobre
+ * el color de la tarjeta.
+ *
+ * Arreglo verificado aquí: `.card` declara `--bs-card-text-muted`/
+ * `--bs-card-text-faint`/`--bs-card-text-accent` con el valor neutro de
+ * siempre; la MISMA regla combinada de las 9 clases de tarjeta que ya fija
+ * `color: var(--bs-color-card-text)` las REDEFINE también a
+ * `var(--bs-color-card-text)`; `.bodyPreview`/`.responseText`/`.startMark`
+ * consultan esas variables en vez de los tokens fijos. Además de este test
+ * (que comprueba el CSS fuente), se hizo verificación VISUAL real con
+ * capturas de pantalla en claro y oscuro sobre los 9 fondos — ver el informe
+ * de esta tarea.
+ */
+describe('Contraste de texto — bug real: bodyPreview/responseText/startMark también deben adaptarse al fondo de color', () => {
+  const cardRuleMatch = nodeCardCss.match(/(?:^|\n)\.card\s*\{([^}]*)\}/)
+  const cardTextRuleMatch = nodeCardCss.match(
+    /\.cardFinal,\s*\.cardIntro,\s*\.cardSlideYellow,\s*\.cardSlideOrange,\s*\.cardSlidePink,\s*\.cardSlidePurple,\s*\.cardSlideCyan,\s*\.cardSlideGray,\s*\.cardSlideRed\s*\{([^}]*)\}/,
+  )
+
+  it('`.card` declara las tres variables `--bs-card-text-*` con su valor neutro por defecto', () => {
+    expect(cardRuleMatch).not.toBeNull()
+    expect(cardRuleMatch?.[1]).toMatch(/--bs-card-text-muted:\s*var\(--bs-color-text-muted\)/)
+    expect(cardRuleMatch?.[1]).toMatch(/--bs-card-text-faint:\s*var\(--bs-color-text-faint\)/)
+    expect(cardRuleMatch?.[1]).toMatch(/--bs-card-text-accent:\s*var\(--bs-color-accent\)/)
+  })
+
+  it('las 9 clases de tarjeta con fondo propio REDEFINEN las tres variables a `--bs-color-card-text`', () => {
+    expect(cardTextRuleMatch).not.toBeNull()
+    expect(cardTextRuleMatch?.[1]).toMatch(/--bs-card-text-muted:\s*var\(--bs-color-card-text\)/)
+    expect(cardTextRuleMatch?.[1]).toMatch(/--bs-card-text-faint:\s*var\(--bs-color-card-text\)/)
+    expect(cardTextRuleMatch?.[1]).toMatch(/--bs-card-text-accent:\s*var\(--bs-color-card-text\)/)
+  })
+
+  it('`.bodyPreview` usa `--bs-card-text-faint` en vez del tono faint fijo', () => {
+    const rule = nodeCardCss.match(/\.bodyPreview\s*\{([^}]*)\}/)
+    expect(rule).not.toBeNull()
+    expect(rule?.[1]).toMatch(/color:\s*var\(--bs-card-text-faint\)/)
+    expect(rule?.[1]).not.toMatch(/color:\s*var\(--bs-color-text-faint\)/)
+  })
+
+  it('`.responseText` usa `--bs-card-text-muted` en vez del tono muted fijo', () => {
+    const rule = nodeCardCss.match(/\.responseText\s*\{([^}]*)\}/)
+    expect(rule).not.toBeNull()
+    expect(rule?.[1]).toMatch(/color:\s*var\(--bs-card-text-muted\)/)
+    expect(rule?.[1]).not.toMatch(/color:\s*var\(--bs-color-text-muted\)/)
+  })
+
+  it('`.startMark` usa `--bs-card-text-accent` en vez del turquesa de acento fijo', () => {
+    const rule = nodeCardCss.match(/\.startMark\s*\{([^}]*)\}/)
+    expect(rule).not.toBeNull()
+    expect(rule?.[1]).toMatch(/color:\s*var\(--bs-card-text-accent\)/)
+    expect(rule?.[1]).not.toMatch(/color:\s*var\(--bs-color-accent\)/)
+  })
+
+  it('`.type` (badge "D{número}") SIGUE con su propio fondo opaco: no necesita el ajuste (no se pinta sobre el color de la tarjeta)', () => {
+    const rule = nodeCardCss.match(/\.type\s*\{([^}]*)\}/)
+    expect(rule).not.toBeNull()
+    expect(rule?.[1]).toMatch(/background:\s*var\(--bs-color-bg\)/)
+  })
+})

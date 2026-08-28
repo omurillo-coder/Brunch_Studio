@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { createId } from './id'
+import { createId, shiftNodeNumbersForNewIntro } from './id'
 import {
   ProjectDocumentSchema,
   EditorStateSchema,
@@ -585,18 +585,27 @@ function migrateSingularImageDocument(
  * de este milestone), lo devuelve sin tocar.
  *
  * Transformación, cuando hace falta sintetizar uno: crea un nodo `intro`
- * nuevo (id nuevo vía `createId()`, `number` = uno más que el máximo
- * `number` existente en el documento, para no chocar con ningún nodo real),
- * con `cicloId`/`asignaturaId` ausentes y `caseName` vacío (portada
- * incompleta: el diseñador la rellenará desde el editor en la fase de UI),
- * `targetNodeId` = el `startNodeId` ANTIGUO del documento (el `intro` pasa a
- * ser un paso previo al que antes era el inicio real, nunca lo sustituye
- * narrativamente) y posición a la izquierda de ese antiguo inicio con un
- * offset fijo de 260px en X (mismo valor, mismo criterio, que
+ * nuevo (id nuevo vía `createId()`, `number` SIEMPRE 1 — milestone "Inicio
+ * siempre es D1" — nunca "uno más que el máximo existente" como antes de ese
+ * milestone), con `cicloId`/`asignaturaId` ausentes y `caseName` vacío
+ * (portada incompleta: el diseñador la rellenará desde el editor en la fase
+ * de UI), `targetNodeId` = el `startNodeId` ANTIGUO del documento (el
+ * `intro` pasa a ser un paso previo al que antes era el inicio real, nunca lo
+ * sustituye narrativamente) y posición a la izquierda de ese antiguo inicio
+ * con un offset fijo de 260px en X (mismo valor, mismo criterio, que
  * `seedIntroNode` en `src/domain/templates.ts` usa al construir una
  * plantilla desde cero — no pretende ser una disposición final perfecta, el
  * diseñador puede moverlo). `graph.startNodeId` pasa a apuntar al `intro`
  * nuevo.
+ *
+ * Como el `intro` sintetizado se queda con el 1, TODOS los nodos ya
+ * existentes del documento antiguo desplazan su `number` una unidad hacia
+ * arriba (`shiftNodeNumbersForNewIntro` en `src/domain/id.ts`, misma función
+ * que usa `createNode` en `src/domain/project.ts` para el camino manual "+
+ * Inicio") — nunca hay dos nodos con el mismo `number`. Efecto secundario
+ * DELIBERADO y aceptado (petición explícita de usuario, ver el comentario de
+ * esa función): esto renumera la numeración visible de un `.brunch` guardado
+ * antes de este milestone, la primera vez que se abre tras actualizar.
  *
  * Vuelve a validar el resultado contra `ProjectDocumentSchema` antes de
  * devolverlo (mismo criterio paranoico que el resto de este archivo: no
@@ -610,11 +619,11 @@ function ensureIntroNode(doc: ProjectDocument): ProjectDocument {
 
   const previousStartId = doc.graph.startNodeId
   const previousStart = doc.graph.nodes.find((node) => node.id === previousStartId)
-  const maxNumber = doc.graph.nodes.reduce((max, node) => Math.max(max, node.number), 0)
+  const shiftedNodes = shiftNodeNumbersForNewIntro(doc.graph.nodes)
 
   const introNode: IntroNode = {
     id: createId(),
-    number: maxNumber + 1,
+    number: 1,
     position: previousStart
       ? { x: previousStart.position.x - 260, y: previousStart.position.y }
       : { x: 0, y: 0 },
@@ -629,7 +638,7 @@ function ensureIntroNode(doc: ProjectDocument): ProjectDocument {
   const withIntro: ProjectDocument = {
     ...doc,
     graph: {
-      nodes: [introNode, ...doc.graph.nodes],
+      nodes: [introNode, ...shiftedNodes],
       startNodeId: introNode.id,
     },
   }

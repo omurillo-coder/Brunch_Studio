@@ -47,11 +47,15 @@ describe('NodeCard — fondo y contenido del nodo `intro` (Diapositiva de Inicio
     expect(finalCard).not.toBeNull()
     expect(finalCard?.classList.contains(cardIntroClass)).toBe(false)
 
-    // Identificada por su código corto (la diapositiva de inicio sembrada
-    // por `resetProjectStore` es siempre D1), no por "Sin ref. oculta": tanto
-    // la diapositiva como el propio `intro` (título vacío) muestran ese
-    // mismo texto de placeholder.
-    const slideTypeBadge = screen.getByText('D1')
+    // Identificada por su código corto, no por "Sin ref. oculta": tanto la
+    // diapositiva como el propio `intro` (título vacío) muestran ese mismo
+    // texto de placeholder. Milestone "Inicio siempre es D1": crear el
+    // `intro` desplaza el número de esta diapositiva (sembrada por
+    // `resetProjectStore` con `number: 1`) a 2 — se calcula dinámicamente en
+    // vez de asumir "D1", que ahora es siempre el propio `intro`.
+    const slide = useProjectStore.getState().project.graph.nodes.find((n) => n.type === 'slide')
+    if (!slide) throw new Error('setup inválido')
+    const slideTypeBadge = screen.getByText(shortNodeLabel(slide))
     const slideCard = slideTypeBadge.closest(`.${CSS.escape(cardClass)}`)
     expect(slideCard).not.toBeNull()
     expect(slideCard?.classList.contains(cardIntroClass)).toBe(false)

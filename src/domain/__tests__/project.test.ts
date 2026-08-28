@@ -662,6 +662,34 @@ describe('nodo "intro" (milestone "Diapositiva de Inicio")', () => {
       // No debe haber mutado nada aunque haya lanzado.
       expect(project.graph.nodes.filter((n) => n.type === 'intro')).toHaveLength(1)
     })
+
+    it('milestone "Inicio siempre es D1": el intro nace SIEMPRE con number 1, desplazando el resto de nodos existentes sin colisiones', () => {
+      let project = createProject('P')
+      project = createNode(project, 'slide', { x: 100, y: 0 }, { title: 'Otra' })
+      project = createNode(project, 'final', { x: 200, y: 0 }, { title: 'Final' })
+      // Antes de crear el intro: slide inicial=1, otra slide=2, final=3.
+      const numbersBefore = project.graph.nodes.map((n) => n.number).sort((a, b) => a - b)
+      expect(numbersBefore).toEqual([1, 2, 3])
+
+      const updated = createNode(project, 'intro', { x: -260, y: 0 })
+
+      const intro = updated.graph.nodes.find((n) => n.type === 'intro')
+      if (!intro) throw new Error('No se creó el nodo intro')
+      expect(intro.number).toBe(1)
+
+      // Los tres nodos anteriores desplazan su number una unidad hacia
+      // arriba: 1->2, 2->3, 3->4.
+      const previousIds = project.graph.nodes.map((n) => n.id)
+      const shiftedNumbers = updated.graph.nodes
+        .filter((n) => previousIds.includes(n.id))
+        .map((n) => n.number)
+        .sort((a, b) => a - b)
+      expect(shiftedNumbers).toEqual([2, 3, 4])
+
+      // Nunca dos nodos con el mismo number.
+      const allNumbers = updated.graph.nodes.map((n) => n.number)
+      expect(new Set(allNumbers).size).toBe(allNumbers.length)
+    })
   })
 
   describe('deleteNode', () => {

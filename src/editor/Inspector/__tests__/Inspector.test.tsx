@@ -1764,6 +1764,34 @@ describe('Inspector — diapositiva de Inicio (nodo `intro`, milestone "Diaposit
     expect(screen.getByLabelText('Destino tras la portada')).toBeInTheDocument()
   })
 
+  it('milestone "Inicio siempre es D1": NO muestra el campo "Ref. oculta" para un `intro`', () => {
+    createAndSelectIntro()
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    expect(screen.queryByLabelText('Ref. oculta')).not.toBeInTheDocument()
+    expect(screen.queryByText('Ref. oculta')).not.toBeInTheDocument()
+  })
+
+  it('"Ref. oculta" sigue mostrándose igual para `slide`/`final` (solo se oculta para `intro`)', () => {
+    act(() => {
+      useProjectStore.getState().selectNode(startNodeId())
+    })
+    const { unmount } = render(<Inspector filePath={TEST_FILE_PATH} />)
+    expect(screen.getByLabelText('Ref. oculta')).toBeInTheDocument()
+    unmount()
+
+    act(() => {
+      useProjectStore.getState().createNode('final', { x: 100, y: 0 })
+    })
+    const finalId = useProjectStore.getState().project.graph.nodes.find((n) => n.type === 'final')?.id
+    if (!finalId) throw new Error('setup inválido')
+    act(() => {
+      useProjectStore.getState().selectNode(finalId)
+    })
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+    expect(screen.getByLabelText('Ref. oculta')).toBeInTheDocument()
+  })
+
   it('la Asignatura está deshabilitada, con aviso, mientras no se elija un Ciclo', () => {
     createAndSelectIntro()
     render(<Inspector filePath={TEST_FILE_PATH} />)
