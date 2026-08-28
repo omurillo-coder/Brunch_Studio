@@ -3,6 +3,7 @@ import {
   addImageBlock,
   addResponse,
   addTextBlock,
+  asignaturaWorkspaceName,
   CICLOS,
   connect,
   createNode,
@@ -366,7 +367,7 @@ describe('toFlowNodes — nodo `intro` (milestone "Diapositiva de Inicio", Tarea
     expect(preview).toBe('(pendiente de completar)')
   })
 
-  it('un `intro` completo resuelve ciclo/asignatura a sus NOMBRES legibles, nunca a sus ids', () => {
+  it('un `intro` completo resuelve ciclo/asignatura a sus NOMBRES legibles (espacio de trabajo: ciclo con prefijo, asignatura con su código de módulo), nunca al id crudo del ciclo', () => {
     const ciclo = CICLOS[0]
     const asignatura = ciclo?.asignaturas[0]
     if (!ciclo || !asignatura) throw new Error('El catálogo de prueba está vacío')
@@ -381,9 +382,17 @@ describe('toFlowNodes — nodo `intro` (milestone "Diapositiva de Inicio", Tarea
 
     const flowNodes = toFlowNodes(project, [])
     const preview = flowNodes.find((n) => n.id === introId)?.data.bodyPreview
-    expect(preview).toBe(`${ciclo.name} · ${asignatura.name} — Simulación de urgencias`)
+    // Resumen de ESPACIO DE TRABAJO (tarjeta del canvas): el ciclo conserva
+    // su prefijo interno tal cual (`ciclo.name`, sin recortar) y la
+    // asignatura lleva su código de módulo entre paréntesis
+    // (`asignaturaWorkspaceName`, el propio `asignatura.id`) — al contrario
+    // que en la salida exportada, que sí recorta el prefijo del ciclo y
+    // nunca añade el código. Ver `cicloOutputName`/`asignaturaWorkspaceName`
+    // en `src/domain/catalog.ts`.
+    expect(preview).toBe(
+      `${ciclo.name} · ${asignaturaWorkspaceName(asignatura)} — Simulación de urgencias`,
+    )
     expect(preview).not.toContain(ciclo.id)
-    expect(preview).not.toContain(asignatura.id)
   })
 
   it('un `intro` sin targetNodeId se marca hasNoOutgoing, igual que una diapositiva "de continuar" sin destino', () => {

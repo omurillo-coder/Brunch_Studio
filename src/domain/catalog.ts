@@ -18,6 +18,39 @@ export interface CatalogCiclo {
   asignaturas: CatalogAsignatura[]
 }
 
+/**
+ * Nombre de un ciclo para la SALIDA (HTML/SCORM/revisión profes y el
+ * reproductor, tanto el "▶ Probar" de dentro de la app como el exportado):
+ * sin el prefijo interno de código antes del primer " - " (p.ej. "AC - " en
+ * `'AC - Actividades comerciales'`, o "ADAF - " en
+ * `'ADAF - Asistencia a la Dirección / Administración y Finanzas'`), que no
+ * significa nada para quien hace el caso práctico.
+ *
+ * En el espacio de trabajo (Inspector, buscador, tarjeta del canvas) se
+ * sigue usando `ciclo.name` tal cual, CON el prefijo — ahí sí es útil para
+ * el equipo de Content Factory. Si el nombre no tiene ese prefijo (p.ej. los
+ * troncales, `'TRONCAL ESP'`), se devuelve sin tocar.
+ */
+export function cicloOutputName(name: string): string {
+  const separatorIndex = name.indexOf(' - ')
+  return separatorIndex === -1 ? name : name.slice(separatorIndex + 3)
+}
+
+/**
+ * Nombre de una asignatura para el ESPACIO DE TRABAJO (selector de
+ * Asignatura del Inspector, resumen de la tarjeta del canvas): el nombre
+ * legible seguido de su código de módulo entre paréntesis (el propio `id`
+ * del catálogo, p.ej. `'Atención al paciente (IDMN_M01)'`) — útil para el
+ * equipo de Content Factory, que identifica cada asignatura por ese código.
+ *
+ * En la SALIDA (HTML/SCORM/revisión profes/reproductor) se sigue usando
+ * `asignatura.name` tal cual, sin el código: no significa nada para quien
+ * hace el caso práctico.
+ */
+export function asignaturaWorkspaceName(asignatura: CatalogAsignatura): string {
+  return `${asignatura.name} (${asignatura.id})`
+}
+
 export const CICLOS: CatalogCiclo[] = [
   {
     id: 'troncal_esp',

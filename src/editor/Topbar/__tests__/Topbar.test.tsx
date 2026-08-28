@@ -388,6 +388,40 @@ describe('Topbar — Exportar HTML', () => {
     expect(htmlBundleWriter.read('/tmp/experiencia.html')).toContain('<!doctype html>')
   })
 
+  it('el aviso de éxito flota bajo el botón "Exportar" y desaparece solo a los 5 segundos', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      const htmlBundleWriter = new MemoryHtmlBundleWriter()
+      const pickExportHtmlPath = vi.fn(async () => '/tmp/experiencia.html')
+      renderTopbar({
+        pickExportHtmlPath,
+        htmlBundleWriter,
+        assetRepository: new MemoryAssetRepository(),
+      })
+
+      openExportMenu()
+      fireEvent.click(screen.getByText('Exportar HTML'))
+
+      await waitFor(() => {
+        expect(screen.getByText('Experiencia exportada a HTML.')).toBeInTheDocument()
+      })
+
+      // Flota bajo el botón "Exportar" (`.exportMessages`, hermano de
+      // `.exportMenu` dentro del mismo `.exportMenuWrapper`), no como un
+      // elemento más de la fila de botones de la barra superior.
+      const message = screen.getByText('Experiencia exportada a HTML.')
+      expect(message.closest('[class*="exportMenuWrapper"]')).not.toBeNull()
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5000)
+      })
+
+      expect(screen.queryByText('Experiencia exportada a HTML.')).not.toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('si el usuario cancela el diálogo, no escribe nada ni muestra error', async () => {
     const htmlBundleWriter = new MemoryHtmlBundleWriter()
     const pickExportHtmlPath = vi.fn(async () => null)

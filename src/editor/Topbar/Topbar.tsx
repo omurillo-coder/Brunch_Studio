@@ -44,6 +44,39 @@ function SidebarToggleIcon() {
   )
 }
 
+/**
+ * Aviso flotante del resultado de una exportación (éxito o error), anclado
+ * bajo el botón "Exportar" (ver `.exportMessages` en `Topbar.module.css`) en
+ * vez de metido en la fila de botones de la barra superior — donde antes
+ * empujaba el resto de la barra y se quedaba fijo ahí para siempre.
+ *
+ * Se autodesaparece a los 5 segundos de montarse. El llamador solo lo monta
+ * mientras `message` no es `null` (ver el `&&` en `Topbar`) y cada hook de
+ * exportación pasa por `message: null` al empezar una exportación nueva
+ * (`setMessage(null)` justo antes de `setStatus('exporting')`), así que una
+ * exportación nueva siempre desmonta el aviso anterior y monta uno fresco
+ * —con su propio temporizador desde cero— aunque el texto sea idéntico.
+ */
+function ExportToast({ status, message }: { status: string; message: string }) {
+  const [expired, setExpired] = useState(false)
+
+  useEffect(() => {
+    const timer = setTimeout(() => setExpired(true), 5000)
+    return () => clearTimeout(timer)
+  }, [])
+
+  if (expired) return null
+
+  return (
+    <div
+      role={status === 'error' ? 'alert' : 'status'}
+      className={status === 'error' ? styles.exportError : styles.exportStatus}
+    >
+      {message}
+    </div>
+  )
+}
+
 function isEditableTarget(target: EventTarget | null): boolean {
   return (
     target instanceof HTMLElement &&
@@ -273,47 +306,25 @@ export function Topbar({
               </button>
             </div>
           )}
+          {/* Resultado de la última exportación, flotando bajo el botón
+              "Exportar" (el menú ya se ha cerrado al elegir la opción, ver
+              arriba) — mismo criterio de mensajes honestos y sin jerga que
+              `HomeScreen`. `role="alert"` solo para el fallo (interrumpe al
+              lector de pantalla porque hay algo que corregir); el éxito va
+              como `role="status"`, que se anuncia sin interrumpir. Cada uno
+              se autodesaparece a los 5s (ver `ExportToast`). */}
+          <div className={styles.exportMessages}>
+            {htmlExport.message && (
+              <ExportToast status={htmlExport.status} message={htmlExport.message} />
+            )}
+            {scormExport.message && (
+              <ExportToast status={scormExport.status} message={scormExport.message} />
+            )}
+            {teacherReviewExport.message && (
+              <ExportToast status={teacherReviewExport.status} message={teacherReviewExport.message} />
+            )}
+          </div>
         </div>
-        {/* Resultado de la última exportación, bajo el botón "Exportar"
-            (el menú ya se ha cerrado al elegir la opción, ver arriba) —
-            mismo criterio de mensajes honestos y sin jerga que
-            `HomeScreen`. `role="alert"` solo para el fallo (interrumpe al
-            lector de pantalla porque hay algo que corregir); el éxito va
-            como `role="status"`, que se anuncia sin interrumpir. */}
-        {htmlExport.message && (
-          <span
-            role={htmlExport.status === 'error' ? 'alert' : 'status'}
-            className={
-              htmlExport.status === 'error' ? styles.exportError : styles.exportStatus
-            }
-          >
-            {htmlExport.message}
-          </span>
-        )}
-        {/* Mismo criterio de mensaje honesto y sin jerga que "Exportar
-            HTML" de arriba. */}
-        {scormExport.message && (
-          <span
-            role={scormExport.status === 'error' ? 'alert' : 'status'}
-            className={
-              scormExport.status === 'error' ? styles.exportError : styles.exportStatus
-            }
-          >
-            {scormExport.message}
-          </span>
-        )}
-        {/* Mismo criterio de mensaje honesto y sin jerga que "Exportar
-            HTML"/"Exportar SCORM" de arriba. */}
-        {teacherReviewExport.message && (
-          <span
-            role={teacherReviewExport.status === 'error' ? 'alert' : 'status'}
-            className={
-              teacherReviewExport.status === 'error' ? styles.exportError : styles.exportStatus
-            }
-          >
-            {teacherReviewExport.message}
-          </span>
-        )}
         {/* "Probar desde aquí": mismo estilo visual que "▶ Probar", pero
             deshabilitado salvo con exactamente un nodo seleccionado en el
             lienzo (`canPlayFromSelection`). Pasa ese único id como segundo

@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { Canvas } from '../../Canvas'
 import { useProjectStore } from '../../../../store'
 import { resetProjectStore } from '../../../../store/testHelpers'
-import { CICLOS } from '../../../../domain'
+import { asignaturaWorkspaceName, CICLOS } from '../../../../domain'
 import { shortNodeLabel } from '../nodeTypes'
 import styles from '../NodeCard.module.css'
 
@@ -69,7 +69,7 @@ describe('NodeCard — fondo y contenido del nodo `intro` (Diapositiva de Inicio
     expect(await screen.findByText('(pendiente de completar)')).toBeInTheDocument()
   })
 
-  it('un `intro` completo muestra los NOMBRES resueltos de ciclo/asignatura/caso, nunca sus ids', async () => {
+  it('un `intro` completo muestra los NOMBRES resueltos de ciclo/asignatura/caso (espacio de trabajo: ciclo con prefijo, asignatura con su código de módulo), nunca el id crudo del ciclo', async () => {
     const ciclo = CICLOS[0]
     const asignatura = ciclo?.asignaturas[0]
     if (!ciclo || !asignatura) throw new Error('El catálogo de prueba está vacío')
@@ -85,10 +85,12 @@ describe('NodeCard — fondo y contenido del nodo `intro` (Diapositiva de Inicio
 
     render(<Canvas />)
 
-    const expectedText = `${ciclo.name} · ${asignatura.name} — Simulación de urgencias`
+    // Mismo criterio que `adapter.test.ts`: espacio de trabajo, así que el
+    // ciclo conserva su prefijo y la asignatura lleva su código de módulo
+    // entre paréntesis (`asignaturaWorkspaceName`).
+    const expectedText = `${ciclo.name} · ${asignaturaWorkspaceName(asignatura)} — Simulación de urgencias`
     expect(await screen.findByText(expectedText)).toBeInTheDocument()
     expect(screen.queryByText(ciclo.id)).not.toBeInTheDocument()
-    expect(screen.queryByText(asignatura.id)).not.toBeInTheDocument()
   })
 
   it('tiene un handle de conexión SALIENTE, sin ningún handle de ENTRADA', async () => {

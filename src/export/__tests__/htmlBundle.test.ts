@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { buildHtmlBundle } from '../htmlBundle'
 import { BUNDLE_ELEMENT_ID } from '../exportedPlayerScript'
 import type { ExportAssetMap } from '../exportAssets'
-import { CICLOS } from '../../domain'
+import { CICLOS, cicloOutputName } from '../../domain'
 import type {
   ContentBlock,
   DecisionResponse,
@@ -1198,7 +1198,27 @@ describe('buildHtmlBundle — diapositiva de Inicio: cicloId/asignaturaId resuel
 
     const names = embeddedIntroNames(buildHtmlBundle(introProject(), {}))
 
-    expect(names.introCicloName).toBe(ciclo.name)
+    // `CICLOS[0]` ("TRONCAL ESP") no lleva prefijo de código, así que
+    // `cicloOutputName` no le cambia nada aquí — el siguiente test cubre el
+    // caso con prefijo.
+    expect(names.introCicloName).toBe(cicloOutputName(ciclo.name))
+    expect(names.introAsignaturaName).toBe(asignatura.name)
+  })
+
+  it('un ciclo con prefijo de código (p.ej. "AC - ") lo pierde en la salida exportada', () => {
+    const ciclo = CICLOS.find((candidate) => candidate.name.includes(' - '))
+    if (!ciclo) throw new Error('El catálogo necesita al menos un ciclo con prefijo " - "')
+    const asignatura = ciclo.asignaturas[0]
+    if (!asignatura) throw new Error('El ciclo de prueba no tiene asignaturas')
+
+    const names = embeddedIntroNames(
+      buildHtmlBundle(introProject({ cicloId: ciclo.id, asignaturaId: asignatura.id }), {}),
+    )
+
+    expect(names.introCicloName).toBe(cicloOutputName(ciclo.name))
+    expect(names.introCicloName).not.toBe(ciclo.name)
+    // La asignatura no lleva ningún código en la salida (eso es exclusivo
+    // del espacio de trabajo, ver `asignaturaWorkspaceName`).
     expect(names.introAsignaturaName).toBe(asignatura.name)
   })
 
@@ -1244,7 +1264,7 @@ describe('buildHtmlBundle — diapositiva de Inicio: comportamiento del HTML gen
 
     const card = currentCard()
     expect(card.querySelector('.introContext')?.textContent).toBe(
-      `${ciclo.name} · ${asignatura.name}`,
+      `${cicloOutputName(ciclo.name)} · ${asignatura.name}`,
     )
     expect(card.querySelector('.title')?.textContent).toBe('Caso de exportación')
     expect(card.querySelector('.primaryButton')?.textContent).toBe('Continuar')

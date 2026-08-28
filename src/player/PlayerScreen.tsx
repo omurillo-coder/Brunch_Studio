@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useProject, useProjectStore, usePreviewStartNodeId } from '../store'
-import { CICLOS, DEFAULT_CONTINUE_LABEL, RESPONSE_LETTERS } from '../domain'
+import { CICLOS, cicloOutputName, DEFAULT_CONTINUE_LABEL, RESPONSE_LETTERS } from '../domain'
 import type { ContentBlock, DecisionResponse, IntroNode, SlideNode } from '../domain'
 import { advance, choose, getInitialState, getView } from './runtime'
 import type { PlayerState } from './runtime'
@@ -267,7 +267,16 @@ function resolveIntroNames(node: IntroNode): { cicloName?: string; asignaturaNam
     ciclo && node.asignaturaId
       ? ciclo.asignaturas.find((candidate) => candidate.id === node.asignaturaId)
       : undefined
-  return { cicloName: ciclo?.name, asignaturaName: asignatura?.name }
+  // Este reproductor ("▶ Probar", dentro de la app) simula fielmente lo que
+  // verá el alumno en la salida final: el nombre del ciclo pierde su
+  // prefijo interno de código (`cicloOutputName`, ver ese comentario en
+  // `src/domain/catalog.ts`), igual que `resolveIntroCatalogNames` en
+  // `src/export/htmlBundle.ts`. El de la asignatura no lleva código, ese es
+  // exclusivo del espacio de trabajo (Inspector/canvas).
+  return {
+    cicloName: ciclo ? cicloOutputName(ciclo.name) : undefined,
+    asignaturaName: asignatura?.name,
+  }
 }
 
 /**

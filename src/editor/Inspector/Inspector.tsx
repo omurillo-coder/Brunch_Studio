@@ -8,6 +8,7 @@ import {
 } from '../../store'
 import {
   asignaturaBelongsToCiclo,
+  asignaturaWorkspaceName,
   CICLOS,
   COMPARISON_OPERATORS,
   DEFAULT_CONTINUE_LABEL,
@@ -1561,7 +1562,7 @@ function IntroSection({ node, allNodes }: { node: IntroNode; allNodes: Node[] })
           <option value={NO_CATALOG_VALUE}>— Elige una asignatura —</option>
           {asignaturaOptions.map((asignatura) => (
             <option key={asignatura.id} value={asignatura.id}>
-              {asignatura.name}
+              {asignaturaWorkspaceName(asignatura)}
             </option>
           ))}
         </select>

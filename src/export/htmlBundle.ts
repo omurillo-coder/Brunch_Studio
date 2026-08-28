@@ -1,5 +1,5 @@
 import { generateHTML } from '@tiptap/core'
-import { CICLOS, DEFAULT_CONTINUE_LABEL, RESPONSE_LETTERS } from '../domain'
+import { CICLOS, cicloOutputName, DEFAULT_CONTINUE_LABEL, RESPONSE_LETTERS } from '../domain'
 import type { ProjectDocument } from '../domain'
 import { RICH_TEXT_EXTENSIONS, parseRichBody } from '../editor/richText/richTextContent'
 import type { ExportAssetMap } from './exportAssets'
@@ -228,6 +228,13 @@ function renderNodeBodies(project: ProjectDocument): Record<string, string> {
  * "probarse"/exportarse con la portada incompleta antes de que
  * `validateIntroForExport` bloquee la exportación real (ver
  * `useHtmlExport`/`useScormExport`).
+ *
+ * El nombre del ciclo se devuelve sin su prefijo interno de código
+ * (`cicloOutputName`, p.ej. "AC - "/"ADAF - "): no significa nada para quien
+ * hace el caso práctico, solo es útil dentro del espacio de trabajo (ver
+ * ese comentario en `src/domain/catalog.ts`). El de la asignatura se
+ * devuelve tal cual, sin su código de módulo — ese sí es exclusivo del
+ * espacio de trabajo.
  */
 function resolveIntroCatalogNames(project: ProjectDocument): {
   cicloName: string | null
@@ -243,7 +250,7 @@ function resolveIntroCatalogNames(project: ProjectDocument): {
       : undefined
 
   return {
-    cicloName: ciclo?.name ?? null,
+    cicloName: ciclo ? cicloOutputName(ciclo.name) : null,
     asignaturaName: asignatura?.name ?? null,
   }
 }

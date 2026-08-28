@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { PlayerScreen } from '../PlayerScreen'
 import { useProjectStore } from '../../store'
 import { resetProjectStore } from '../../store/testHelpers'
-import { CICLOS, createProject } from '../../domain'
+import { CICLOS, cicloOutputName, createProject } from '../../domain'
 import type { AppServices } from '../../app/AppServices'
 import { AppServicesProvider } from '../../app/AppServicesContext'
 import { MemoryAssetRepository } from '../../persistence'
@@ -857,8 +857,39 @@ describe('PlayerScreen: portada (nodo intro, milestone "Diapositiva de Inicio")'
     renderPlayer()
 
     expect(screen.getByText('Caso de la fábrica')).toBeInTheDocument()
-    expect(screen.getByText(`${ciclo.name} · ${asignatura.name}`)).toBeInTheDocument()
+    // `CICLOS[0]` ("TRONCAL ESP") no lleva prefijo de código, así que
+    // `cicloOutputName` no le cambia nada aquí — el siguiente test cubre el
+    // caso con prefijo, que sí se recorta.
+    expect(screen.getByText(`${cicloOutputName(ciclo.name)} · ${asignatura.name}`)).toBeInTheDocument()
     expect(screen.getByText('Continuar')).toBeInTheDocument()
+  })
+
+  it('"▶ Probar" simula la salida real: un ciclo con prefijo de código (p.ej. "AC - ") lo pierde, igual que en la exportación', () => {
+    const ciclo = CICLOS.find((candidate) => candidate.name.includes(' - '))
+    if (!ciclo) throw new Error('El catálogo necesita al menos un ciclo con prefijo " - "')
+    const asignatura = ciclo.asignaturas[0]
+    if (!asignatura) throw new Error('El ciclo de prueba no tiene asignaturas')
+
+    act(() => {
+      useProjectStore.getState().createNode('intro', { x: -200, y: 0 })
+    })
+    const introId = useProjectStore.getState().project.graph.startNodeId
+    act(() => {
+      useProjectStore.getState().updateNode(introId, {
+        cicloId: ciclo.id,
+        asignaturaId: asignatura.id,
+        caseName: 'Caso con ciclo prefijado',
+      })
+      useProjectStore.getState().createNode('final', { x: 200, y: 0 })
+    })
+    const finalId = otherNodeIdOf('final')
+    act(() => {
+      useProjectStore.getState().connect(introId, finalId)
+    })
+    renderPlayer()
+
+    expect(screen.getByText(`${cicloOutputName(ciclo.name)} · ${asignatura.name}`)).toBeInTheDocument()
+    expect(screen.queryByText(`${ciclo.name} · ${asignatura.name}`)).not.toBeInTheDocument()
   })
 
   it('el botón de continuar de la portada avanza a targetNodeId (primera diapositiva narrativa real)', () => {

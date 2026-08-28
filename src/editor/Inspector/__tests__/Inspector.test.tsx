@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { Inspector } from '../Inspector'
 import { useProjectStore } from '../../../store'
 import { resetProjectStore } from '../../../store/testHelpers'
-import { CICLOS } from '../../../domain'
+import { asignaturaWorkspaceName, CICLOS } from '../../../domain'
 import type { SlideNode } from '../../../domain'
 import { AppServicesProvider } from '../../../app/AppServicesContext'
 import type { AppServices } from '../../../app/AppServices'
@@ -1816,7 +1816,11 @@ describe('Inspector — diapositiva de Inicio (nodo `intro`, milestone "Diaposit
     expect(asignaturaSelect).not.toBeDisabled()
     const firstAsignatura = ciclo.asignaturas[0]
     if (!firstAsignatura) throw new Error('El ciclo de prueba no tiene asignaturas')
-    expect(within(asignaturaSelect as HTMLElement).getByText(firstAsignatura.name)).toBeInTheDocument()
+    // Espacio de trabajo: la opción muestra el nombre + su código de módulo
+    // entre paréntesis (`asignaturaWorkspaceName`), no el nombre a secas.
+    expect(
+      within(asignaturaSelect as HTMLElement).getByText(asignaturaWorkspaceName(firstAsignatura)),
+    ).toBeInTheDocument()
   })
 
   it('cambiar de Ciclo limpia la Asignatura elegida si ya no pertenece al ciclo nuevo (misma llamada a updateNode)', () => {

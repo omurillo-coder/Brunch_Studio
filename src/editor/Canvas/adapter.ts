@@ -1,5 +1,5 @@
 import type { Edge as XyEdge, Node as XyNode } from '@xyflow/react'
-import { CICLOS, deriveEdges, RESPONSE_LETTERS } from '../../domain'
+import { asignaturaWorkspaceName, CICLOS, deriveEdges, RESPONSE_LETTERS } from '../../domain'
 import type {
   DecisionResponse,
   Edge as DomainEdge,
@@ -236,7 +236,13 @@ function introSummaryFor(node: IntroNode): string {
   const caseName = node.caseName.trim()
 
   if (ciclo && asignatura && caseName) {
-    return `${ciclo.name} · ${asignatura.name} — ${caseName}`
+    // Resumen de ESPACIO DE TRABAJO: el ciclo conserva su prefijo interno
+    // ("AC - ", "ADAF - "…) y la asignatura lleva su código de módulo entre
+    // paréntesis (`asignaturaWorkspaceName`) — al contrario que en la
+    // salida (HTML/SCORM/revisión profes/reproductor), donde el ciclo pierde
+    // ese prefijo (`cicloOutputName`) y la asignatura no lleva código. Ver
+    // comentarios de ambas funciones en `src/domain/catalog.ts`.
+    return `${ciclo.name} · ${asignaturaWorkspaceName(asignatura)} — ${caseName}`
   }
   return '(pendiente de completar)'
 }
