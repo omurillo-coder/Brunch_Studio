@@ -1,6 +1,18 @@
 import { useState } from 'react'
 import { useProject, useProjectStore, usePreviewStartNodeId } from '../store'
-import { CICLOS, cicloOutputName, DEFAULT_CONTINUE_LABEL, RESPONSE_LETTERS } from '../domain'
+import {
+  CICLOS,
+  cicloOutputName,
+  DEFAULT_CONTINUE_LABEL,
+  INTRO_ASIGNATURA_PLACEHOLDER,
+  INTRO_CASE_NAME_PLACEHOLDER,
+  INTRO_CICLO_PLACEHOLDER,
+  INTRO_HEADING,
+  INTRO_SUBTITLE_ACCENT,
+  INTRO_SUBTITLE_PREFIX,
+  INTRO_SUBTITLE_SUFFIX,
+  RESPONSE_LETTERS,
+} from '../domain'
 import type { ContentBlock, DecisionResponse, IntroNode, SlideNode } from '../domain'
 import { advance, choose, getInitialState, getView } from './runtime'
 import type { PlayerState } from './runtime'
@@ -8,6 +20,7 @@ import { useAppServices } from '../app/AppServicesContext'
 import { useAssetDataUri } from '../hooks/useAssetDataUri'
 import type { AssetRepository } from '../persistence'
 import { RichTextView } from '../editor/richText/RichTextView'
+import ilernaLogoUrl from '../assets/playerIntro/ilerna-logo.png'
 import styles from './PlayerScreen.module.css'
 
 /** Mismo criterio de orden que `Inspector`: por letra (A→B→C→D) fijo,
@@ -280,35 +293,71 @@ function resolveIntroNames(node: IntroNode): { cicloName?: string; asignaturaNam
 }
 
 /**
- * Tarjeta de portada (nodo `intro`, milestone "Diapositiva de Inicio"):
- * primera vista del recorrido en casi todo proyecto (ver comentario de
- * `IntroNodeSchema` en `src/domain/schemas.ts`). Jerarquía visual: ciclo +
- * asignatura como contexto secundario (arriba, apagado, igual que
- * `.nodeReferenceTitle`), `caseName` como título principal (`.title`, mismo
- * peso visual que el título fijo de la vista Final) y un botón de continuar
- * con el mismo estilo que el de la vista `continue` — la portada no define
- * `continueLabel` propio (no existe en `IntroNodeSchema`), así que usa
- * siempre `DEFAULT_CONTINUE_LABEL`.
+ * Portada de marca iLERNA (nodo `intro`, milestone "Portada de marca
+ * iLERNA"): primera vista del recorrido en casi todo proyecto (ver
+ * comentario de `IntroNodeSchema` en `src/domain/schemas.ts`). Diseño de
+ * referencia entregado por Content Factory: logo arriba, titular fijo de
+ * marca ("¿Qué harías tú?" + subtítulo con "decisiones" en acento),
+ * ciclo/asignatura como contexto secundario, `caseName` como título de la
+ * actividad junto al botón de continuar (abajo, empujado por
+ * `.introFooter { margin-top: auto }`), e ilustración de marca a la derecha
+ * (oculta en móvil, ver `.introIllustration`/media query en
+ * `PlayerScreen.module.css`). El botón de continuar usa el mismo estilo que
+ * la vista `continue` — la portada no define `continueLabel` propio (no
+ * existe en `IntroNodeSchema`), así que usa siempre `DEFAULT_CONTINUE_LABEL`.
+ *
+ * Fondo/tipografía/colores FIJOS de marca, independientes del tema
+ * claro/oscuro de la app (`.introCard` en `PlayerScreen.module.css` usa
+ * colores propios en vez de los tokens `--bs-color-*`): es una portada de
+ * marca, no una superficie más de la interfaz de edición.
  *
  * Ningún campo es obligatorio para pintar esta vista (el proyecto puede
  * "probarse" incompleto antes de exportar, ver `validateIntroForExport`):
- * cada pieza que falte (ciclo/asignatura sin elegir, `caseName` vacío) se
- * omite sin más, nunca un placeholder o un error — mismo criterio de "vacío
- * = nada" que el resto de este archivo (p.ej. `ContentBlockView`, bloque de
- * texto vacío).
+ * a diferencia del resto de vistas del Player (donde "vacío" se omite sin
+ * más), aquí cada pieza que falte (ciclo/asignatura sin elegir, `caseName`
+ * vacío) se sustituye por un placeholder gris — decisión de producto
+ * explícita para esta portada, ver `INTRO_CICLO_PLACEHOLDER` y compañía.
+ * Traducción literal en `buildIntroCard` de
+ * `src/export/exportedPlayerScript.ts`.
  */
 function IntroCard({ node, onContinue }: { node: IntroNode; onContinue: () => void }) {
   const { cicloName, asignaturaName } = resolveIntroNames(node)
-  const contextLabel = [cicloName, asignaturaName].filter(Boolean).join(' · ')
   const caseName = node.caseName.trim()
 
   return (
-    <div className={styles.card}>
-      {contextLabel && <p className={styles.introContext}>{contextLabel}</p>}
-      {caseName && <h1 className={styles.title}>{caseName}</h1>}
-      <button type="button" className={styles.primaryButton} onClick={onContinue}>
-        {DEFAULT_CONTINUE_LABEL}
-      </button>
+    <div className={styles.introCard}>
+      <div className={styles.introContent}>
+        <img className={styles.introLogo} src={ilernaLogoUrl} alt="iLERNA" />
+        <div className={styles.introHeadingGroup}>
+          <h1 className={styles.introHeading}>{INTRO_HEADING}</h1>
+          <p className={styles.introSubtitle}>
+            {INTRO_SUBTITLE_PREFIX}
+            <span className={styles.introSubtitleAccent}>{INTRO_SUBTITLE_ACCENT}</span>
+            {INTRO_SUBTITLE_SUFFIX}
+          </p>
+        </div>
+        <div className={styles.introFooter}>
+          <p className={caseName ? styles.introCaseTitle : styles.introCaseTitlePlaceholder}>
+            {caseName || INTRO_CASE_NAME_PLACEHOLDER}
+          </p>
+          <button type="button" className={styles.introButton} onClick={onContinue}>
+            {DEFAULT_CONTINUE_LABEL}
+          </button>
+        </div>
+        {/* Ciclo/asignatura: contexto secundario, deliberadamente pequeño y
+            apagado — va DEBAJO del botón (no encima, como en un primer
+            borrador) para no competir en protagonismo con el titular fijo
+            de marca ni con el título de la actividad. */}
+        <div className={styles.introMeta}>
+          <p className={cicloName ? styles.introMetaLine : styles.introMetaLinePlaceholder}>
+            {cicloName || INTRO_CICLO_PLACEHOLDER}
+          </p>
+          <p className={asignaturaName ? styles.introMetaLine : styles.introMetaLinePlaceholder}>
+            {asignaturaName || INTRO_ASIGNATURA_PLACEHOLDER}
+          </p>
+        </div>
+      </div>
+      <div className={styles.introIllustration} aria-hidden="true" />
     </div>
   )
 }

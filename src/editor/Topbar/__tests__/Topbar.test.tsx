@@ -12,6 +12,7 @@ import {
 import { useProjectStore } from '../../../store'
 import { resetProjectStore } from '../../../store/testHelpers'
 import { CICLOS } from '../../../domain'
+import { BUNDLE_ELEMENT_ID } from '../../../export/exportedPlayerScript'
 
 const TEST_FILE_PATH = '/tmp/topbar-test.brunch'
 
@@ -659,6 +660,18 @@ describe('Topbar — Exportar SCORM', () => {
       ).toBeInTheDocument()
     })
     expect(scormPackageWriter.writtenPaths()).toEqual(['/tmp/experiencia.zip'])
-    expect(scormPackageWriter.read('/tmp/experiencia.zip')?.html).not.toContain('data:image')
+    // No basta con "el HTML no contiene ningún `data:image`": desde el
+    // rediseño de la portada de marca (milestone "Portada de marca iLERNA")
+    // el HTML SIEMPRE lleva el logo/ilustración embebidos como `data:` URI,
+    // con independencia de que el asset del PROYECTO haya fallado. Se
+    // comprueba en su lugar que el asset fallido en concreto (identificado
+    // por su id, `asset-inexistente`) no tiene entrada resuelta en
+    // `assetUris` — ver `buildAssetUris` en `htmlBundle.ts`.
+    const html = scormPackageWriter.read('/tmp/experiencia.zip')?.html ?? ''
+    const marker = `<script type="application/json" id="${BUNDLE_ELEMENT_ID}">`
+    const start = html.indexOf(marker) + marker.length
+    const end = html.indexOf('</script>', start)
+    const bundle = JSON.parse(html.slice(start, end)) as { assetUris?: Record<string, string> }
+    expect(bundle.assetUris?.['asset-inexistente']).toBeUndefined()
   })
 })

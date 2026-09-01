@@ -129,17 +129,168 @@ body {
   color: var(--bs-color-text);
 }
 
-/* Contexto secundario de la portada (nodo \`intro\`): ciclo + asignatura, por
-   encima de \`caseName\` (\`.title\`). Traducción literal de \`.introContext\` en
-   \`src/player/PlayerScreen.module.css\` — ver \`buildCard\`, rama \`'intro'\`, en
-   \`exportedPlayerScript.ts\`. */
-.introContext {
+/* ---------------------------------------------------------------------
+   Portada de marca iLERNA (nodo \`intro\`) — traducción literal de la misma
+   sección de \`src/player/PlayerScreen.module.css\` (mismos nombres de clase,
+   mismos valores). Construida por \`buildIntroCard\` en
+   \`exportedPlayerScript.ts\`.
+
+   Lo que NO está aquí (a propósito): los dos \`@font-face\` de FS Millbank y
+   el \`background-image\` de \`.introIllustration\`. Esta hoja es un string
+   ESTÁTICO sin interpolación, y esos tres valores son \`data:\` URI que solo
+   se conocen en tiempo de exportación (ver \`introBrand\` en el bundle JSON,
+   \`resolvePlayerIntroBrandAssets\` en \`introBrandAssets.ts\`) — el propio
+   runtime los inyecta en un \`<style>\` aparte al arrancar, ver
+   \`injectIntroBrandStyles\` en \`exportedPlayerScript.ts\`. Sin \`introBrand\`
+   (bundle antiguo o de test sin este dato), \`.introIllustration\` queda sin
+   imagen de fondo y el texto cae a \`var(--bs-font-sans)\` — degradación
+   correcta, no un error.
+   --------------------------------------------------------------------- */
+
+.introCard {
+  position: relative;
+  width: 100%;
+  max-width: 920px;
+  min-height: 440px;
+  overflow: hidden;
+  border-radius: var(--bs-radius-lg);
+  background: #ffffff;
+  border: 1px solid var(--bs-color-border);
+  box-shadow: var(--bs-shadow-sm);
+  font-family: 'FS Millbank', var(--bs-font-sans);
+  color: #0a0a0a;
+}
+
+.introContent {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  max-width: 54%;
+  padding: 36px 40px;
+}
+
+.introLogo {
+  height: 26px;
+  width: auto;
+  align-self: flex-start;
+}
+
+.introHeadingGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.introHeading {
   margin: 0;
-  font-size: var(--bs-font-size-sm);
-  font-weight: 600;
-  color: var(--bs-color-text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  font-family: inherit;
+  font-weight: 700;
+  font-size: clamp(28px, 4vw, 42px);
+  line-height: 1.05;
+  letter-spacing: -0.01em;
+  color: #0a0a0a;
+}
+
+.introSubtitle {
+  margin: 0;
+  max-width: 34ch;
+  font-size: 15px;
+  line-height: 1.5;
+  color: #1a1a1a;
+}
+
+.introSubtitleAccent {
+  font-weight: 700;
+  color: var(--bs-color-accent);
+}
+
+.introFooter {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.introCaseTitle {
+  margin: 0;
+  font-weight: 700;
+  font-size: 18px;
+  line-height: 1.3;
+  color: #0a0a0a;
+}
+
+.introCaseTitlePlaceholder {
+  margin: 0;
+  font-weight: 400;
+  font-size: 18px;
+  line-height: 1.3;
+  font-style: italic;
+  color: #a3a3a3;
+}
+
+.introButton {
+  flex: 0 0 auto;
+  padding: 13px 30px;
+  border: none;
+  border-radius: var(--bs-radius-sm);
+  background: var(--bs-color-accent);
+  color: #0a0a0a;
+  font-family: inherit;
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.introButton:hover {
+  background: var(--bs-color-accent-hover);
+}
+
+/* Ciclo/asignatura: contexto secundario deliberadamente discreto, debajo
+   del botón (no encima: ver comentario de \`.introMeta\` en
+   \`PlayerScreen.module.css\` sobre por qué). */
+.introMeta {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.introMetaLine {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 400;
+  color: #8a8a8a;
+}
+
+.introMetaLinePlaceholder {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 400;
+  font-style: italic;
+  color: #a3a3a3;
+}
+
+.introIllustration {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-repeat: no-repeat;
+  background-position: top right;
+  background-size: 85% auto;
+}
+
+@media (max-width: 640px) {
+  .introIllustration {
+    display: none;
+  }
+
+  .introContent {
+    max-width: none;
+    padding: 28px 24px;
+  }
 }
 
 .body {
@@ -399,8 +550,19 @@ button:focus-visible {
 
 /* "Diapositiva {número}", grande y bien visible, antes del propio
    contenido de la tarjeta — la referencia que el profesor usa en su hoja
-   de validación externa. */
+   de validación externa. \`position: relative\` + \`z-index: 1\` (sin mover
+   nada) es necesario ÚNICAMENTE para la portada (\`.introCard\`): al
+   insertarse como su primer hijo (\`card.insertBefore\`, ver \`render()\` en
+   \`exportedPlayerScript.ts\`) queda HERMANO de \`.introIllustration\`
+   (\`position: absolute; z-index: 0\`), que sin este empate de "estar
+   posicionado" pintaría por encima de esta etiqueta (estática) aunque vaya
+   antes en el DOM — las reglas de contexto de apilamiento pintan los
+   elementos posicionados por encima de los estáticos, sea cual sea su
+   orden. En el resto de tarjetas (\`.card\`, sin ninguna capa posicionada
+   dentro) esta regla no cambia nada visualmente. */
 .reviewSlideLabel {
+  position: relative;
+  z-index: 1;
   margin: 0;
   font-size: 22px;
   font-weight: 700;

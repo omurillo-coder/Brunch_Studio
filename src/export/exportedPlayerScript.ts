@@ -109,6 +109,14 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
   // entero.
   var introCicloName = bundle.introCicloName || null;
   var introAsignaturaName = bundle.introAsignaturaName || null;
+  // Assets de marca de la portada (logo/ilustración/tipografía), ya
+  // resueltos a \`data:\` URI EN TIEMPO DE EXPORTACIÓN — ver
+  // \`resolvePlayerIntroBrandAssets\` en \`introBrandAssets.ts\`. \`null\` si
+  // quien generó el bundle no los resolvió (no pasa en producción, ver
+  // comentario de \`ExportBundle.introBrand\` en \`htmlBundle.ts\`); en ese
+  // caso \`buildIntroCard\`/\`injectIntroBrandStyles\` degradan sin logo, sin
+  // ilustración y con la tipografía de sistema de repuesto.
+  var introBrand = bundle.introBrand || null;
 
   // Textos del botón "Salir" de la vista 'final' y de su aviso posterior.
   // Traducción literal de los mismos textos fijos de PlayerScreen.tsx
@@ -694,41 +702,99 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
     return wrapper;
   }
 
+  /** Inyecta EN \`<head>\`, UNA sola vez al arrancar (llamada junto a
+   *  \`render()\` al final de este script), los tres valores de
+   *  \`introBrand\` que \`exportedStyles.ts\` NO puede incluir por ser un
+   *  string estático sin interpolación (ver comentario de esa sección): los
+   *  dos \`@font-face\` de FS Millbank y el \`background-image\` de
+   *  \`.introIllustration\`, los tres como \`data:\` URI. Sin \`introBrand\`
+   *  (ver comentario de esa variable más arriba) no hace nada: el texto cae
+   *  a \`var(--bs-font-sans)\` y la ilustración queda sin imagen de fondo,
+   *  degradación correcta, no un error. */
+  function injectIntroBrandStyles() {
+    if (!introBrand) {
+      return;
+    }
+    var style = el('style', null);
+    style.textContent =
+      "@font-face { font-family: 'FS Millbank'; src: url('" +
+      introBrand.fontRegularDataUri +
+      "') format('opentype'); font-weight: 400; font-style: normal; font-display: swap; }" +
+      "@font-face { font-family: 'FS Millbank'; src: url('" +
+      introBrand.fontBoldDataUri +
+      "') format('opentype'); font-weight: 700; font-style: normal; font-display: swap; }" +
+      '.introIllustration { background-image: url("' +
+      introBrand.backgroundDataUri +
+      '"); }';
+    document.head.appendChild(style);
+  }
+
   /** Traducción literal de \`IntroCard\` en \`src/player/PlayerScreen.tsx\`:
-   *  contexto (ciclo · asignatura, ya resueltos, ver \`introCicloName\`/
-   *  \`introAsignaturaName\` arriba) + \`caseName\` como título principal + botón
-   *  de continuar con el mismo texto fijo que la vista 'continue' sin
-   *  \`continueLabel\` propio (un \`intro\` no tiene ese campo). Cada pieza que
-   *  falte (contexto vacío, \`caseName\` vacío) se omite sin más — mismo
-   *  criterio de "vacío = nada" que el resto de este runtime. */
+   *  logo + titular fijo de marca (\`texts.introHeading\`/subtítulo con
+   *  "decisiones" en acento) + ciclo/asignatura pequeños bajo el botón +
+   *  \`caseName\` junto al botón de continuar (mismo texto fijo que la vista
+   *  'continue' sin \`continueLabel\` propio, un \`intro\` no tiene ese campo)
+   *  + ilustración de fondo a pantalla completa. A diferencia del resto de
+   *  vistas de este runtime ("vacío" se omite sin más), aquí cada pieza que
+   *  falte (ciclo/asignatura sin elegir, \`caseName\` vacío) se sustituye por
+   *  un placeholder gris (\`texts.introCicloPlaceholder\` y compañía) — ver
+   *  comentario de \`IntroCard\`. */
   function buildIntroCard(node) {
-    var card = el('section', 'card');
+    var card = el('section', 'introCard');
 
-    var contextLabel = [introCicloName, introAsignaturaName]
-      .filter(function (value) {
-        return !!value;
-      })
-      .join(' · ');
-    if (contextLabel) {
-      var context = el('p', 'introContext');
-      context.textContent = contextLabel;
-      card.appendChild(context);
+    var illustration = el('div', 'introIllustration');
+    illustration.setAttribute('aria-hidden', 'true');
+    card.appendChild(illustration);
+
+    var content = el('div', 'introContent');
+    card.appendChild(content);
+
+    if (introBrand && introBrand.logoDataUri) {
+      var logo = el('img', 'introLogo');
+      logo.src = introBrand.logoDataUri;
+      logo.alt = 'iLERNA';
+      content.appendChild(logo);
     }
 
+    var headingGroup = el('div', 'introHeadingGroup');
+    var heading = el('h1', 'introHeading');
+    heading.textContent = texts.introHeading;
+    headingGroup.appendChild(heading);
+    var subtitle = el('p', 'introSubtitle');
+    subtitle.appendChild(document.createTextNode(texts.introSubtitlePrefix));
+    var accent = el('span', 'introSubtitleAccent');
+    accent.textContent = texts.introSubtitleAccent;
+    subtitle.appendChild(accent);
+    subtitle.appendChild(document.createTextNode(texts.introSubtitleSuffix));
+    headingGroup.appendChild(subtitle);
+    content.appendChild(headingGroup);
+
+    var footer = el('div', 'introFooter');
     var caseName = trimmed(node.caseName);
-    if (caseName) {
-      var heading = el('h1', 'title');
-      heading.textContent = caseName;
-      card.appendChild(heading);
-    }
+    var caseTitle = el('p', caseName ? 'introCaseTitle' : 'introCaseTitlePlaceholder');
+    caseTitle.textContent = caseName || texts.introCaseNamePlaceholder;
+    footer.appendChild(caseTitle);
 
-    var continueButton = el('button', 'primaryButton');
+    var continueButton = el('button', 'introButton');
     continueButton.type = 'button';
     continueButton.textContent = texts.defaultContinueLabel;
     continueButton.addEventListener('click', function () {
       setState(advance(state));
     });
-    card.appendChild(continueButton);
+    footer.appendChild(continueButton);
+    content.appendChild(footer);
+
+    var meta = el('div', 'introMeta');
+    var cicloLine = el('p', introCicloName ? 'introMetaLine' : 'introMetaLinePlaceholder');
+    cicloLine.textContent = introCicloName || texts.introCicloPlaceholder;
+    meta.appendChild(cicloLine);
+    var asignaturaLine = el(
+      'p',
+      introAsignaturaName ? 'introMetaLine' : 'introMetaLinePlaceholder',
+    );
+    asignaturaLine.textContent = introAsignaturaName || texts.introAsignaturaPlaceholder;
+    meta.appendChild(asignaturaLine);
+    content.appendChild(meta);
 
     return card;
   }
@@ -1114,6 +1180,7 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
     render();
   }
 
+  injectIntroBrandStyles();
   render();
 })();
 `

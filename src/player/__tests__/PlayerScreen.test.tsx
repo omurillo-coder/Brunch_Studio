@@ -857,10 +857,13 @@ describe('PlayerScreen: portada (nodo intro, milestone "Diapositiva de Inicio")'
     renderPlayer()
 
     expect(screen.getByText('Caso de la fábrica')).toBeInTheDocument()
-    // `CICLOS[0]` ("TRONCAL ESP") no lleva prefijo de código, así que
-    // `cicloOutputName` no le cambia nada aquí — el siguiente test cubre el
-    // caso con prefijo, que sí se recorta.
-    expect(screen.getByText(`${cicloOutputName(ciclo.name)} · ${asignatura.name}`)).toBeInTheDocument()
+    // Ciclo y asignatura van en dos líneas independientes (`.introMetaLine`
+    // x2, ver `IntroCard`), no unidas en un solo string " · " como antes del
+    // rediseño de la portada de marca. `CICLOS[0]` ("TRONCAL ESP") no lleva
+    // prefijo de código, así que `cicloOutputName` no le cambia nada aquí —
+    // el siguiente test cubre el caso con prefijo, que sí se recorta.
+    expect(screen.getByText(cicloOutputName(ciclo.name))).toBeInTheDocument()
+    expect(screen.getByText(asignatura.name)).toBeInTheDocument()
     expect(screen.getByText('Continuar')).toBeInTheDocument()
   })
 
@@ -888,8 +891,12 @@ describe('PlayerScreen: portada (nodo intro, milestone "Diapositiva de Inicio")'
     })
     renderPlayer()
 
-    expect(screen.getByText(`${cicloOutputName(ciclo.name)} · ${asignatura.name}`)).toBeInTheDocument()
-    expect(screen.queryByText(`${ciclo.name} · ${asignatura.name}`)).not.toBeInTheDocument()
+    expect(screen.getByText(cicloOutputName(ciclo.name))).toBeInTheDocument()
+    expect(screen.getByText(asignatura.name)).toBeInTheDocument()
+    // El nombre CON el prefijo (el crudo del catálogo) no debe aparecer en
+    // ningún sitio: confirma que de verdad se recortó, no que casualmente
+    // coincidan.
+    expect(screen.queryByText(ciclo.name)).not.toBeInTheDocument()
   })
 
   it('el botón de continuar de la portada avanza a targetNodeId (primera diapositiva narrativa real)', () => {
@@ -902,7 +909,7 @@ describe('PlayerScreen: portada (nodo intro, milestone "Diapositiva de Inicio")'
     expect(screen.getByText('Fin del caso.')).toBeInTheDocument()
   })
 
-  it('con la portada incompleta (sin ciclo/asignatura/caseName) no rompe la vista: omite lo que falta', () => {
+  it('con la portada incompleta (sin ciclo/asignatura/caseName) no rompe la vista: pinta placeholders grises', () => {
     act(() => {
       useProjectStore.getState().createNode('intro', { x: -200, y: 0 })
     })
@@ -917,8 +924,13 @@ describe('PlayerScreen: portada (nodo intro, milestone "Diapositiva de Inicio")'
 
     renderPlayer()
 
-    // Ni ciclo/asignatura ni caseName están elegidos: la vista sigue
-    // pintando el botón de continuar sin romperse.
+    // Ni ciclo/asignatura ni caseName están elegidos: a diferencia del resto
+    // de vistas del Player ("vacío" se omite sin más), la portada sustituye
+    // cada dato que falte por un placeholder gris — ver comentario de
+    // `IntroCard` — y sigue pintando el botón de continuar sin romperse.
+    expect(screen.getByText('— Ciclo sin elegir —')).toBeInTheDocument()
+    expect(screen.getByText('— Asignatura sin elegir —')).toBeInTheDocument()
+    expect(screen.getByText('— Título sin definir —')).toBeInTheDocument()
     expect(screen.getByText('Continuar')).toBeInTheDocument()
   })
 

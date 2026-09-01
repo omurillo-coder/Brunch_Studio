@@ -293,16 +293,216 @@
   color: var(--bs-color-text-muted);
 }
 
-/* Contexto secundario de la portada (nodo `intro`): nombre de ciclo +
-   asignatura, por encima de `caseName` (`.title`, el elemento realmente
-   destacado de la tarjeta) — mismo tono apagado que `.exitMessage`/metadatos
-   secundarios del resto de la app, en mayúsculas y con tracking para leerse
-   como una etiqueta de contexto, no como contenido narrativo. */
-.introContext {
+/* ---------------------------------------------------------------------
+   Portada de marca iLERNA (nodo `intro`) — ver comentario de `IntroCard`
+   en `PlayerScreen.tsx`. Ficheros fuente en `src/assets/playerIntro/`.
+   Traducción literal en `exportedStyles.ts` (mismos nombres de clase,
+   `@font-face` con `data:` URI en vez de referencia a fichero — ver
+   comentario de esa sección).
+   --------------------------------------------------------------------- */
+
+/* La tipografía de marca se referencia por ruta relativa: Vite resuelve y
+   empaqueta el `.otf` como cualquier otro asset de CSS, sin necesidad de
+   importarlo desde el `.tsx`. Solo dos pesos (Regular/Bold): son los dos
+   únicos que usa este diseño — ver comentario de encargo del resto de pesos
+   en `src/assets/playerIntro/fonts/`. */
+@font-face {
+  font-family: 'FS Millbank';
+  src: url('../assets/playerIntro/fonts/FSMillbank-Regular.otf') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'FS Millbank';
+  src: url('../assets/playerIntro/fonts/FSMillbank-Bold.otf') format('opentype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Colores/tipografía FIJOS de marca (no `var(--bs-color-*)`): esta portada
+   no se adapta al tema claro/oscuro de la app, igual que un splash de marca
+   impreso no cambia de color. `overflow: hidden` es lo que permite que
+   `.introIllustration` (fondo de marca, capa absoluta de más abajo) sangre
+   por los bordes de la tarjeta sin desbordar el layout.
+   `.introIllustration` es UNA imagen de fondo a pantalla completa de la
+   tarjeta (no una columna aparte, ver comentario de esa clase): el propio
+   fondo blanco de la ilustración fuente hace de fondo de la mitad izquierda
+   de la tarjeta, así que el texto de `.introContent` (por encima, `z-index:
+   1`) queda "sobre" la imagen en vez de partida en dos columnas — igual que
+   la referencia de diseño entregada por Content Factory. */
+.introCard {
+  position: relative;
+  width: 100%;
+  max-width: 920px;
+  min-height: 440px;
+  overflow: hidden;
+  border-radius: var(--bs-radius-lg);
+  background: #ffffff;
+  border: 1px solid var(--bs-color-border);
+  box-shadow: var(--bs-shadow-sm);
+  font-family: 'FS Millbank', var(--bs-font-sans);
+  color: #0a0a0a;
+}
+
+.introContent {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  max-width: 54%;
+  padding: 36px 40px;
+}
+
+.introLogo {
+  height: 26px;
+  width: auto;
+  align-self: flex-start;
+}
+
+.introHeadingGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.introHeading {
   margin: 0;
-  font-size: var(--bs-font-size-sm);
-  font-weight: 600;
-  color: var(--bs-color-text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  font-family: inherit;
+  font-weight: 700;
+  font-size: clamp(28px, 4vw, 42px);
+  line-height: 1.05;
+  letter-spacing: -0.01em;
+  color: #0a0a0a;
+}
+
+.introSubtitle {
+  margin: 0;
+  max-width: 34ch;
+  font-size: 15px;
+  line-height: 1.5;
+  color: #1a1a1a;
+}
+
+.introSubtitleAccent {
+  font-weight: 700;
+  color: var(--bs-color-accent);
+}
+
+/* Bloque de ciclo/asignatura: contexto secundario DELIBERADAMENTE discreto
+   (feedback de diseño: en un primer borrador, encima del botón y en
+   mayúsculas/negrita, tenía demasiado protagonismo) — va DEBAJO del botón
+   (ver `.introFooter`/`IntroCard`), en dos líneas independientes en vez de
+   una sola unida por " · ", para que cada una pueda tener su propio
+   placeholder (ver `.introMetaLinePlaceholder`) sin ambigüedad sobre cuál
+   falta. */
+.introMeta {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.introMetaLine {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 400;
+  color: #8a8a8a;
+}
+
+/* Portada incompleta (se puede "Probar" antes de rellenar ciclo/asignatura/
+   caseName, ver comentario de `IntroCard`): itálica y más clara que
+   `.introMetaLine`, para que se note a simple vista que es un aviso de "aún
+   sin elegir" y no un dato real. */
+.introMetaLinePlaceholder {
+  composes: introMetaLine;
+  font-style: italic;
+  color: #a3a3a3;
+}
+
+/* Título de la actividad (`caseName`) + botón "Continuar": empujados al
+   fondo de la tarjeta por `margin-top: auto` (el resto de `.introContent`,
+   flex column, fluye normal por encima), sea cual sea la longitud del resto
+   del contenido de arriba — `.introMeta` (ciclo/asignatura) va justo debajo,
+   con su propio margen pequeño, no con `margin-top: auto` propio: solo hace
+   falta empujar al fondo al PRIMERO del grupo. `flex-wrap: wrap` es la
+   salvaguarda para un `caseName` largo en una tarjeta estrecha (móvil),
+   donde el botón pasaría a su propia línea en vez de solaparse con el
+   título. */
+.introFooter {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.introCaseTitle {
+  margin: 0;
+  font-weight: 700;
+  font-size: 18px;
+  line-height: 1.3;
+  color: #0a0a0a;
+}
+
+.introCaseTitlePlaceholder {
+  composes: introCaseTitle;
+  font-weight: 400;
+  font-style: italic;
+  color: #a3a3a3;
+}
+
+.introButton {
+  flex: 0 0 auto;
+  padding: 13px 30px;
+  border: none;
+  border-radius: var(--bs-radius-sm);
+  background: var(--bs-color-accent);
+  color: #0a0a0a;
+  font-family: inherit;
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.introButton:hover {
+  background: var(--bs-color-accent-hover);
+}
+
+/* Ilustración de marca: capa de FONDO A PANTALLA COMPLETA de `.introCard`
+   (`position: absolute; inset: 0`, por DEBAJO de `.introContent` gracias a
+   `z-index`), no una columna del layout — el propio fondo blanco de la
+   imagen fuente hace de fondo de la mitad izquierda de la tarjeta, así que
+   el texto queda "sobre" la ilustración en vez de partida en dos columnas
+   con una línea divisoria, igual que la referencia de diseño entregada por
+   Content Factory. `background-position: top right` + `background-size`
+   por encima del 100% es lo que consigue que la cinta/puertas "sangren" por
+   la esquina superior derecha de la tarjeta (recortadas por el `overflow:
+   hidden` de `.introCard`), en vez de quedar encajadas dentro del recuadro. */
+.introIllustration {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-image: url('../assets/playerIntro/fondo-inicio.jpg');
+  background-repeat: no-repeat;
+  background-position: top right;
+  background-size: 85% auto;
+}
+
+/* Pantalla estrecha (móvil): la ilustración se oculta (decisión de producto
+   explícita, ver comentario de `IntroCard`) y `.introContent` recupera todo
+   el ancho de la tarjeta — el texto nunca compite por espacio con la imagen
+   de marca por debajo de este ancho. */
+@media (max-width: 640px) {
+  .introIllustration {
+    display: none;
+  }
+
+  .introContent {
+    max-width: none;
+    padding: 28px 24px;
+  }
 }

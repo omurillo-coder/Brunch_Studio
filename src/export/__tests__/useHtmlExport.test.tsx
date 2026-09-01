@@ -20,6 +20,23 @@ import { CICLOS } from '../../domain'
  * el caso nuevo: portada incompleta.
  */
 
+/**
+ * `useHtmlExport` resuelve los assets de marca de la portada
+ * (`resolvePlayerIntroBrandAssets` en `introBrandAssets.ts`) con `fetch()`
+ * sobre las URLs que resuelve Vite para el logo/ilustración/tipografía
+ * (sufijo `?url`) — en jsdom no hay ningún servidor real detrás, así que se
+ * mockea `fetch` globalmente, mismo criterio que `Topbar.test.tsx`.
+ */
+vi.stubGlobal(
+  'fetch',
+  vi.fn(async () =>
+    new Response(new Uint8Array([137, 80, 78, 71]).buffer, {
+      status: 200,
+      headers: { 'content-type': 'image/png' },
+    }),
+  ),
+)
+
 const TEST_FILE_PATH = '/tmp/use-html-export-test.brunch'
 
 function renderUseHtmlExport(services: Partial<AppServices> = {}) {

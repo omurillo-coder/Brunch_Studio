@@ -1,5 +1,17 @@
 import { generateHTML } from '@tiptap/core'
-import { CICLOS, cicloOutputName, DEFAULT_CONTINUE_LABEL, RESPONSE_LETTERS } from '../domain'
+import {
+  CICLOS,
+  cicloOutputName,
+  DEFAULT_CONTINUE_LABEL,
+  INTRO_ASIGNATURA_PLACEHOLDER,
+  INTRO_CASE_NAME_PLACEHOLDER,
+  INTRO_CICLO_PLACEHOLDER,
+  INTRO_HEADING,
+  INTRO_SUBTITLE_ACCENT,
+  INTRO_SUBTITLE_PREFIX,
+  INTRO_SUBTITLE_SUFFIX,
+  RESPONSE_LETTERS,
+} from '../domain'
 import type { ProjectDocument } from '../domain'
 import { RICH_TEXT_EXTENSIONS, parseRichBody } from '../editor/richText/richTextContent'
 import type { ExportAssetMap } from './exportAssets'
@@ -9,6 +21,7 @@ import {
   ROOT_ELEMENT_ID,
 } from './exportedPlayerScript'
 import { EXPORTED_STYLES } from './exportedStyles'
+import type { PlayerIntroBrandAssets } from './introBrandAssets'
 
 /**
  * ---------------------------------------------------------------------------
@@ -52,6 +65,16 @@ interface ExportedTexts {
   deadEnd: string
   nodeImageAlt: string
   responseImageAlt: string
+  /** Textos fijos de la portada de marca iLERNA (ver `buildIntroCard` en
+   *  `exportedPlayerScript.ts` y comentario de `playerIntroTexts.ts`, fuente
+   *  única compartida con `IntroCard` en `PlayerScreen.tsx`). */
+  introHeading: string
+  introSubtitlePrefix: string
+  introSubtitleAccent: string
+  introSubtitleSuffix: string
+  introCicloPlaceholder: string
+  introAsignaturaPlaceholder: string
+  introCaseNamePlaceholder: string
 }
 
 const EXPORTED_TEXTS: ExportedTexts = {
@@ -66,6 +89,13 @@ const EXPORTED_TEXTS: ExportedTexts = {
   deadEnd: 'Esta parte de la experiencia no tiene una continuación configurada.',
   nodeImageAlt: 'Imagen de esta pantalla',
   responseImageAlt: 'Imagen de la respuesta ',
+  introHeading: INTRO_HEADING,
+  introSubtitlePrefix: INTRO_SUBTITLE_PREFIX,
+  introSubtitleAccent: INTRO_SUBTITLE_ACCENT,
+  introSubtitleSuffix: INTRO_SUBTITLE_SUFFIX,
+  introCicloPlaceholder: INTRO_CICLO_PLACEHOLDER,
+  introAsignaturaPlaceholder: INTRO_ASIGNATURA_PLACEHOLDER,
+  introCaseNamePlaceholder: INTRO_CASE_NAME_PLACEHOLDER,
 }
 
 /** Mensaje para quien abra el archivo con JavaScript desactivado. */
@@ -110,6 +140,19 @@ interface ExportBundle {
    */
   introCicloName: string | null
   introAsignaturaName: string | null
+  /**
+   * Assets de marca de la portada ("¿Qué harías tú?", ver `IntroCard` en
+   * `src/player/PlayerScreen.tsx`) ya resueltos a `data:` URI EN TIEMPO DE
+   * EXPORTACIÓN — ver `resolvePlayerIntroBrandAssets` en
+   * `src/export/introBrandAssets.ts` para el porqué (mismo motivo que
+   * `introCicloName`/`introAsignaturaName`: el runtime JS vanilla embebido no
+   * puede hacer ese `fetch`). `null` únicamente si quien llama a
+   * `buildHtmlBundle` no los resolvió (no debería pasar en producción: los
+   * tres flujos de exportación reales siempre los resuelven) — el runtime
+   * degrada con elegancia sin ellos (sin logo, sin ilustración, con la
+   * tipografía de sistema de repuesto).
+   */
+  introBrand: PlayerIntroBrandAssets | null
   /**
    * Bandera de "modo revisión profes" (ver `exportedPlayerScript.ts`,
    * sección "Modo revisión profes"), y los datos que ese modo necesita.
@@ -277,6 +320,15 @@ function buildAssetUris(assets: ExportAssetMap): Record<string, string> {
  * el mismo HTML (no se incluye fecha de exportación ni nada variable), lo que
  * permite comparar exportaciones y hace los tests estables.
  *
+ * `introBrandAssets` (opcional): logo/ilustración/tipografía de la portada
+ * ("¿Qué harías tú?") ya resueltos a `data:` URI por
+ * `resolvePlayerIntroBrandAssets` (`src/export/introBrandAssets.ts`) —a
+ * diferencia de `teacherReview`, LOS TRES flujos de exportación reales lo
+ * pasan siempre (ver `useHtmlExport`/`useScormExport`/
+ * `teacherReviewExport.ts`); queda opcional aquí solo para no obligar a
+ * cientos de llamadas de test a resolverlo cuando no les importa el aspecto
+ * de la portada.
+ *
  * `teacherReview` (opcional): presente ÚNICAMENTE cuando quien llama es
  * `buildTeacherReviewBundle` (`src/export/teacherReviewExport.ts`) — activa
  * el "modo revisión profes" embebiendo `reviewMode: true` y estos datos en
@@ -293,6 +345,7 @@ export function buildHtmlBundle(
   project: ProjectDocument,
   assets: ExportAssetMap,
   teacherReview?: TeacherReviewBundleOptions,
+  introBrandAssets?: PlayerIntroBrandAssets,
 ): string {
   const introNames = resolveIntroCatalogNames(project)
   const bundle: ExportBundle = {
@@ -301,6 +354,7 @@ export function buildHtmlBundle(
     assetUris: buildAssetUris(assets),
     responseLetters: [...RESPONSE_LETTERS],
     texts: EXPORTED_TEXTS,
+    introBrand: introBrandAssets ?? null,
     introCicloName: introNames.cicloName,
     introAsignaturaName: introNames.asignaturaName,
     ...(teacherReview ? { reviewMode: true as const, teacherReview } : {}),

@@ -4,6 +4,7 @@ import { useProject } from '../store'
 import { validateIntroForExport } from '../domain'
 import { resolveExportAssets } from './exportAssets'
 import { buildHtmlBundle } from './htmlBundle'
+import { resolvePlayerIntroBrandAssets } from './introBrandAssets'
 import { buildScormManifest } from './scormManifest'
 
 /**
@@ -82,7 +83,8 @@ export function useScormExport(filePath: string): ScormExportState {
         project,
         assetRepository,
       )
-      const html = buildHtmlBundle(project, assets)
+      const introBrandAssets = await resolvePlayerIntroBrandAssets()
+      const html = buildHtmlBundle(project, assets, undefined, introBrandAssets)
       const manifest = buildScormManifest(project)
       await scormPackageWriter.writeScormPackage(path, html, manifest)
 

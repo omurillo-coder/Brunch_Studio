@@ -231,8 +231,11 @@ function runExportedBundle(html: string): void {
   new Function(script.textContent ?? '')()
 }
 
+/** `.introCard` (portada de marca) es una tarjeta con su propio layout,
+ *  distinta de `.card` (el resto de vistas) — ver `buildIntroCard` en
+ *  `exportedPlayerScript.ts`. */
 function currentCard(): HTMLElement {
-  const card = document.querySelector<HTMLElement>('#brunch-root .card')
+  const card = document.querySelector<HTMLElement>('#brunch-root .card, #brunch-root .introCard')
   if (!card) {
     throw new Error('No se ha pintado ninguna tarjeta en el HTML exportado.')
   }
@@ -1256,18 +1259,18 @@ describe('buildHtmlBundle — diapositiva de Inicio: comportamiento del HTML gen
     document.body.innerHTML = ''
   })
 
-  it('arranca pintando la portada: contexto (ciclo · asignatura), caseName como título y "Continuar"', () => {
+  it('arranca pintando la portada de marca: titular fijo, ciclo/asignatura pequeños, caseName y "Continuar"', () => {
     const ciclo = CICLOS[0]!
     const asignatura = ciclo.asignaturas[0]!
 
     runExportedBundle(buildHtmlBundle(introProject(), {}))
 
     const card = currentCard()
-    expect(card.querySelector('.introContext')?.textContent).toBe(
-      `${cicloOutputName(ciclo.name)} · ${asignatura.name}`,
-    )
-    expect(card.querySelector('.title')?.textContent).toBe('Caso de exportación')
-    expect(card.querySelector('.primaryButton')?.textContent).toBe('Continuar')
+    expect(card.querySelector('.introHeading')?.textContent).toBe('¿Qué harías tú?')
+    expect(card.querySelector('.introMetaLine')?.textContent).toBe(cicloOutputName(ciclo.name))
+    expect(card.querySelectorAll('.introMetaLine')[1]?.textContent).toBe(asignatura.name)
+    expect(card.querySelector('.introCaseTitle')?.textContent).toBe('Caso de exportación')
+    expect(card.querySelector('.introButton')?.textContent).toBe('Continuar')
   })
 
   it('pulsar "Continuar" en la portada avanza a la primera diapositiva narrativa real', () => {
@@ -1282,7 +1285,7 @@ describe('buildHtmlBundle — diapositiva de Inicio: comportamiento del HTML gen
     expect(card.textContent).toContain('Esta diapositiva todavía no tiene contenido.')
   })
 
-  it('con la portada incompleta (sin ciclo/asignatura/caseName) no rompe el HTML exportado: omite lo que falta', () => {
+  it('con la portada incompleta (sin ciclo/asignatura/caseName) no rompe el HTML exportado: pinta placeholders grises', () => {
     runExportedBundle(
       buildHtmlBundle(
         introProject({ cicloId: undefined, asignaturaId: undefined, caseName: '' }),
@@ -1291,10 +1294,21 @@ describe('buildHtmlBundle — diapositiva de Inicio: comportamiento del HTML gen
     )
 
     const card = currentCard()
-    expect(card.querySelector('.introContext')).toBeNull()
-    expect(card.querySelector('.title')).toBeNull()
-    // El botón de continuar sigue ahí, aunque no haya nada más que pintar.
-    expect(card.querySelector('.primaryButton')?.textContent).toBe('Continuar')
+    // A diferencia del resto de vistas ("vacío" se omite sin más), la
+    // portada sustituye cada dato que falte por un placeholder gris — ver
+    // comentario de `IntroCard` en `PlayerScreen.tsx`.
+    expect(card.querySelectorAll('.introMetaLinePlaceholder')[0]?.textContent).toBe(
+      '— Ciclo sin elegir —',
+    )
+    expect(card.querySelectorAll('.introMetaLinePlaceholder')[1]?.textContent).toBe(
+      '— Asignatura sin elegir —',
+    )
+    expect(card.querySelector('.introCaseTitlePlaceholder')?.textContent).toBe(
+      '— Título sin definir —',
+    )
+    // El titular fijo de marca y el botón de continuar siguen ahí siempre.
+    expect(card.querySelector('.introHeading')?.textContent).toBe('¿Qué harías tú?')
+    expect(card.querySelector('.introButton')?.textContent).toBe('Continuar')
   })
 
   it('sin targetNodeId, la portada exportada cae en el mismo aviso de "sin continuación" que el resto del runtime', () => {
@@ -1303,8 +1317,8 @@ describe('buildHtmlBundle — diapositiva de Inicio: comportamiento del HTML gen
     expect(currentCard().textContent).toContain(
       'Esta parte de la experiencia no tiene una continuación configurada.',
     )
-    // Y no queda ningún resto de portada (ni contexto ni caseName).
-    expect(currentCard().querySelector('.introContext')).toBeNull()
+    // Y no queda ningún resto de portada (ni titular fijo ni caseName).
+    expect(currentCard().querySelector('.introHeading')).toBeNull()
     expect(currentCard().textContent).not.toContain('Caso de exportación')
   })
 

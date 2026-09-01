@@ -1,6 +1,7 @@
 import type { ProjectDocument } from '../domain'
 import type { ExportAssetMap } from './exportAssets'
 import { buildHtmlBundle } from './htmlBundle'
+import { resolvePlayerIntroBrandAssets } from './introBrandAssets'
 /**
  * Ruta del archivo binario de la imagen de felicitación, resuelta a una URL
  * en tiempo de build/dev por Vite (sufijo `?url`) — mismo mecanismo que
@@ -92,18 +93,29 @@ export async function resolveCompletionPenguinDataUri(): Promise<string> {
  * mismo documento HTML que `buildHtmlBundle`, con el modo revisión activado.
  *
  * A diferencia de `buildHtmlBundle` (síncrona, pura), esta función es
- * ASÍNCRONA porque necesita resolver la imagen del pingüino primero
- * (`resolveCompletionPenguinDataUri`); una vez resuelta, delega en
- * `buildHtmlBundle` sin ninguna lógica propia de generación de HTML.
+ * ASÍNCRONA porque necesita resolver primero la imagen del pingüino
+ * (`resolveCompletionPenguinDataUri`) y los assets de marca de la portada
+ * (`resolvePlayerIntroBrandAssets`, ver `introBrandAssets.ts` — los mismos
+ * que resuelven `useHtmlExport`/`useScormExport`, este modo de exportación
+ * no es una excepción); una vez resueltos, delega en `buildHtmlBundle` sin
+ * ninguna lógica propia de generación de HTML.
  */
 export async function buildTeacherReviewBundle(
   project: ProjectDocument,
   assets: ExportAssetMap,
 ): Promise<string> {
-  const penguinDataUri = await resolveCompletionPenguinDataUri()
-  return buildHtmlBundle(project, assets, {
-    welcomeText: TEACHER_REVIEW_WELCOME_TEXT,
-    completionText: TEACHER_REVIEW_COMPLETION_TEXT,
-    penguinDataUri,
-  })
+  const [penguinDataUri, introBrandAssets] = await Promise.all([
+    resolveCompletionPenguinDataUri(),
+    resolvePlayerIntroBrandAssets(),
+  ])
+  return buildHtmlBundle(
+    project,
+    assets,
+    {
+      welcomeText: TEACHER_REVIEW_WELCOME_TEXT,
+      completionText: TEACHER_REVIEW_COMPLETION_TEXT,
+      penguinDataUri,
+    },
+    introBrandAssets,
+  )
 }
