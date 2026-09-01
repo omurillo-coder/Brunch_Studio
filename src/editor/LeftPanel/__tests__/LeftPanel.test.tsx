@@ -54,6 +54,32 @@ describe('LeftPanel', () => {
     expect(useProjectStore.getState().selection.selectedNodeIds).toEqual([created.id])
   })
 
+  it('"+1 fallo con Game Over" añade las 2 diapositivas del paquete y selecciona la primera (milestone "+1 fallo con Game Over")', () => {
+    render(<LeftPanel />)
+    const before = useProjectStore.getState().project.graph.nodes.length
+
+    fireEvent.click(screen.getByText('+1 fallo con Game Over'))
+
+    const nodes = useProjectStore.getState().project.graph.nodes
+    expect(nodes.length).toBe(before + 2)
+
+    const selectedId = useProjectStore.getState().selection.selectedNodeIds[0]
+    const selected = nodes.find((node) => node.id === selectedId)
+    expect(selected?.type).toBe('slide')
+    // La seleccionada es la PRIMERA del paquete ("en blanco", no "Game
+    // Over"): tiene 2 respuestas vacías, sin el texto predefinido de "Game
+    // Over".
+    expect(selected?.type === 'slide' ? selected.responses : []).toHaveLength(2)
+    expect(
+      selected?.type === 'slide'
+        ? selected.content.some((block) => block.type === 'image')
+        : false,
+    ).toBe(false)
+
+    // La variable "Fallos" se crea sola.
+    expect(useProjectStore.getState().project.variables.some((v) => v.name === 'Fallos')).toBe(true)
+  })
+
   it('"+ Inicio" crea un nodo de tipo intro y lo selecciona cuando el proyecto todavía no tiene ninguno', () => {
     render(<LeftPanel />)
     const before = useProjectStore.getState().project.graph.nodes.length

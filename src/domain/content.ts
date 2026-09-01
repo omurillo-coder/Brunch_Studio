@@ -108,19 +108,59 @@ export function addTextBlock(
 }
 
 /**
- * Añade un bloque de imagen que referencia un asset ya importado
- * (`assetId`). No comprueba que el asset exista en la biblioteca de assets
- * del proyecto: esa validación, igual que ya ocurría con el antiguo
- * `imageAssetIds`/`DecisionResponse.imageAssetId`, es responsabilidad de la
- * UI, que solo debe ofrecer assets ya importados para elegir.
+ * Añade un bloque de imagen. `assetId` es OPCIONAL (milestone "+1 fallo con
+ * Game Over", ver comentario de `ContentBlockSchema` en `schemas.ts`): sin
+ * él, el bloque nace "pendiente de subir" — un hueco reservado en el editor
+ * mientras se consigue el material real, que `attachImageAsset` (más abajo)
+ * completa después. Con `assetId`, mismo comportamiento de siempre: no
+ * comprueba que el asset exista en la biblioteca del proyecto, esa
+ * validación es responsabilidad de la UI, que solo debe ofrecer assets ya
+ * importados para elegir.
  */
 export function addImageBlock(
   project: ProjectDocument,
   slideNodeId: string,
-  assetId: string,
+  assetId?: string,
   index?: number,
 ): ProjectDocument {
   return insertBlock(project, slideNodeId, { id: createId(), type: 'image', assetId }, index)
+}
+
+/**
+ * Rellena el `assetId` de un bloque de imagen ya creado pero todavía
+ * "pendiente de subir" (`addImageBlock` sin `assetId`, ver su comentario) —
+ * el único cambio de estado posible de un bloque pendiente: una vez
+ * rellenado, se comporta exactamente igual que cualquier otro bloque de
+ * imagen (no hay "des-rellenar"; para eso se quita el bloque y se añade uno
+ * nuevo pendiente, mismo criterio que el resto de `content.ts` sobre no
+ * ofrecer "Reemplazar"). Lanza `Error` si el nodo no existe/no es
+ * diapositiva, si el bloque no existe, o si no es de tipo `image`.
+ */
+export function attachImageAsset(
+  project: ProjectDocument,
+  slideNodeId: string,
+  blockId: string,
+  assetId: string,
+): ProjectDocument {
+  const node = findSlideNode(project, slideNodeId)
+  const index = findBlockIndex(node, blockId)
+  if (index === -1) {
+    throw new Error(`La diapositiva "${slideNodeId}" no tiene un bloque con id "${blockId}".`)
+  }
+  const block = node.content[index]
+  if (!block || block.type !== 'image') {
+    throw new Error(`El bloque "${blockId}" de la diapositiva "${slideNodeId}" no es de tipo "image".`)
+  }
+
+  return produce(project, (draft) => {
+    const draftNode = draft.graph.nodes.find((candidate) => candidate.id === slideNodeId)
+    if (!draftNode || draftNode.type !== 'slide') return
+    const draftBlock = draftNode.content[index]
+    if (draftBlock && draftBlock.type === 'image') {
+      draftBlock.assetId = assetId
+    }
+    draft.metadata.updatedAt = new Date().toISOString()
+  })
 }
 
 /** Añade un bloque de audio que referencia un asset ya importado. Mismo

@@ -103,6 +103,18 @@ const NOSCRIPT_MESSAGE =
   'Esta experiencia interactiva necesita JavaScript. Actívalo en tu navegador para poder reproducirla.'
 
 /**
+ * Sufijo que distingue, dentro de `bodyHtml` (ver `renderNodeBodies`), la
+ * clave del contenido ALTERNATIVO de un Final (`FinalNode.alternateBody`,
+ * milestone "+1 fallo con Game Over") de la clave de su `body` por defecto
+ * (`node.id` a secas). Constante compartida SOLO de nombre: no se puede
+ * importar de verdad desde `exportedPlayerScript.ts` (JS vanilla embebido,
+ * sin módulos, ver cabecera de ese archivo) — ese archivo usa el mismo
+ * literal a mano, con un comentario cruzado a esta constante. Cambiar este
+ * valor exige cambiar el otro sitio a la vez.
+ */
+const ALTERNATE_BODY_KEY_SUFFIX = ':alternate'
+
+/**
  * Datos del modo revisión profes ("Exportar revisión profes") que viajan
  * embebidos en el bundle cuando está activo. `buildTeacherReviewBundle`
  * (`src/export/teacherReviewExport.ts`) es quien las produce (textos fijos +
@@ -236,8 +248,22 @@ function renderNodeBodies(project: ProjectDocument): Record<string, string> {
       continue
     }
     if (node.type === 'final') {
-      if (!node.body.trim()) continue
-      bodyHtml[node.id] = generateHTML(parseRichBody(node.body), RICH_TEXT_EXTENSIONS)
+      if (node.body.trim()) {
+        bodyHtml[node.id] = generateHTML(parseRichBody(node.body), RICH_TEXT_EXTENSIONS)
+      }
+      // Milestone "+1 fallo con Game Over" ("Final Ok"/"Final con fallos"
+      // con un único nodo Final): el contenido alternativo se pre-renderiza
+      // aparte, bajo una clave DISTINTA (`ALTERNATE_BODY_KEY_SUFFIX`) para
+      // no pisar el `body` por defecto de este mismo nodo — el runtime
+      // exportado (`exportedPlayerScript.ts`, `resolveFinalBody`) decide en
+      // tiempo de recorrido cuál de las dos claves leer de `bodyHtml`, según
+      // `alternateCondition`.
+      if (node.alternateBody?.trim()) {
+        bodyHtml[node.id + ALTERNATE_BODY_KEY_SUFFIX] = generateHTML(
+          parseRichBody(node.alternateBody),
+          RICH_TEXT_EXTENSIONS,
+        )
+      }
       continue
     }
     for (const block of node.content) {

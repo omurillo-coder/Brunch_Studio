@@ -97,3 +97,32 @@ export function validateIntroForExport(project: ProjectDocument): string[] {
 
   return issues
 }
+
+/**
+ * Comprueba si el proyecto tiene algún bloque de contenido "pendiente" que
+ * bloquee la exportación, y devuelve la lista de textos describiendo cuál —
+ * vacía si no hay ninguno. Mismo criterio que `validateIntroForExport`: pura,
+ * no lanza, no muta nada; la UI de exportación (`useHtmlExport`/
+ * `useScormExport`/`teacherReviewExport.ts`) la llama junto a esa otra
+ * validación y bloquea con el mismo mecanismo si cualquiera de las dos
+ * devuelve algo.
+ *
+ * Milestone "+1 fallo con Game Over": un bloque de imagen puede existir SIN
+ * `assetId` todavía (`ContentBlockSchema`, "pendiente de subir") — el
+ * Player lo tolera (lo omite, ver `ContentBlockView` en `PlayerScreen.tsx`),
+ * pero exportar una experiencia con un hueco de imagen a medio rellenar no
+ * tiene sentido: se bloquea igual que una portada incompleta.
+ */
+export function validatePendingContentForExport(project: ProjectDocument): string[] {
+  const issues: string[] = []
+  for (const node of project.graph.nodes) {
+    if (node.type !== 'slide') continue
+    const hasPendingImage = node.content.some(
+      (block) => block.type === 'image' && !block.assetId,
+    )
+    if (hasPendingImage) {
+      issues.push(`La diapositiva D${node.number} tiene una imagen pendiente de subir.`)
+    }
+  }
+  return issues
+}

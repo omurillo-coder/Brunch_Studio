@@ -7,7 +7,9 @@ import {
   addTextBlock as domainAddTextBlock,
   addVariable as domainAddVariable,
   addVideoBlock as domainAddVideoBlock,
+  attachImageAsset as domainAttachImageAsset,
   connect as domainConnect,
+  addGameOverPack as domainAddGameOverPack,
   createConnectedNode as domainCreateConnectedNode,
   createNode as domainCreateNode,
   createProject,
@@ -194,6 +196,10 @@ export interface ProjectStoreActions {
   // -- Acciones de dominio (delegan en src/domain; el store solo orquesta
   // -- el historial) --
   createNode: (type: NodeType, position: NodePosition, extra?: CreateNodeExtra) => void
+  /** Milestone "+1 fallo con Game Over": añade el paquete de 2 diapositivas
+   *  ya cableadas y con su contenido predefinido — ver `addGameOverPack` en
+   *  `src/domain/nodePacks.ts`. */
+  addGameOverPack: (position: NodePosition) => void
   deleteNode: (nodeId: string) => void
   moveNode: (nodeId: string, position: NodePosition) => void
   // -- Orden de aparición en el panel izquierdo (puramente organizativo,
@@ -212,7 +218,11 @@ export interface ProjectStoreActions {
   // -- `src/domain/content.ts`, mismo patrón de historial (una entrada por
   // -- acción) que el resto de acciones de dominio de arriba --
   addTextBlock: (slideNodeId: string, index?: number) => void
-  addImageBlock: (slideNodeId: string, assetId: string, index?: number) => void
+  addImageBlock: (slideNodeId: string, assetId?: string, index?: number) => void
+  /** Milestone "+1 fallo con Game Over": rellena el `assetId` de un bloque
+   *  de imagen ya creado pero "pendiente de subir" — ver `attachImageAsset`
+   *  en `src/domain/content.ts`. */
+  attachImageAsset: (slideNodeId: string, blockId: string, assetId: string) => void
   addAudioBlock: (slideNodeId: string, assetId: string, index?: number) => void
   addVideoBlock: (slideNodeId: string, assetId: string, index?: number) => void
   updateTextBlockBody: (slideNodeId: string, blockId: string, body: string) => void
@@ -350,6 +360,15 @@ export const useProjectStore = create<ProjectStoreState>()(
       })
     },
 
+    addGameOverPack: (position) => {
+      const next = domainAddGameOverPack(get().project, position)
+      set((state) => {
+        state.history.past.push(state.project as ProjectDocument)
+        state.history.future = []
+        state.project = next
+      })
+    },
+
     deleteNode: (nodeId) => {
       const next = domainDeleteNode(get().project, nodeId)
       set((state) => {
@@ -448,6 +467,15 @@ export const useProjectStore = create<ProjectStoreState>()(
 
     addImageBlock: (slideNodeId, assetId, index) => {
       const next = domainAddImageBlock(get().project, slideNodeId, assetId, index)
+      set((state) => {
+        state.history.past.push(state.project as ProjectDocument)
+        state.history.future = []
+        state.project = next
+      })
+    },
+
+    attachImageAsset: (slideNodeId, blockId, assetId) => {
+      const next = domainAttachImageAsset(get().project, slideNodeId, blockId, assetId)
       set((state) => {
         state.history.past.push(state.project as ProjectDocument)
         state.history.future = []

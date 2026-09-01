@@ -540,7 +540,10 @@ function ContentBlockRow({
           ariaLabelledBy={labelId}
         />
       )}
-      {block.type !== 'text' && (
+      {block.type === 'image' && !block.assetId && (
+        <PendingImageBlock slideNodeId={slideNodeId} blockId={block.id} filePath={filePath} />
+      )}
+      {block.type !== 'text' && block.assetId && (
         <AssetPreview
           key={block.assetId}
           kind={block.type}
@@ -548,6 +551,69 @@ function ContentBlockRow({
           filePath={filePath}
           suffix={` ${position}`}
         />
+      )}
+    </div>
+  )
+}
+
+/**
+ * Bloque de imagen "pendiente de subir" (milestone "+1 fallo con Game
+ * Over", ver comentario de `ContentBlockSchema` en `schemas.ts`): un hueco
+ * reservado sin archivo todavía. Mismo flujo de importación que "+ Imagen"
+ * (`ContentBlocksSection.handleAddAsset`, más abajo) pero rellenando el
+ * bloque YA CREADO (`attachImageAsset`) en vez de crear uno nuevo — no se
+ * comparte ese handler porque este necesita el `blockId` del bloque
+ * pendiente concreto, que `handleAddAsset` no conoce.
+ */
+function PendingImageBlock({
+  slideNodeId,
+  blockId,
+  filePath,
+}: {
+  slideNodeId: string
+  blockId: string
+  filePath: string
+}) {
+  const attachImageAsset = useProjectStore((state) => state.attachImageAsset)
+  const { pickImportAssetPath, assetRepository } = useAppServices()
+  const [busy, setBusy] = useState(false)
+  const [pickError, setPickError] = useState<string | null>(null)
+
+  async function handleAttach() {
+    setPickError(null)
+    setBusy(true)
+    try {
+      const sourcePath = await pickImportAssetPath('image')
+      if (!sourcePath) {
+        // Cancelado por el usuario: sin error visible, sin cambios.
+        return
+      }
+      const meta = await assetRepository.importAsset(filePath, sourcePath)
+      attachImageAsset(slideNodeId, blockId, meta.id)
+    } catch (error) {
+      if (error instanceof PersistenceCommandError && error.kind === 'AssetTooLarge') {
+        setPickError(assetTooLargeMessage(error))
+      } else {
+        setPickError('No se ha podido adjuntar la imagen. Inténtalo de nuevo.')
+      }
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className={styles.pendingImageBlock}>
+      <p className={styles.pendingImageNotice}>
+        Imagen pendiente de subir. Mientras no tenga archivo, el Player la omite y no se puede
+        exportar.
+      </p>
+      <button type="button" className={styles.replaceButton} onClick={handleAttach} disabled={busy}>
+        Adjuntar imagen
+      </button>
+      {pickError && (
+        <p role="alert" className={styles.mediaError}>
+          {pickError}
+        </p>
       )}
     </div>
   )
@@ -1169,6 +1235,68 @@ function ResponseEffectsSection({
 }
 
 /**
+ * Efectos sobre variables aplicados al VISITAR esta diapositiva (milestone
+ * "+1 fallo con Game Over", `SlideNodeSchema.visitEffects`) — se disparan
+ * sea cual sea el camino por el que se llega (una respuesta elegida, el
+ * "Continuar" de otra diapositiva, o el propio arranque del recorrido), a
+ * diferencia de `ResponseEffectsSection` (solo al elegir esa respuesta
+ * concreta). Mismo widget (`EffectRow`) y mismo criterio de "reemplaza el
+ * array completo" que esa sección; solo cambia la acción de dominio
+ * (`updateNode` en vez de `updateResponse`) y dónde vive la lista
+ * (`node.visitEffects`, no `response.effects`).
+ */
+function SlideVisitEffectsSection({ node, variables }: { node: SlideNode; variables: VariableDef[] }) {
+  const updateNode = useProjectStore((state) => state.updateNode)
+  const effects = node.visitEffects ?? []
+
+  function handleChange(index: number, next: VariableEffect) {
+    const nextEffects = effects.map((item, i) => (i === index ? next : item))
+    updateNode(node.id, { visitEffects: nextEffects })
+  }
+
+  function handleRemove(index: number) {
+    const remaining = effects.filter((_, i) => i !== index)
+    updateNode(node.id, { visitEffects: remaining.length > 0 ? remaining : null })
+  }
+
+  function handleAdd() {
+    const firstVariable = variables[0]
+    if (!firstVariable) return
+    const newEffect = makeEffect(firstVariable.id, 'set', defaultValueForVariable(firstVariable))
+    updateNode(node.id, { visitEffects: [...effects, newEffect] })
+  }
+
+  if (variables.length === 0) {
+    return (
+      <p className={styles.noVariablesNotice}>
+        Todavía no hay variables en el proyecto. Créalas desde el panel "Variables" para poder
+        modificarlas al visitar esta diapositiva.
+      </p>
+    )
+  }
+
+  return (
+    <div className={styles.effectsSection}>
+      <span className={styles.label}>Efecto al visitar esta diapositiva</span>
+      {effects.map((effect, index) => (
+        <EffectRow
+          key={index}
+          effect={effect}
+          index={index}
+          variables={variables}
+          onChange={handleChange}
+          onRemove={handleRemove}
+          idPrefix={`inspector-slide-visit-effect-${node.id}-${index}`}
+        />
+      ))}
+      <button type="button" className={styles.addResponseButton} onClick={handleAdd}>
+        + Añadir efecto
+      </button>
+    </div>
+  )
+}
+
+/**
  * Bloque combinado de condición + efectos de variables de una respuesta.
  * Sin ninguna variable definida en el proyecto todavía, sustituye ambas
  * secciones por un único aviso sobrio invitando a crearlas desde el panel
@@ -1711,6 +1839,7 @@ function ResponseRow({
 
   const textFieldId = `inspector-response-text-${response.id}`
   const targetFieldId = `inspector-response-target-${response.id}`
+  const actsAsExitFieldId = `inspector-response-acts-as-exit-${response.id}`
   const pointsFieldId = `inspector-response-points-${response.id}`
   const responseContextLabel = `de la respuesta ${index}`
 
@@ -1749,6 +1878,7 @@ function ResponseRow({
           className={styles.select}
           value={response.targetNodeId ?? NO_TARGET_VALUE}
           onChange={handleTargetChange}
+          disabled={response.actsAsExit}
         >
           <option value={NO_TARGET_VALUE}>— Sin destino —</option>
           {allNodes.map((node) => (
@@ -1757,6 +1887,25 @@ function ResponseRow({
             </option>
           ))}
         </select>
+      </div>
+      {/* Milestone "+1 fallo con Game Over": mutuamente excluyente con el
+          destino de arriba (ver comentario de
+          `UpdateResponsePatch.actsAsExit` en `src/domain/responses.ts`) —
+          marcarla borra el destino elegido en la MISMA llamada a
+          `updateResponse`, así que el `<select>` de arriba queda
+          deshabilitado mientras esté activa. */}
+      <div className={styles.actsAsExitField}>
+        <label htmlFor={actsAsExitFieldId}>
+          <input
+            id={actsAsExitFieldId}
+            type="checkbox"
+            checked={response.actsAsExit ?? false}
+            onChange={(event) =>
+              updateResponse(slideNodeId, response.id, { actsAsExit: event.target.checked })
+            }
+          />
+          Actúa como botón Salir (no navega a ningún nodo)
+        </label>
       </div>
       <div>
         <label className={styles.label} htmlFor={pointsFieldId}>
@@ -2129,6 +2278,80 @@ function FinalVariantSection({ node }: { node: FinalNode }) {
 }
 
 /**
+ * Variante alternativa de un Final (milestone "+1 fallo con Game Over":
+ * "Final Ok"/"Final con fallos" con un ÚNICO nodo Final, ver comentario de
+ * `FinalNodeSchema.alternateCondition`/`alternateBody` en `schemas.ts`).
+ * Quien diseña el caso solo conecta UN destino a este nodo; esta sección es
+ * la que decide qué contenido alternativo se muestra cuando la condición se
+ * cumple — el contenido "de siempre" (arriba, el editor de "Contenido")
+ * sigue siendo el que se ve si no hay condición, o si no se cumple. Sin
+ * variables en el proyecto, mismo aviso sobrio que el resto de secciones de
+ * condición (`ResponseConditionSection`/`ConditionalRoutingSection`) en vez
+ * de un desplegable vacío. Sin condición todavía, un botón "+ Añadir
+ * variante alternativa" la crea con un valor de partida razonable (primera
+ * variable del proyecto, `==`, valor por defecto de su tipo) — mismo
+ * criterio que `ResponseConditionSection.handleEnable`.
+ */
+function FinalAlternateSection({ node, variables }: { node: FinalNode; variables: VariableDef[] }) {
+  const updateNode = useProjectStore((state) => state.updateNode)
+  const bodyLabelId = 'inspector-final-alternate-body-label'
+
+  if (variables.length === 0) {
+    return (
+      <p className={styles.noVariablesNotice}>
+        Todavía no hay variables en el proyecto. Créalas desde el panel "Variables" para poder
+        definir una variante alternativa de este Final.
+      </p>
+    )
+  }
+
+  function handleEnable() {
+    const firstVariable = variables[0]
+    if (!firstVariable) return
+    updateNode(node.id, {
+      alternateCondition: {
+        variableId: firstVariable.id,
+        operator: '==',
+        value: defaultValueForVariable(firstVariable),
+      },
+    })
+  }
+
+  return (
+    <div className={styles.conditionSection}>
+      <span className={styles.label}>Variante alternativa</span>
+      {!node.alternateCondition && (
+        <button type="button" className={styles.addResponseButton} onClick={handleEnable}>
+          + Añadir variante alternativa
+        </button>
+      )}
+      {node.alternateCondition && (
+        <>
+          <ConditionEditor
+            condition={node.alternateCondition}
+            variables={variables}
+            onChange={(next) => updateNode(node.id, { alternateCondition: next })}
+            onRemove={() => updateNode(node.id, { alternateCondition: null, alternateBody: null })}
+            idPrefix={`inspector-final-alternate-condition-${node.id}`}
+            removeLabel="Quitar variante alternativa"
+          />
+          <div>
+            <span id={bodyLabelId} className={styles.label}>
+              Contenido alternativo
+            </span>
+            <RichTextEditor
+              body={node.alternateBody ?? ''}
+              onCommit={(nextBody) => updateNode(node.id, { alternateBody: nextBody })}
+              ariaLabelledBy={bodyLabelId}
+            />
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+/**
  * Campos de edición de un nodo (título/body), comunes a cualquier tipo, más
  * — para una Diapositiva — sus adjuntos, su modo "de continuar" (si no tiene
  * respuestas) y la sección de respuestas.
@@ -2295,6 +2518,7 @@ function NodeFields({
                   ariaLabelledBy="inspector-node-body-label"
                 />
               </div>
+              <FinalAlternateSection node={node} variables={project.variables} />
             </>
           )}
           {/* Diapositiva de Inicio (Tarea 2, milestone "Diapositiva de
@@ -2315,6 +2539,12 @@ function NodeFields({
             filePath={filePath}
             variables={project.variables}
           />
+          {/* Al final, DESPUÉS de las respuestas a propósito (no dentro de
+              `.metaGroup`, arriba): varios tests existentes localizan
+              botones "+ Añadir efecto" por posición ordinal
+              (`getAllByRole(...)[0]` = el de la primera respuesta) —
+              colocar esta sección antes desplazaría esos índices. */}
+          <SlideVisitEffectsSection node={node} variables={project.variables} />
         </>
       )}
       <ConnectionsSection node={node} project={project} />

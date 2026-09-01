@@ -108,6 +108,7 @@ function nodeMatchesQuery(node: Node, query: string): boolean {
 export function LeftPanel() {
   const project = useProject()
   const createNode = useProjectStore((state) => state.createNode)
+  const addGameOverPack = useProjectStore((state) => state.addGameOverPack)
   const selectNode = useProjectStore((state) => state.selectNode)
   const focusNode = useProjectStore((state) => state.focusNode)
   const reorderNode = useProjectStore((state) => state.reorderNode)
@@ -453,6 +454,30 @@ export function LeftPanel() {
     if (created) selectNode(created.id)
   }
 
+  /**
+   * Botón "+1 fallo con Game Over" (milestone del mismo nombre): añade el
+   * paquete de 2 diapositivas ya cableadas (`addGameOverPack`,
+   * `src/domain/nodePacks.ts`) y selecciona la PRIMERA (la "en blanco", que
+   * el diseñador tiene que rellenar) — mismo criterio de "identificar el
+   * nodo nuevo por id, nunca por número más alto" que `handleCreate`, pero
+   * comparando el conjunto de nodos ANTES/DESPUÉS porque aquí se crean DOS
+   * nodos de golpe, no uno.
+   */
+  function handleCreateGameOverPack() {
+    const position = viewportCenter ?? nextCascadePosition(project.graph.nodes.length)
+    const existingIds = new Set(project.graph.nodes.map((node) => node.id))
+    addGameOverPack(position)
+
+    const nodes = useProjectStore.getState().project.graph.nodes
+    const newNodes = nodes.filter((node) => !existingIds.has(node.id))
+    // La primera diapositiva del paquete es la que nace en `position` (la
+    // de "Game Over" nace desplazada a su derecha, ver `addGameOverPack`).
+    const firstSlide = newNodes.find(
+      (node) => node.position.x === position.x && node.position.y === position.y,
+    )
+    if (firstSlide) selectNode(firstSlide.id)
+  }
+
   return (
     <aside className={styles.panel}>
       <div className={styles.addSection}>
@@ -475,6 +500,14 @@ export function LeftPanel() {
             + {NODE_TYPE_LABEL[type]}
           </button>
         ))}
+        {/* "+1 fallo con Game Over": paquete de 2 diapositivas ya cableadas
+            y con su contenido predefinido — ver `handleCreateGameOverPack`/
+            `addGameOverPack` en `src/domain/nodePacks.ts`. Sin límite de
+            cantidad (a diferencia de "+ Inicio"): se puede usar tantas
+            veces como haga falta en un mismo proyecto. */}
+        <button type="button" className={styles.addButton} onClick={handleCreateGameOverPack}>
+          +1 fallo con Game Over
+        </button>
       </div>
 
       <div className={styles.searchSection}>

@@ -5,6 +5,7 @@ import {
   addImageBlock,
   addTextBlock,
   addVideoBlock,
+  attachImageAsset,
   moveContentBlock,
   removeContentBlock,
   updateTextBlockBody,
@@ -90,6 +91,41 @@ describe('addTextBlock / addImageBlock / addAudioBlock / addVideoBlock', () => {
 
     expect(() => addTextBlock(project, 'no-existe')).toThrow()
     expect(() => addTextBlock(withFinal, finalId)).toThrow()
+  })
+
+  it('milestone "+1 fallo con Game Over": addImageBlock sin assetId crea un bloque de imagen "pendiente de subir"', () => {
+    const { project, slideId } = blankSlide()
+    const updated = addImageBlock(project, slideId)
+
+    const slide = slideOf(updated, slideId)
+    const block = slide.content[1]
+    expect(block?.type).toBe('image')
+    expect(block?.type === 'image' ? block.assetId : 'missing').toBeUndefined()
+  })
+})
+
+describe('attachImageAsset (milestone "+1 fallo con Game Over")', () => {
+  it('rellena el assetId de un bloque de imagen pendiente, sin tocar nada más', () => {
+    const { project, slideId } = blankSlide()
+    const pending = addImageBlock(project, slideId)
+    const blockId = slideOf(pending, slideId).content[1]?.id
+    if (!blockId) throw new Error('setup inválido')
+
+    const updated = attachImageAsset(pending, slideId, blockId, IMAGE_ID)
+
+    const slide = slideOf(updated, slideId)
+    expect(slide.content[1]).toMatchObject({ id: blockId, type: 'image', assetId: IMAGE_ID })
+    // Inmutabilidad: el bloque pendiente original no se toca.
+    expect(slideOf(pending, slideId).content[1]).toMatchObject({ assetId: undefined })
+  })
+
+  it('lanza si el bloque no existe, o si no es de tipo image', () => {
+    const { project, slideId } = blankSlide()
+    const textBlockId = slideOf(project, slideId).content[0]?.id
+    if (!textBlockId) throw new Error('setup inválido')
+
+    expect(() => attachImageAsset(project, slideId, 'no-existe', IMAGE_ID)).toThrow()
+    expect(() => attachImageAsset(project, slideId, textBlockId, IMAGE_ID)).toThrow()
   })
 })
 

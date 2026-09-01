@@ -788,6 +788,90 @@ describe('PlayerScreen: botón "Salir" (vista Final)', () => {
   })
 })
 
+describe('PlayerScreen: milestone "+1 fallo con Game Over"', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('una respuesta actsAsExit es pulsable sin destino, y al elegirla se queda en la misma diapositiva mostrando el aviso de "Salir"', () => {
+    const closeSpy = vi.spyOn(window, 'close').mockImplementation(() => {})
+    const { decisionId } = buildGraphInStore()
+    const responseExitId = addResponseTo(decisionId)
+    act(() => {
+      useProjectStore.getState().updateResponse(decisionId, responseExitId, {
+        text: 'No, me rindo.',
+        actsAsExit: true,
+      })
+    })
+
+    renderPlayer()
+    fireEvent.click(screen.getByText('Continuar'))
+
+    const exitOption = screen.getByText('No, me rindo.').closest('button')
+    expect(exitOption).not.toBeNull()
+    expect(exitOption).not.toBeDisabled()
+
+    fireEvent.click(screen.getByText('No, me rindo.'))
+
+    expect(closeSpy).toHaveBeenCalledTimes(1)
+    expect(screen.getByText('Ya puedes cerrar esta pestaña.')).toBeInTheDocument()
+    // Sigue en la MISMA diapositiva: la otra respuesta ("Camino A") sigue
+    // visible, no navegó al Final.
+    expect(screen.getByText('Camino A')).toBeInTheDocument()
+    expect(screen.queryByText('Fin de la experiencia')).not.toBeInTheDocument()
+  })
+
+  it('el Final muestra su contenido alternativo cuando la condición se cumple (tras visitar la diapositiva con visitEffects)', () => {
+    const { startId, finalId } = buildGraphInStore()
+    act(() => {
+      useProjectStore.getState().addVariable({ name: 'Fallos', type: 'number', initialValue: 0 })
+    })
+    const fallosVar = useProjectStore.getState().project.variables[0]
+    if (!fallosVar) throw new Error('setup inválido')
+    act(() => {
+      // La diapositiva de inicio suma +1 a "Fallos" al visitarla.
+      useProjectStore.getState().updateNode(startId, {
+        visitEffects: [{ variableId: fallosVar.id, operation: 'increment', value: 1 }],
+      })
+      useProjectStore.getState().updateNode(finalId, {
+        alternateCondition: { variableId: fallosVar.id, operator: '>=', value: 1 },
+        alternateBody: 'Contenido alternativo por fallos.',
+      })
+    })
+
+    renderPlayer()
+    fireEvent.click(screen.getByText('Continuar')) // visita el inicio -> +1 Fallos
+    fireEvent.click(screen.getByText('Camino A')) // -> Final
+
+    expect(screen.getByText('Contenido alternativo por fallos.')).toBeInTheDocument()
+    expect(screen.queryByText('Llegaste al final A.')).not.toBeInTheDocument()
+  })
+
+  it('el Final muestra su contenido por defecto cuando la condición NO se cumple', () => {
+    const { finalId } = buildGraphInStore()
+    act(() => {
+      useProjectStore.getState().addVariable({ name: 'Fallos', type: 'number', initialValue: 0 })
+    })
+    const fallosVar = useProjectStore.getState().project.variables[0]
+    if (!fallosVar) throw new Error('setup inválido')
+    act(() => {
+      // Ninguna diapositiva de este recorrido tiene visitEffects: "Fallos"
+      // se queda en su valor inicial (0), la condición (>= 1) es falsa.
+      useProjectStore.getState().updateNode(finalId, {
+        alternateCondition: { variableId: fallosVar.id, operator: '>=', value: 1 },
+        alternateBody: 'Contenido alternativo por fallos.',
+      })
+    })
+
+    renderPlayer()
+    fireEvent.click(screen.getByText('Continuar'))
+    fireEvent.click(screen.getByText('Camino A'))
+
+    expect(screen.getByText('Llegaste al final A.')).toBeInTheDocument()
+    expect(screen.queryByText('Contenido alternativo por fallos.')).not.toBeInTheDocument()
+  })
+})
+
 describe('PlayerScreen: contenedor de scroll compartido por las 4 vistas', () => {
   /** El bug de scroll (ver `PlayerScreen.module.css`, clase `.stage`) podía
    *  afectar a las cuatro vistas del Player si cada una tuviera su propio

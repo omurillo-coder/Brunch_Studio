@@ -13,6 +13,7 @@ import type {
   SlideNode,
   VariableCondition,
   VariableDef,
+  VariableEffect,
   VariableType,
 } from './schemas'
 
@@ -109,6 +110,17 @@ export interface UpdateNodePatch {
   asignaturaId?: string | null
   caseName?: string
   variant?: FinalVariant
+  /** Solo en `slide` (milestone "+1 fallo con Game Over", ver
+   *  `SlideNodeSchema.visitEffects`). Mismo criterio de patch que `effects`
+   *  en `UpdateResponsePatch`: `undefined` no toca, `null` borra, un array
+   *  REEMPLAZA la lista completa. */
+  visitEffects?: VariableEffect[] | null
+  /** Solo en `final` (milestone "+1 fallo con Game Over", ver
+   *  `FinalNodeSchema.alternateCondition`/`alternateBody`). Mismo criterio
+   *  de patch "`undefined` no toca, `null` borra" que el resto de campos
+   *  opcionales de este parche. */
+  alternateCondition?: VariableCondition | null
+  alternateBody?: string | null
 }
 
 /**
@@ -443,10 +455,11 @@ export function updateNode(
     patch.continueLabel !== undefined ||
     patch.condition !== undefined ||
     patch.elseTargetNodeId !== undefined ||
-    patch.color !== undefined
+    patch.color !== undefined ||
+    patch.visitEffects !== undefined
   if (setsSlideOnlyField && node && node.type !== 'slide') {
     throw new Error(
-      `El nodo "${nodeId}" es de tipo "${node.type}" y no admite texto de continuar, enrutado condicional ni color.`,
+      `El nodo "${nodeId}" es de tipo "${node.type}" y no admite texto de continuar, enrutado condicional, color ni efecto al visitar.`,
     )
   }
   if (patch.body !== undefined && node && node.type !== 'final') {
@@ -457,6 +470,13 @@ export function updateNode(
   if (patch.variant !== undefined && node && node.type !== 'final') {
     throw new Error(
       `El nodo "${nodeId}" es de tipo "${node.type}" y no admite variante de Final (general/bueno/malo).`,
+    )
+  }
+  const setsFinalAlternateField =
+    patch.alternateCondition !== undefined || patch.alternateBody !== undefined
+  if (setsFinalAlternateField && node && node.type !== 'final') {
+    throw new Error(
+      `El nodo "${nodeId}" es de tipo "${node.type}" y no admite variante alternativa de Final.`,
     )
   }
   const setsIntroOnlyField =
@@ -477,6 +497,13 @@ export function updateNode(
     if (draftNode.type === 'final') {
       if (patch.body !== undefined) draftNode.body = patch.body
       if (patch.variant !== undefined) draftNode.variant = patch.variant
+      if (patch.alternateCondition !== undefined) {
+        draftNode.alternateCondition =
+          patch.alternateCondition === null ? undefined : patch.alternateCondition
+      }
+      if (patch.alternateBody !== undefined) {
+        draftNode.alternateBody = patch.alternateBody === null ? undefined : patch.alternateBody
+      }
     }
     if (draftNode.type === 'slide') {
       if (patch.continueLabel !== undefined) {
@@ -491,6 +518,9 @@ export function updateNode(
       }
       if (patch.color !== undefined) {
         draftNode.color = patch.color === null ? undefined : patch.color
+      }
+      if (patch.visitEffects !== undefined) {
+        draftNode.visitEffects = patch.visitEffects === null ? undefined : patch.visitEffects
       }
     }
     if (draftNode.type === 'intro') {

@@ -214,8 +214,8 @@ describe('ContentBlockSchema', () => {
     expect(ContentBlockSchema.safeParse({ id: BLOCK_ID, type: 'text' }).success).toBe(false)
   })
 
-  it('rechaza un bloque de imagen/audio/vídeo sin assetId, o con un assetId que no es uuid', () => {
-    expect(ContentBlockSchema.safeParse({ id: BLOCK_ID, type: 'image' }).success).toBe(false)
+  it('rechaza un bloque de audio/vídeo sin assetId, o con un assetId que no es uuid', () => {
+    expect(ContentBlockSchema.safeParse({ id: BLOCK_ID, type: 'audio' }).success).toBe(false)
     expect(
       ContentBlockSchema.safeParse({ id: BLOCK_ID, type: 'audio', assetId: 'no-es-uuid' }).success,
     ).toBe(false)
@@ -225,9 +225,24 @@ describe('ContentBlockSchema', () => {
     ).toBe(false)
   })
 
-  it('rechaza un bloque de imagen con `body` en vez de `assetId` (campos de otro tipo del discriminador)', () => {
+  it('rechaza un bloque de imagen con un assetId que no es uuid', () => {
     expect(
-      ContentBlockSchema.safeParse({ id: BLOCK_ID, type: 'image', body: 'texto' }).success,
+      ContentBlockSchema.safeParse({ id: BLOCK_ID, type: 'image', assetId: 'no-es-uuid' }).success,
+    ).toBe(false)
+  })
+
+  it('milestone "+1 fallo con Game Over": acepta un bloque de imagen SIN assetId ("pendiente de subir")', () => {
+    const result = ContentBlockSchema.safeParse({ id: BLOCK_ID, type: 'image' })
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data).toMatchObject({ id: BLOCK_ID, type: 'image' })
+      expect(result.data.type === 'image' ? result.data.assetId : 'missing').toBeUndefined()
+    }
+  })
+
+  it('rechaza un bloque de audio con `body` en vez de `assetId` (campos de otro tipo del discriminador)', () => {
+    expect(
+      ContentBlockSchema.safeParse({ id: BLOCK_ID, type: 'audio', body: 'texto' }).success,
     ).toBe(false)
   })
 

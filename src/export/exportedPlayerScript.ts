@@ -333,23 +333,76 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
     return evaluateCondition(variables, node.condition) ? node.targetNodeId : node.elseTargetNodeId;
   }
 
+  /** Traducción literal de \`applyVisitEffects\` (\`src/player/runtime.ts\`,
+   *  milestone "+1 fallo con Game Over"): aplica \`node.visitEffects\` (si los
+   *  hay) al ENTRAR en \`nodeId\`, sea cual sea el camino por el que se llegó
+   *  — se llama desde \`getInitialState\`/\`advance\`/\`choose\`, los tres únicos
+   *  sitios donde cambia \`currentNodeId\`. Solo tiene efecto sobre un
+   *  \`slide\` con \`visitEffects\`; en cualquier otro caso devuelve
+   *  \`variables\` intacto. */
+  function applyVisitEffects(variables, nodeId) {
+    if (!nodeId) {
+      return variables;
+    }
+    var node = findNode(nodeId);
+    if (!node || node.type !== 'slide' || !node.visitEffects || node.visitEffects.length === 0) {
+      return variables;
+    }
+    return applyVariableEffects(variables, node.visitEffects);
+  }
+
+  /** Equivalente de \`resolveFinalBody\` (\`src/player/runtime.ts\`, milestone
+   *  "+1 fallo con Game Over") adaptado a este runtime: a diferencia de la
+   *  app (Tiptap disponible en tiempo de recorrido), aquí el HTML de CADA
+   *  cuerpo posible se pre-renderiza EN TIEMPO DE EXPORTACIÓN
+   *  (\`renderNodeBodies\` en \`htmlBundle.ts\`) e indexa en \`bodyHtml\` por
+   *  clave — \`node.id\` para el \`body\` por defecto, \`node.id + ':alternate'\`
+   *  para \`alternateBody\` (el mismo sufijo literal que
+   *  \`ALTERNATE_BODY_KEY_SUFFIX\` en \`htmlBundle.ts\`: cambiar uno exige
+   *  cambiar el otro). Esta función decide solo QUÉ CLAVE/texto plano usar,
+   *  nunca genera HTML — eso ya está hecho. \`rawBody\` viaja además del id
+   *  porque \`appendBody\` lo necesita para decidir "vacío = nada" (mismo
+   *  criterio que con \`node.body\` de siempre). */
+  function resolveFinalContent(node, variables) {
+    if (
+      node.alternateCondition &&
+      node.alternateBody &&
+      trimmed(node.alternateBody) &&
+      evaluateCondition(variables, node.alternateCondition)
+    ) {
+      return { bodyId: node.id + ':alternate', rawBody: node.alternateBody };
+    }
+    return { bodyId: node.id, rawBody: node.body };
+  }
+
   function getInitialState() {
     var start = findNode(project.graph.startNodeId);
+    var startId = start ? start.id : null;
     var variableDefs = project.variables || [];
     var variables = {};
     for (var i = 0; i < variableDefs.length; i += 1) {
       variables[variableDefs[i].id] = variableDefs[i].initialValue;
     }
-    return { currentNodeId: start ? start.id : null, totalPoints: null, variables: variables };
+    return {
+      currentNodeId: startId,
+      totalPoints: null,
+      variables: applyVisitEffects(variables, startId),
+    };
   }
 
   function restart() {
     return getInitialState();
   }
 
+  /** Traducción literal de \`getView\` (rama \`'decision'\`, \`src/player/runtime.ts\`,
+   *  milestone "+1 fallo con Game Over"): una respuesta \`actsAsExit\` cuenta
+   *  igual que una con \`targetNodeId\` a la hora de decidir si esto es una
+   *  decisión ofrecible — no navega a ningún nodo, pero SÍ es una opción
+   *  pulsable de verdad (ver \`buildResponseButton\`/\`handleExitAttempt\` más
+   *  abajo). */
   function hasAnyTarget(responses) {
     for (var i = 0; i < responses.length; i += 1) {
-      if (responses[i].targetNodeId) {
+      if (responses[i].targetNodeId || responses[i].actsAsExit) {
         return true;
       }
     }
@@ -422,7 +475,11 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
       if (!node.targetNodeId) {
         return state;
       }
-      return { currentNodeId: node.targetNodeId, totalPoints: state.totalPoints, variables: state.variables };
+      return {
+        currentNodeId: node.targetNodeId,
+        totalPoints: state.totalPoints,
+        variables: applyVisitEffects(state.variables, node.targetNodeId),
+      };
     }
     if (node.type !== 'slide') {
       return state;
@@ -435,7 +492,11 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
     if (!target) {
       return state;
     }
-    return { currentNodeId: target, totalPoints: state.totalPoints, variables: state.variables };
+    return {
+      currentNodeId: target,
+      totalPoints: state.totalPoints,
+      variables: applyVisitEffects(state.variables, target),
+    };
   }
 
   function choose(state, responseId) {
@@ -466,7 +527,8 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
       response.points === undefined
         ? state.totalPoints
         : (state.totalPoints === null ? 0 : state.totalPoints) + response.points;
-    var variables = applyVariableEffects(state.variables, response.effects || []);
+    var afterResponseEffects = applyVariableEffects(state.variables, response.effects || []);
+    var variables = applyVisitEffects(afterResponseEffects, response.targetNodeId);
     return { currentNodeId: response.targetNodeId, totalPoints: totalPoints, variables: variables };
   }
 
@@ -499,9 +561,13 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
    *  \`appendContent\` más abajo para los bloques de \`content\` de una
    *  diapositiva). \`fallback\` se pinta como texto plano cuando el nodo no
    *  tiene cuerpo; \`null\` significa "no pintar nada". */
-  function appendBody(card, node, fallback) {
-    var html = bodyHtml[node.id];
-    if (trimmed(node.body) && html) {
+  /** \`bodyId\`/\`rawBody\` en vez de \`node\` directamente (milestone "+1 fallo
+   *  con Game Over"): el único llamador (la vista 'final') necesita poder
+   *  pedir el \`body\` por defecto O el alternativo, cada uno con su propia
+   *  clave en \`bodyHtml\` — ver \`resolveFinalContent\`. */
+  function appendBody(card, bodyId, rawBody, fallback) {
+    var html = bodyHtml[bodyId];
+    if (trimmed(rawBody) && html) {
       var rich = el('div', 'body');
       rich.innerHTML = html;
       card.appendChild(rich);
@@ -617,6 +683,24 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
     card.appendChild(message);
   }
 
+  /** Intento de "salir": finalización SCORM + \`window.close()\` + aviso —
+   *  factorizado del botón "Salir" de la vista 'final' (más abajo) para que
+   *  una respuesta \`actsAsExit\` (milestone "+1 fallo con Game Over") lo
+   *  reutilice tal cual, en vez de duplicar la secuencia. */
+  function attemptExit(card) {
+    // Finalización SCORM explícita ANTES de intentar cerrar: no depender
+    // solo de que "beforeunload" llegue a dispararse a tiempo (ver cabecera
+    // del archivo). Reutiliza scormFinish(), la misma función que ya usa el
+    // listener de "beforeunload".
+    scormFinish();
+    // window.close() no lanza cuando el navegador lo bloquea (la pestaña no
+    // la abrió un script), simplemente no hace nada, así que no hace falta
+    // try/catch. El aviso de abajo se muestra siempre, precisamente para
+    // cubrir ese caso.
+    window.close();
+    showExitMessage(card);
+  }
+
   /** Resuelve una lista de assetId de imagen a sus \`data:\` URI ya
    *  embebidos, descartando (sin romper nada) los que no se pudieron leer
    *  en tiempo de exportación. Solo la usa \`buildOption\` (imagen de una
@@ -669,12 +753,16 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
     return owner.audioAssetId ? assetUris[owner.audioAssetId] || null : null;
   }
 
-  function buildOption(response, index) {
+  function buildOption(response, index, card) {
     var wrapper = el('div', 'option');
 
     var button = el('button', 'optionButton');
     button.type = 'button';
-    if (!response.targetNodeId) {
+    // Milestone "+1 fallo con Game Over": una respuesta \`actsAsExit\` SÍ es
+    // pulsable aunque no tenga \`targetNodeId\` (nunca lo tiene, ver
+    // comentario de \`hasAnyTarget\`) — el propio botón, no \`disabled\`, la
+    // distingue de una respuesta "de verdad" sin destino todavía.
+    if (!response.targetNodeId && !response.actsAsExit) {
       button.disabled = true;
     }
     var bullet = el('span', 'optionBullet');
@@ -684,6 +772,12 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
     label.textContent = trimmed(response.text) || texts.emptyResponse;
     button.appendChild(label);
     button.addEventListener('click', function () {
+      if (response.actsAsExit) {
+        // Igual que el botón "Salir" de la vista 'final' (ver más abajo):
+        // no navega a ningún nodo, se queda en esta misma diapositiva.
+        attemptExit(card);
+        return;
+      }
       setState(choose(state, response.id));
     });
     wrapper.appendChild(button);
@@ -832,7 +926,7 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
       var options = el('div', 'options');
       var sorted = sortByLetter(view.visibleResponses || []);
       for (var i = 0; i < sorted.length; i += 1) {
-        options.appendChild(buildOption(sorted[i], i + 1));
+        options.appendChild(buildOption(sorted[i], i + 1, card));
       }
       card.appendChild(options);
       return card;
@@ -843,7 +937,13 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
       var heading = el('h1', 'title');
       heading.textContent = texts.finalTitle;
       card.appendChild(heading);
-      appendBody(card, view.node, trimmed(view.node.title) || texts.finalFallbackBody);
+      var finalContent = resolveFinalContent(view.node, state.variables);
+      appendBody(
+        card,
+        finalContent.bodyId,
+        finalContent.rawBody,
+        trimmed(view.node.title) || texts.finalFallbackBody,
+      );
       if (state.totalPoints !== null) {
         var points = el('p', 'points');
         points.textContent = texts.pointsPrefix + state.totalPoints + texts.pointsSuffix;
@@ -878,18 +978,7 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
         'background:var(--bs-color-bg);color:var(--bs-color-text);' +
         'font-size:var(--bs-font-size-md);font-weight:600;cursor:pointer;';
       exitButton.addEventListener('click', function () {
-        // Finalización SCORM explícita ANTES de intentar cerrar: no depender
-        // solo de que "beforeunload" llegue a dispararse a tiempo (ver
-        // cabecera del archivo). Reutiliza scormFinish(), la misma función
-        // que ya usa el listener de "beforeunload": no se duplica lógica.
-        scormFinish();
-        // Traducción literal de PlayerScreen.tsx (handleExitAttempt):
-        // window.close() no lanza cuando el navegador lo bloquea (la
-        // pestaña no la abrió un script), simplemente no hace nada, así que
-        // no hace falta try/catch. El aviso de abajo se muestra siempre,
-        // precisamente para cubrir ese caso.
-        window.close();
-        showExitMessage(card);
+        attemptExit(card);
       });
       actions.appendChild(exitButton);
 

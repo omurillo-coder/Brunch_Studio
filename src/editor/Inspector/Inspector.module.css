@@ -96,6 +96,22 @@
   letter-spacing: 0.04em;
 }
 
+/* "Actúa como botón Salir" (milestone "+1 fallo con Game Over"): checkbox +
+   texto en una sola línea, mismo tamaño de fuente que el resto de campos de
+   una respuesta. */
+.actsAsExitField {
+  display: flex;
+  align-items: center;
+}
+
+.actsAsExitField label {
+  display: flex;
+  align-items: center;
+  gap: var(--bs-space-1);
+  font-size: var(--bs-font-size-sm);
+  color: var(--bs-color-text);
+}
+
 .input {
   width: 100%;
   padding: var(--bs-space-2);
@@ -425,6 +441,25 @@
   margin: 0;
   font-size: var(--bs-font-size-xs);
   color: var(--bs-color-danger);
+}
+
+/* Bloque de imagen "pendiente de subir" (milestone "+1 fallo con Game
+   Over", ver `PendingImageBlock` en Inspector.tsx): mismo borde discontinuo
+   que un hueco vacío a rellenar, para diferenciarlo a simple vista de
+   `.mediaPreview` (que sí tiene un archivo real detrás). */
+.pendingImageBlock {
+  display: flex;
+  flex-direction: column;
+  gap: var(--bs-space-2);
+  padding: var(--bs-space-3);
+  border: 1px dashed var(--bs-color-border-strong);
+  border-radius: var(--bs-radius-sm);
+}
+
+.pendingImageNotice {
+  margin: 0;
+  font-size: var(--bs-font-size-xs);
+  color: var(--bs-color-text-muted);
 }
 
 /* Bloques de contenido de una diapositiva (milestone "Bloques de

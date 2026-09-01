@@ -1330,3 +1330,154 @@ describe('buildHtmlBundle — diapositiva de Inicio: comportamiento del HTML gen
     expect(html).not.toContain('Nota interna de la portada')
   })
 })
+
+const VISIT_VAR_ID = 'cccccccc-0000-4000-8000-000000000001'
+const VISIT_START_ID = 'cccccccc-0000-4000-8000-000000000002'
+const VISIT_DECISION_ID = 'cccccccc-0000-4000-8000-000000000003'
+const VISIT_FINAL_ID = 'cccccccc-0000-4000-8000-000000000004'
+const VISIT_RESPONSE_CONTINUE_ID = 'cccccccc-0000-4000-8000-000000000005'
+const VISIT_RESPONSE_EXIT_ID = 'cccccccc-0000-4000-8000-000000000006'
+
+/**
+ * Proyecto de prueba del milestone "+1 fallo con Game Over": una variable
+ * numérica ("Fallos"), una diapositiva "Inicio" con `visitEffects` que la
+ * incrementa en 5 al visitarla, una decisión con una respuesta normal y otra
+ * `actsAsExit` (más un bloque de imagen PENDIENTE, sin `assetId`), y un
+ * Final con contenido alternativo condicionado a esa misma variable
+ * (`>= 5`).
+ */
+function gameOverFeaturesProject(): ProjectDocument {
+  const start: SlideNode = {
+    id: VISIT_START_ID,
+    number: 1,
+    type: 'slide',
+    position: { x: 0, y: 0 },
+    title: '',
+    targetNodeId: VISIT_DECISION_ID,
+    continueLabel: undefined,
+    responses: [],
+    content: [textBlock(richBody('Inicio'))],
+    visitEffects: [{ variableId: VISIT_VAR_ID, operation: 'increment', value: 5 }],
+  }
+
+  const decision: SlideNode = {
+    id: VISIT_DECISION_ID,
+    number: 2,
+    type: 'slide',
+    position: { x: 300, y: 0 },
+    title: '',
+    targetNodeId: undefined,
+    continueLabel: undefined,
+    responses: [
+      makeResponse({
+        id: VISIT_RESPONSE_CONTINUE_ID,
+        letter: 'A',
+        text: 'Seguir',
+        targetNodeId: VISIT_FINAL_ID,
+      }),
+      makeResponse({
+        id: VISIT_RESPONSE_EXIT_ID,
+        letter: 'B',
+        text: 'No, me rindo.',
+        actsAsExit: true,
+      }),
+    ],
+    content: [
+      textBlock(richBody('Elige qué hacer')),
+      { id: 'pending-image-block', type: 'image', assetId: undefined },
+    ],
+  }
+
+  const final: FinalNode = {
+    id: VISIT_FINAL_ID,
+    number: 3,
+    type: 'final',
+    variant: 'general',
+    position: { x: 600, y: 0 },
+    title: '',
+    body: richBody('Final normal'),
+    alternateCondition: { variableId: VISIT_VAR_ID, operator: '>=', value: 5 },
+    alternateBody: richBody('Final alternativo por fallos'),
+  }
+
+  const fallosVariable: VariableDef = {
+    id: VISIT_VAR_ID,
+    name: 'Fallos',
+    type: 'number',
+    initialValue: 0,
+  }
+
+  return {
+    schemaVersion: 1,
+    metadata: {
+      id: 'cccccccc-9999-4999-8999-999999999999',
+      name: 'Proyecto de prueba visitEffects',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    },
+    settings: {},
+    variables: [fallosVariable],
+    graph: { nodes: [start, decision, final], startNodeId: VISIT_START_ID },
+    editor: { viewport: { x: 0, y: 0, zoom: 1 } },
+  }
+}
+
+describe('buildHtmlBundle — milestone "+1 fallo con Game Over"', () => {
+  it('visitEffects se aplican al visitar una diapositiva, sea cual sea el camino, y afectan al contenido alternativo del Final', () => {
+    runExportedBundle(buildHtmlBundle(gameOverFeaturesProject(), {}))
+    // Arranca en "Inicio" (visitEffects: +5 sobre "Fallos") -> avanza a la
+    // decisión.
+    clickButton('Continuar')
+    // Elige "Seguir" -> Final. La variable ya vale 5 (>= 5, la condición del
+    // alternativo), así que se ve el contenido ALTERNATIVO.
+    clickButton('Seguir')
+    expect(currentCard().textContent).toContain('Final alternativo por fallos')
+    expect(currentCard().textContent).not.toContain('Final normal')
+  })
+
+  it('sin haber visitado la diapositiva con visitEffects, el Final muestra su contenido por defecto', () => {
+    // Arranca DIRECTAMENTE en la decisión ("Probar desde aquí", saltándose
+    // "Inicio"): la variable se queda en su valor inicial (0), la condición
+    // del alternativo (>= 5) es falsa.
+    const project = gameOverFeaturesProject()
+    project.graph.startNodeId = VISIT_DECISION_ID
+    runExportedBundle(buildHtmlBundle(project, {}))
+
+    clickButton('Seguir')
+
+    expect(currentCard().textContent).toContain('Final normal')
+    expect(currentCard().textContent).not.toContain('Final alternativo por fallos')
+  })
+
+  it('una respuesta actsAsExit es pulsable sin destino y no navega: se queda en la misma diapositiva y muestra el aviso de salir', () => {
+    // Mismo motivo que el test de "Salir" del Final (más arriba en este
+    // archivo): jsdom SÍ implementa window.close() de verdad (a diferencia
+    // de scrollBy y compañía) y desmonta el document entero al llamarlo
+    // (`delete window._document`), lo que rompería cualquier cosa que se
+    // pinte después en el mismo test — se mockea a no-op, igual que el
+    // comportamiento real en un navegador cuando la pestaña no la abrió un
+    // script.
+    const closeSpy = vi.spyOn(window, 'close').mockImplementation(() => {})
+
+    const project = gameOverFeaturesProject()
+    project.graph.startNodeId = VISIT_DECISION_ID
+    runExportedBundle(buildHtmlBundle(project, {}))
+
+    clickButton('No, me rindo.')
+
+    // Sigue en la MISMA diapositiva (su propio texto sigue presente) — no
+    // navegó a ningún nodo.
+    expect(currentCard().textContent).toContain('Elige qué hacer')
+    expect(currentCard().textContent).toContain('Ya puedes cerrar esta pestaña.')
+
+    closeSpy.mockRestore()
+  })
+
+  it('un bloque de imagen "pendiente de subir" (sin assetId) se omite sin más, sin romper el HTML exportado', () => {
+    const project = gameOverFeaturesProject()
+    project.graph.startNodeId = VISIT_DECISION_ID
+    runExportedBundle(buildHtmlBundle(project, {}))
+
+    expect(currentCard().querySelector('img')).toBeNull()
+  })
+})

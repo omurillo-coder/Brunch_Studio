@@ -93,6 +93,15 @@ export interface UpdateResponsePatch {
   audioAssetId?: string | null
   effects?: VariableEffect[] | null
   condition?: VariableCondition | null
+  /**
+   * Milestone "+1 fallo con Game Over" (ver `DecisionResponseSchema.actsAsExit`
+   * en `schemas.ts`): mutuamente excluyente con `targetNodeId`. Fijar
+   * `actsAsExit: true` aquí BORRA `targetNodeId` en la misma llamada (una
+   * respuesta de abandono no puede tener destino) — y a la inversa, `connect`
+   * (`src/domain/graph.ts`) borra `actsAsExit` al fijar un `targetNodeId`
+   * nuevo. `false`/`undefined` no toca `targetNodeId` para nada.
+   */
+  actsAsExit?: boolean
 }
 
 /**
@@ -134,6 +143,14 @@ export function updateResponse(
         }
         if (patch.condition !== undefined) {
           response.condition = patch.condition === null ? undefined : patch.condition
+        }
+        if (patch.actsAsExit !== undefined) {
+          response.actsAsExit = patch.actsAsExit || undefined
+          if (patch.actsAsExit) {
+            // Mutuamente excluyente con el destino: una respuesta que
+            // "actúa como Salir" no navega a ningún nodo.
+            response.targetNodeId = undefined
+          }
         }
       }
     }

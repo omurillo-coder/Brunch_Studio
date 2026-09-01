@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useAppServices } from '../app/AppServicesContext'
 import { useProject } from '../store'
-import { validateIntroForExport } from '../domain'
+import { validateIntroForExport, validatePendingContentForExport } from '../domain'
 import { resolveExportAssets } from './exportAssets'
 import { buildHtmlBundle } from './htmlBundle'
 import { resolvePlayerIntroBrandAssets } from './introBrandAssets'
@@ -40,15 +40,16 @@ function incompleteAssetsMessage(failedCount: number): string {
 }
 
 /**
- * Mensaje de bloqueo cuando la diapositiva de Inicio (portada, nodo `intro`)
- * está incompleta: une en una sola línea legible los textos que devuelve
- * `validateIntroForExport` (`src/domain/introValidation.ts`), uno por cada
- * dato que falta o no es coherente. Reutiliza el MISMO campo `message` que ya
- * usa este hook para el resto de errores (`status: 'error'`) — `Topbar.tsx`
- * ya lo pinta con `role="alert"` sin ningún cambio, así que no hace falta
- * ningún mecanismo nuevo.
+ * Mensaje de bloqueo cuando el proyecto no está listo para exportar: une en
+ * una sola línea legible los textos que devuelven `validateIntroForExport`
+ * (portada incompleta) y `validatePendingContentForExport` (bloques de
+ * imagen "pendientes de subir", milestone "+1 fallo con Game Over"), uno por
+ * cada problema encontrado. Reutiliza el MISMO campo `message` que ya usa
+ * este hook para el resto de errores (`status: 'error'`) — `Topbar.tsx` ya lo
+ * pinta con `role="alert"` sin ningún cambio, así que no hace falta ningún
+ * mecanismo nuevo.
  */
-function incompleteIntroMessage(issues: string[]): string {
+function blockingExportIssuesMessage(issues: string[]): string {
   return `No se puede exportar: ${issues.join('; ')}.`
 }
 
@@ -63,12 +64,15 @@ export function useHtmlExport(filePath: string): HtmlExportState {
     setMessage(null)
     try {
       // Bloquea ANTES de abrir el selector de guardado (y de leer assets o
-      // generar nada): una portada incompleta no debe llegar a producir
-      // ningún archivo. Ver `validateIntroForExport`.
-      const introIssues = validateIntroForExport(project)
-      if (introIssues.length > 0) {
+      // generar nada): una portada incompleta, o un bloque de imagen
+      // pendiente de subir, no debe llegar a producir ningún archivo.
+      const blockingIssues = [
+        ...validateIntroForExport(project),
+        ...validatePendingContentForExport(project),
+      ]
+      if (blockingIssues.length > 0) {
         setStatus('error')
-        setMessage(incompleteIntroMessage(introIssues))
+        setMessage(blockingExportIssuesMessage(blockingIssues))
         return
       }
 

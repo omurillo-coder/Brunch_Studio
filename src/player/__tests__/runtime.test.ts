@@ -775,3 +775,182 @@ describe('runtime del Player: nodo intro (portada)', () => {
     expect(state.currentNodeId).not.toBe(slideId)
   })
 })
+
+// ---------------------------------------------------------------------------
+// Milestone "+1 fallo con Game Over"
+// ---------------------------------------------------------------------------
+
+describe('runtime del Player: visitEffects (efecto al visitar una diapositiva)', () => {
+  it('getInitialState aplica visitEffects si la diapositiva de arranque los tiene', () => {
+    let { project, counter } = withTwoVariables()
+    project = updateNode(project, project.graph.startNodeId, {
+      visitEffects: [{ variableId: counter.id, operation: 'increment', value: 5 }],
+    })
+
+    const state = getInitialState(project)
+    expect(state.variables[counter.id]).toBe(8) // 3 (initialValue) + 5
+  })
+
+  it('advance aplica visitEffects de la diapositiva de destino al avanzar', () => {
+    let { project, counter } = withTwoVariables()
+    project = createNode(project, 'slide', { x: 200, y: 0 })
+    const startId = project.graph.startNodeId
+    const targetId = project.graph.nodes.find((node) => node.id !== startId)!.id
+    project = connect(project, startId, targetId)
+    project = updateNode(project, targetId, {
+      visitEffects: [{ variableId: counter.id, operation: 'increment', value: 5 }],
+    })
+
+    let state = getInitialState(project)
+    expect(state.variables[counter.id]).toBe(3) // todavía no ha visitado el destino
+    state = advance(project, state)
+    expect(state.currentNodeId).toBe(targetId)
+    expect(state.variables[counter.id]).toBe(8)
+  })
+
+  it('choose aplica visitEffects de la diapositiva de destino, DESPUÉS de los effects de la propia respuesta', () => {
+    let { project, counter } = withTwoVariables()
+    project = createNode(project, 'slide', { x: 200, y: 0 })
+    const startId = project.graph.startNodeId
+    const targetId = project.graph.nodes.find((node) => node.id !== startId)!.id
+    project = addResponse(project, startId)
+    const responseA = responsesOf(project, startId).find((r) => r.letter === 'A')
+    if (!responseA) throw new Error('setup inválido')
+    project = connect(project, startId, targetId, responseA.id)
+    project = updateResponse(project, startId, responseA.id, {
+      effects: [{ variableId: counter.id, operation: 'set', value: 10 }],
+    })
+    project = updateNode(project, targetId, {
+      visitEffects: [{ variableId: counter.id, operation: 'increment', value: 5 }],
+    })
+
+    let state = getInitialState(project)
+    state = choose(project, state, responseA.id)
+    // Primero el `set` de la respuesta (-> 10), luego el `+5` de visitEffects (-> 15).
+    expect(state.variables[counter.id]).toBe(15)
+  })
+
+  it('una diapositiva sin visitEffects no toca las variables al visitarla', () => {
+    const { project, counter } = withTwoVariables()
+    const state = getInitialState(project)
+    expect(state.variables[counter.id]).toBe(3)
+  })
+})
+
+describe('runtime del Player: actsAsExit (respuesta "actúa como botón Salir")', () => {
+  it('getView ofrece una respuesta actsAsExit como decisión aunque no tenga targetNodeId', () => {
+    let project = createProject('P')
+    const startId = project.graph.startNodeId
+    project = addResponse(project, startId)
+    const responseA = responsesOf(project, startId).find((r) => r.letter === 'A')
+    if (!responseA) throw new Error('setup inválido')
+    project = updateResponse(project, startId, responseA.id, { actsAsExit: true })
+
+    const state = getInitialState(project)
+    const view = getView(project, state)
+    expect(view.kind).toBe('decision')
+    if (view.kind === 'decision') {
+      expect(view.visibleResponses.map((r) => r.id)).toContain(responseA.id)
+    }
+  })
+
+  it('sin ninguna respuesta con targetNodeId NI actsAsExit, sigue siendo un dead-end', () => {
+    let project = createProject('P')
+    const startId = project.graph.startNodeId
+    project = addResponse(project, startId)
+
+    const state = getInitialState(project)
+    expect(getView(project, state).kind).toBe('dead-end')
+  })
+
+  it('updateResponse borra targetNodeId al fijar actsAsExit; connect borra actsAsExit al fijar targetNodeId', () => {
+    let project = createProject('P')
+    project = createNode(project, 'final', { x: 200, y: 0 })
+    const startId = project.graph.startNodeId
+    const finalId = project.graph.nodes.find((node) => node.type === 'final')!.id
+    project = addResponse(project, startId)
+    const responseA = responsesOf(project, startId).find((r) => r.letter === 'A')
+    if (!responseA) throw new Error('setup inválido')
+
+    project = connect(project, startId, finalId, responseA.id)
+    expect(responsesOf(project, startId)[0]?.targetNodeId).toBe(finalId)
+
+    project = updateResponse(project, startId, responseA.id, { actsAsExit: true })
+    expect(responsesOf(project, startId)[0]?.actsAsExit).toBe(true)
+    expect(responsesOf(project, startId)[0]?.targetNodeId).toBeUndefined()
+
+    project = connect(project, startId, finalId, responseA.id)
+    expect(responsesOf(project, startId)[0]?.targetNodeId).toBe(finalId)
+    expect(responsesOf(project, startId)[0]?.actsAsExit).toBeUndefined()
+  })
+})
+
+describe('runtime del Player: variante alternativa de un Final ("Final Ok"/"Final con fallos")', () => {
+  function buildFinalWithAlternate(counter: VariableDef) {
+    let project = createProject('P')
+    project = createNode(project, 'final', { x: 200, y: 0 }, { body: 'Cuerpo por defecto' })
+    const finalId = project.graph.nodes.find((node) => node.type === 'final')!.id
+    project = updateNode(project, finalId, {
+      alternateCondition: { variableId: counter.id, operator: '>=', value: 5 },
+      alternateBody: 'Cuerpo alternativo',
+    })
+    return { project, finalId }
+  }
+
+  it('con la condición verdadera y alternateBody con contenido, resuelve al cuerpo alternativo', () => {
+    const { project: base, counter } = withTwoVariables()
+    const { project, finalId } = buildFinalWithAlternate(counter)
+    const merged = { ...project, variables: base.variables }
+
+    const state = { currentNodeId: finalId, totalPoints: null, variables: { [counter.id]: 5 } }
+    const view = getView(merged, state)
+    expect(view.kind).toBe('final')
+    if (view.kind === 'final') {
+      expect(view.resolvedBody).toBe('Cuerpo alternativo')
+    }
+  })
+
+  it('con la condición falsa, resuelve al cuerpo por defecto', () => {
+    const { project: base, counter } = withTwoVariables()
+    const { project, finalId } = buildFinalWithAlternate(counter)
+    const merged = { ...project, variables: base.variables }
+
+    const state = { currentNodeId: finalId, totalPoints: null, variables: { [counter.id]: 0 } }
+    const view = getView(merged, state)
+    expect(view.kind).toBe('final')
+    if (view.kind === 'final') {
+      expect(view.resolvedBody).toBe('Cuerpo por defecto')
+    }
+  })
+
+  it('con la condición verdadera pero alternateBody vacío, no deja la vista en blanco: cae al cuerpo por defecto', () => {
+    let { project, counter } = withTwoVariables()
+    project = createNode(project, 'final', { x: 200, y: 0 }, { body: 'Cuerpo por defecto' })
+    const finalId = project.graph.nodes.find((node) => node.type === 'final')!.id
+    project = updateNode(project, finalId, {
+      alternateCondition: { variableId: counter.id, operator: '>=', value: 5 },
+      // alternateBody NO se fija: queda undefined.
+    })
+
+    const state = { currentNodeId: finalId, totalPoints: null, variables: { [counter.id]: 5 } }
+    const view = getView(project, state)
+    expect(view.kind).toBe('final')
+    if (view.kind === 'final') {
+      expect(view.resolvedBody).toBe('Cuerpo por defecto')
+    }
+  })
+
+  it('sin alternateCondition, resuelve siempre al cuerpo por defecto (compatibilidad total)', () => {
+    let project = createProject('P')
+    project = createNode(project, 'final', { x: 200, y: 0 }, { body: 'Cuerpo por defecto' })
+    const finalId = project.graph.nodes.find((node) => node.type === 'final')!.id
+
+    const state = getInitialState(project)
+    const withFinal = { ...state, currentNodeId: finalId }
+    const view = getView(project, withFinal)
+    expect(view.kind).toBe('final')
+    if (view.kind === 'final') {
+      expect(view.resolvedBody).toBe('Cuerpo por defecto')
+    }
+  })
+})

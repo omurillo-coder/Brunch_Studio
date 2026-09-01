@@ -127,6 +127,12 @@ function ContentBlockView({
       if (!block.body.trim()) return null
       return <RichTextView body={block.body} className={styles.body} />
     case 'image':
+      // Imagen "pendiente de subir" (milestone "+1 fallo con Game Over",
+      // `assetId` opcional): mismo criterio "vacío = nada" que un bloque de
+      // texto sin escribir — el Player la omite sin más. Exportar SÍ la
+      // bloquea (ver `validatePendingContentForExport`), así que en la
+      // práctica esto solo se ve al "Probar" con contenido a medias.
+      if (!block.assetId) return null
       return (
         <PlayerImage
           key={block.assetId}
@@ -509,23 +515,39 @@ export function PlayerScreen({ filePath }: PlayerScreenProps) {
                   key={response.id}
                   response={response}
                   index={index + 1}
-                  disabled={!response.targetNodeId}
+                  disabled={!response.targetNodeId && !response.actsAsExit}
                   filePath={filePath}
                   assetRepository={assetRepository}
                   onChoose={() =>
-                    setPlayerState((current) => choose(project, current, response.id))
+                    // Milestone "+1 fallo con Game Over": una respuesta
+                    // `actsAsExit` no navega a ningún nodo — se comporta
+                    // igual que el botón "Salir" de la vista Final
+                    // (`handleExitAttempt`), quedándose en esta misma
+                    // diapositiva.
+                    response.actsAsExit
+                      ? handleExitAttempt()
+                      : setPlayerState((current) => choose(project, current, response.id))
                   }
                 />
               ))}
             </div>
+            {/* Mismo aviso que la vista Final tras "Salir" (ver
+                `handleExitAttempt`): una respuesta `actsAsExit` deja al
+                jugador en esta misma diapositiva, así que el aviso se pinta
+                aquí en vez de en una vista Final a la que nunca llega. */}
+            {exitMessageVisible && (
+              <p className={styles.exitMessage} role="status">
+                Ya puedes cerrar esta pestaña.
+              </p>
+            )}
           </div>
         )}
 
         {view.kind === 'final' && (
           <div key={view.node.id} className={styles.card}>
             <h1 className={styles.title}>Fin de la experiencia</h1>
-            {view.node.body.trim() ? (
-              <RichTextView body={view.node.body} className={styles.body} />
+            {view.resolvedBody.trim() ? (
+              <RichTextView body={view.resolvedBody} className={styles.body} />
             ) : (
               <p className={styles.body}>
                 {view.node.title.trim() || 'Has llegado al final de esta experiencia.'}

@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { asignaturaBelongsToCiclo, validateIntroForExport } from '../introValidation'
+import {
+  asignaturaBelongsToCiclo,
+  validateIntroForExport,
+  validatePendingContentForExport,
+} from '../introValidation'
 import { createNode, createProject, updateNode } from '../project'
+import { addImageBlock } from '../content'
 import { CICLOS } from '../catalog'
 import type { ProjectDocument } from '../schemas'
 
@@ -95,5 +100,44 @@ describe('validateIntroForExport', () => {
       caseName: '   ',
     })
     expect(validateIntroForExport(updated)).toEqual(['Escribe el nombre del caso práctico'])
+  })
+})
+
+describe('validatePendingContentForExport (milestone "+1 fallo con Game Over")', () => {
+  it('sin ningún bloque de imagen pendiente, no devuelve ningún problema', () => {
+    const project = createProject('P')
+    expect(validatePendingContentForExport(project)).toEqual([])
+  })
+
+  it('detecta un bloque de imagen pendiente (sin assetId) y lo identifica por el número D de su diapositiva', () => {
+    const project = createProject('P')
+    const slideId = project.graph.startNodeId
+    const withPending = addImageBlock(project, slideId)
+
+    const issues = validatePendingContentForExport(withPending)
+    expect(issues).toEqual(['La diapositiva D1 tiene una imagen pendiente de subir.'])
+  })
+
+  it('detecta varios bloques pendientes en distintas diapositivas', () => {
+    let project = createProject('P')
+    const firstSlideId = project.graph.startNodeId
+    project = addImageBlock(project, firstSlideId)
+    project = createNode(project, 'slide', { x: 200, y: 0 })
+    const secondSlideId = project.graph.nodes.find(
+      (node) => node.type === 'slide' && node.id !== firstSlideId,
+    )?.id
+    if (!secondSlideId) throw new Error('setup inválido')
+    project = addImageBlock(project, secondSlideId)
+
+    const issues = validatePendingContentForExport(project)
+    expect(issues).toHaveLength(2)
+  })
+
+  it('un bloque de imagen con assetId ya asignado no cuenta como pendiente', () => {
+    const project = createProject('P')
+    const slideId = project.graph.startNodeId
+    const withImage = addImageBlock(project, slideId, '11111111-1111-1111-1111-111111111111')
+
+    expect(validatePendingContentForExport(withImage)).toEqual([])
   })
 })

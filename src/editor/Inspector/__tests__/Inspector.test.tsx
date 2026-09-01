@@ -691,6 +691,35 @@ describe('Inspector — editor de bloques de contenido de una diapositiva (miles
     expect(preview.getAttribute('src')).toContain('data:image/png;base64,')
   })
 
+  it('milestone "+1 fallo con Game Over": un bloque de imagen pendiente muestra "Adjuntar imagen"; adjuntar rellena el assetId y sustituye el aviso por la vista previa', async () => {
+    const id = createEmptySlide()
+    act(() => {
+      useProjectStore.getState().addImageBlock(id) // sin assetId: "pendiente de subir"
+      useProjectStore.getState().selectNode(id)
+    })
+    const assetRepository = setupAssetRepository()
+    const pickImportAssetPath = vi.fn().mockResolvedValue('/tmp/foto.png')
+
+    renderInspectorWithServices({ assetRepository, pickImportAssetPath })
+
+    expect(screen.getByText(/Imagen pendiente de subir/)).toBeInTheDocument()
+    expect(screen.queryByAltText('Vista previa de la imagen adjunta 1')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Adjuntar imagen' }))
+
+    await waitFor(() => {
+      const block = slideNode(id).content[0]
+      expect(block?.type === 'image' ? block.assetId : undefined).toBeDefined()
+    })
+    expect(pickImportAssetPath).toHaveBeenCalledWith('image')
+
+    const preview = (await screen.findByAltText(
+      'Vista previa de la imagen adjunta 1',
+    )) as HTMLImageElement
+    expect(preview.getAttribute('src')).toContain('data:image/png;base64,')
+    expect(screen.queryByText(/Imagen pendiente de subir/)).not.toBeInTheDocument()
+  })
+
   it('"+ Audio" añade un bloque de audio a content y muestra el reproductor', async () => {
     const id = createEmptySlide()
     act(() => {
@@ -1475,9 +1504,13 @@ describe('Inspector — enrutado condicional de una diapositiva "de continuar" (
     render(<Inspector filePath={TEST_FILE_PATH} />)
 
     expect(screen.getByText('Condición de aparición')).toBeInTheDocument()
+    // Al menos una: el mismo aviso también lo pinta, por su cuenta, la
+    // sección de "Efecto al visitar esta diapositiva" (milestone "+1 fallo
+    // con Game Over") más abajo en la misma tarjeta — ambas secciones
+    // necesitan variables y ninguna hay en este test.
     expect(
-      screen.getByText(/Todavía no hay variables en el proyecto/),
-    ).toBeInTheDocument()
+      screen.getAllByText(/Todavía no hay variables en el proyecto/).length,
+    ).toBeGreaterThanOrEqual(1)
     expect(
       screen.queryByRole('button', { name: '+ Activar condición de aparición' }),
     ).not.toBeInTheDocument()
@@ -1559,6 +1592,187 @@ describe('Inspector — enrutado condicional de una diapositiva "de continuar" (
     render(<Inspector filePath={TEST_FILE_PATH} />)
 
     expect(screen.queryByText('Condición de aparición')).not.toBeInTheDocument()
+  })
+})
+
+describe('Inspector — "Actúa como botón Salir" en una respuesta (milestone "+1 fallo con Game Over")', () => {
+  it('marcarla borra el destino ya elegido y deshabilita el desplegable de destino', () => {
+    act(() => {
+      useProjectStore.getState().createNode('final', { x: 100, y: 0 }, { title: 'Fin' })
+    })
+    const finalId = useProjectStore.getState().project.graph.nodes.find((n) => n.type === 'final')?.id
+    if (!finalId) throw new Error('setup inválido')
+    const decisionId = createSlideWithTwoResponses()
+    const responseAId = slideNode(decisionId).responses.find((r) => r.letter === 'A')?.id
+    if (!responseAId) throw new Error('setup inválido')
+    act(() => {
+      useProjectStore.getState().connect(decisionId, finalId, responseAId)
+      useProjectStore.getState().selectNode(decisionId)
+    })
+    expect(
+      slideNode(decisionId).responses.find((r) => r.id === responseAId)?.targetNodeId,
+    ).toBe(finalId)
+
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    // [0]: hay una casilla por respuesta (A y B); esta prueba actúa sobre A.
+    fireEvent.click(
+      screen.getAllByRole('checkbox', {
+        name: 'Actúa como botón Salir (no navega a ningún nodo)',
+      })[0]!,
+    )
+
+    const responseA = slideNode(decisionId).responses.find((r) => r.id === responseAId)
+    expect(responseA?.actsAsExit).toBe(true)
+    expect(responseA?.targetNodeId).toBeUndefined()
+    expect(screen.getByLabelText('Destino de la respuesta 1')).toBeDisabled()
+  })
+
+  it('desmarcarla vuelve a habilitar el desplegable de destino', () => {
+    const decisionId = createSlideWithTwoResponses()
+    const responseAId = slideNode(decisionId).responses.find((r) => r.letter === 'A')?.id
+    if (!responseAId) throw new Error('setup inválido')
+    act(() => {
+      useProjectStore.getState().updateResponse(decisionId, responseAId, { actsAsExit: true })
+      useProjectStore.getState().selectNode(decisionId)
+    })
+
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    // [0]: hay una casilla por respuesta (A y B); esta prueba actúa sobre A.
+    const checkbox = screen.getAllByRole('checkbox', {
+      name: 'Actúa como botón Salir (no navega a ningún nodo)',
+    })[0]!
+    expect(checkbox).toBeChecked()
+    fireEvent.click(checkbox)
+
+    // `updateResponse` normaliza `actsAsExit: false` a `undefined` (ver
+    // comentario de `UpdateResponsePatch.actsAsExit` en
+    // `src/domain/responses.ts`) — igual de "desactivado" que no haberlo
+    // fijado nunca.
+    expect(
+      slideNode(decisionId).responses.find((r) => r.id === responseAId)?.actsAsExit,
+    ).toBeFalsy()
+    expect(screen.getByLabelText('Destino de la respuesta 1')).not.toBeDisabled()
+  })
+})
+
+describe('Inspector — efecto al visitar una diapositiva (milestone "+1 fallo con Game Over")', () => {
+  it('sin variables en el proyecto, muestra un aviso en vez del editor de efectos', () => {
+    act(() => {
+      useProjectStore.getState().selectNode(startNodeId())
+    })
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    // Sin variables, la sección se reduce al aviso (sin la etiqueta "Efecto
+    // al visitar esta diapositiva", que solo aparece con el editor real).
+    expect(
+      screen.getAllByText(/Todavía no hay variables en el proyecto/).length,
+    ).toBeGreaterThanOrEqual(1)
+    expect(screen.queryByRole('button', { name: '+ Añadir efecto' })).not.toBeInTheDocument()
+  })
+
+  it('"+ Añadir efecto" añade un efecto "set" con la primera variable y valor por defecto; editar su valor lo actualiza en `node.visitEffects`', () => {
+    act(() => {
+      useProjectStore.getState().addVariable({ name: 'Fallos', type: 'number', initialValue: 0 })
+      useProjectStore.getState().selectNode(startNodeId())
+    })
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    fireEvent.click(screen.getByRole('button', { name: '+ Añadir efecto' }))
+
+    expect(slideNode(startNodeId()).visitEffects).toEqual([
+      { variableId: expect.any(String), operation: 'set', value: 0 },
+    ])
+
+    const valueField = screen.getByLabelText('Valor del efecto 1')
+    fireEvent.change(valueField, { target: { value: '1' } })
+    fireEvent.blur(valueField)
+
+    expect(slideNode(startNodeId()).visitEffects?.[0]?.value).toBe(1)
+  })
+
+  it('quitar el único efecto deja `visitEffects` sin definir', () => {
+    act(() => {
+      useProjectStore.getState().addVariable({ name: 'Fallos', type: 'number', initialValue: 0 })
+      useProjectStore.getState().selectNode(startNodeId())
+    })
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    fireEvent.click(screen.getByRole('button', { name: '+ Añadir efecto' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Quitar efecto 1' }))
+
+    expect(slideNode(startNodeId()).visitEffects).toBeUndefined()
+  })
+})
+
+describe('Inspector — variante alternativa de un Final (milestone "+1 fallo con Game Over")', () => {
+  it('sin variables en el proyecto, muestra un aviso en vez del botón "+ Añadir variante alternativa"', () => {
+    act(() => {
+      useProjectStore.getState().createNode('final', { x: 0, y: 0 })
+    })
+    const finalId = useProjectStore.getState().project.graph.nodes.find((n) => n.type === 'final')?.id
+    if (!finalId) throw new Error('setup inválido')
+    act(() => {
+      useProjectStore.getState().selectNode(finalId)
+    })
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    // Sin variables, la sección se reduce al aviso (sin la etiqueta
+    // "Variante alternativa", que solo aparece con el editor real).
+    expect(screen.getByText(/Todavía no hay variables en el proyecto/)).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: '+ Añadir variante alternativa' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('"+ Añadir variante alternativa" fija una condición por defecto y muestra el editor de contenido alternativo', () => {
+    act(() => {
+      useProjectStore.getState().addVariable({ name: 'Fallos', type: 'number', initialValue: 0 })
+      useProjectStore.getState().createNode('final', { x: 0, y: 0 })
+    })
+    const finalId = useProjectStore.getState().project.graph.nodes.find((n) => n.type === 'final')?.id
+    if (!finalId) throw new Error('setup inválido')
+    act(() => {
+      useProjectStore.getState().selectNode(finalId)
+    })
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    fireEvent.click(screen.getByRole('button', { name: '+ Añadir variante alternativa' }))
+
+    const nodeAfter = useProjectStore.getState().project.graph.nodes.find((n) => n.id === finalId)
+    expect(nodeAfter?.type === 'final' ? nodeAfter.alternateCondition : undefined).toEqual({
+      variableId: expect.any(String),
+      operator: '==',
+      value: 0,
+    })
+    expect(screen.getByText('Contenido alternativo')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Quitar variante alternativa' })).toBeInTheDocument()
+  })
+
+  it('quitar la variante limpia tanto la condición como el contenido alternativo', () => {
+    act(() => {
+      useProjectStore.getState().addVariable({ name: 'Fallos', type: 'number', initialValue: 0 })
+      useProjectStore.getState().createNode('final', { x: 0, y: 0 })
+    })
+    const finalId = useProjectStore.getState().project.graph.nodes.find((n) => n.type === 'final')?.id
+    if (!finalId) throw new Error('setup inválido')
+    const variableId = useProjectStore.getState().project.variables[0]?.id
+    if (!variableId) throw new Error('setup inválido')
+    act(() => {
+      useProjectStore.getState().updateNode(finalId, {
+        alternateCondition: { variableId, operator: '>', value: 0 },
+        alternateBody: 'Con fallos',
+      })
+      useProjectStore.getState().selectNode(finalId)
+    })
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Quitar variante alternativa' }))
+
+    const nodeAfter = useProjectStore.getState().project.graph.nodes.find((n) => n.id === finalId)
+    expect(nodeAfter?.type === 'final' ? nodeAfter.alternateCondition : undefined).toBeUndefined()
+    expect(nodeAfter?.type === 'final' ? nodeAfter.alternateBody : undefined).toBeUndefined()
   })
 })
 

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useAppServices } from '../app/AppServicesContext'
 import { useProject } from '../store'
-import { validateIntroForExport } from '../domain'
+import { validateIntroForExport, validatePendingContentForExport } from '../domain'
 import { resolveExportAssets } from './exportAssets'
 import { buildTeacherReviewBundle } from './teacherReviewExport'
 
@@ -45,10 +45,10 @@ function incompleteAssetsMessage(failedCount: number): string {
 }
 
 /** Mismo criterio que `useHtmlExport`/`useScormExport`: une los textos de
- *  `validateIntroForExport` en una sola línea legible, reutilizando el
- *  mismo campo `message`/`status: 'error'` que `Topbar.tsx` ya pinta sin
- *  ningún cambio. */
-function incompleteIntroMessage(issues: string[]): string {
+ *  `validateIntroForExport`/`validatePendingContentForExport` en una sola
+ *  línea legible, reutilizando el mismo campo `message`/`status: 'error'`
+ *  que `Topbar.tsx` ya pinta sin ningún cambio. */
+function blockingExportIssuesMessage(issues: string[]): string {
   return `No se puede exportar: ${issues.join('; ')}.`
 }
 
@@ -64,10 +64,13 @@ export function useTeacherReviewExport(filePath: string): TeacherReviewExportSta
     try {
       // Bloquea ANTES de abrir el selector de guardado (y de leer assets o
       // generar nada), igual criterio que "Exportar HTML"/"Exportar SCORM".
-      const introIssues = validateIntroForExport(project)
-      if (introIssues.length > 0) {
+      const blockingIssues = [
+        ...validateIntroForExport(project),
+        ...validatePendingContentForExport(project),
+      ]
+      if (blockingIssues.length > 0) {
         setStatus('error')
-        setMessage(incompleteIntroMessage(introIssues))
+        setMessage(blockingExportIssuesMessage(blockingIssues))
         return
       }
 

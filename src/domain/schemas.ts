@@ -184,6 +184,21 @@ export const DecisionResponseSchema = z.object({
    * total con el comportamiento actual).
    */
   condition: VariableConditionSchema.optional(),
+  /**
+   * Milestone "+1 fallo con Game Over": esta respuesta no navega a ningún
+   * nodo — al elegirla, el Player se comporta igual que el botón "Salir" de
+   * la vista `final` (intento de cerrar la pestaña + aviso "ya puedes
+   * cerrar esta pestaña"), quedándose en la misma diapositiva. Pensada para
+   * una respuesta de abandono ("No, me rindo.") que no tiene sentido
+   * conectar a ningún nodo real del grafo.
+   *
+   * Mutuamente excluyente con `targetNodeId`: `updateResponse`
+   * (`src/domain/responses.ts`) borra `targetNodeId` al fijar
+   * `actsAsExit: true`, y `connect` (`src/domain/graph.ts`) borra
+   * `actsAsExit` al fijar un `targetNodeId` — nunca conviven los dos a la
+   * vez. `undefined`/`false` = comportamiento de siempre (compat. total).
+   */
+  actsAsExit: z.boolean().optional(),
 })
 
 // ---------------------------------------------------------------------------
@@ -284,7 +299,18 @@ export const ContentBlockSchema = z.discriminatedUnion('type', [
   z.object({
     id: z.string().uuid(),
     type: z.literal('image'),
-    assetId: z.string().uuid(),
+    /**
+     * Milestone "+1 fallo con Game Over": `assetId` es OPCIONAL — un bloque
+     * de imagen puede existir "pendiente de subir" (sin archivo todavía),
+     * para dejar el hueco reservado en el editor mientras se consigue el
+     * material real. `undefined` = sin imagen todavía; el Player/export lo
+     * tratan como cualquier otro contenido vacío (se omite, mismo criterio
+     * "vacío = nada" que el resto de bloques). `validatePendingContentForExport`
+     * (`src/domain/introValidation.ts`) BLOQUEA la exportación mientras
+     * quede algún bloque de imagen pendiente — a diferencia del Player, que
+     * sí tolera probarlo así.
+     */
+    assetId: z.string().uuid().optional(),
   }),
   z.object({
     id: z.string().uuid(),
@@ -486,6 +512,20 @@ export const SlideNodeSchema = z.object({
    * ninguna razón de dominio para poner un tope.
    */
   content: z.array(ContentBlockSchema),
+  /**
+   * Milestone "+1 fallo con Game Over": efectos sobre variables aplicados
+   * la primera vez que el Player entra en ESTA diapositiva, sea cual sea el
+   * camino por el que se llegó (una respuesta elegida, el "Continuar" de
+   * otra diapositiva, o incluso el arranque del recorrido si esta
+   * diapositiva fuera el punto de partida) — a diferencia de
+   * `DecisionResponse.effects` (solo al elegir esa respuesta concreta),
+   * este es el equivalente "al visitar" en vez de "al elegir". Mismo tipo
+   * `VariableEffect` reutilizado tal cual, mismo criterio de patch
+   * (`undefined`/array vacío = "sin efectos") que `effects` en
+   * `DecisionResponseSchema`. Aplicado por `runtime.ts`
+   * (`applyVisitEffects`), reflejado en `exportedPlayerScript.ts`.
+   */
+  visitEffects: z.array(VariableEffectSchema).optional(),
 })
 
 /**
@@ -529,6 +569,26 @@ export const FinalNodeSchema = z.object({
    * `src/domain/__tests__/schemas.test.ts`.
    */
   variant: FinalVariantSchema.default('general'),
+  /**
+   * Milestone "+1 fallo con Game Over" ("Final Ok" / "Final con fallos" con
+   * un único nodo Final): variante alternativa de `body`, mostrada en vez
+   * del contenido por defecto cuando `alternateCondition` se evalúa a
+   * VERDADERA contra el estado de variables del recorrido
+   * (`evaluateCondition`, `src/domain/variables.ts`). Quien diseña el caso
+   * solo conecta un ÚNICO destino a este nodo Final; es la propia variable
+   * la que decide qué contenido ve el alumno — no hay que crear un segundo
+   * nodo Final ni cablear una segunda conexión.
+   *
+   * Ausente `alternateCondition`, o presente pero `alternateBody` vacío =
+   * comportamiento de siempre (siempre `body`, nunca se evalúa nada) —
+   * cambio puramente aditivo, sin migración. `alternateBody` vacío con
+   * `alternateCondition` verdadera NO deja la vista en blanco: cae de
+   * vuelta a `body`/`title` por defecto (ver `resolveFinalBody` en
+   * `src/player/runtime.ts`) — un alternativo mal configurado nunca debe
+   * dejar al alumno ante una pantalla vacía.
+   */
+  alternateCondition: VariableConditionSchema.optional(),
+  alternateBody: z.string().optional(),
 })
 
 export const NodeSchema = z.discriminatedUnion('type', [

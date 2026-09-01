@@ -87,7 +87,24 @@ export type PlayerView =
        */
       visibleResponses: DecisionResponse[]
     }
-  | { kind: 'final'; node: FinalNode }
+  | {
+      kind: 'final'
+      node: FinalNode
+      /**
+       * Milestone "+1 fallo con Game Over" ("Final Ok"/"Final con fallos"
+       * con un único nodo Final, ver `FinalNodeSchema.alternateCondition`/
+       * `alternateBody`): el cuerpo que debe pintarse, ya resuelto —
+       * `node.alternateBody` si `node.alternateCondition` evalúa a
+       * verdadera contra `PlayerState.variables` Y `alternateBody` tiene
+       * contenido; `node.body` en cualquier otro caso (sin condición, con
+       * condición falsa, o alternativo vacío — nunca deja la vista en
+       * blanco). Quien pinta la vista (`PlayerScreen.tsx`/
+       * `exportedPlayerScript.ts`) usa SIEMPRE este campo, nunca
+       * `node.body` directamente — mismo criterio que `visibleResponses`
+       * para `kind: 'decision'`.
+       */
+      resolvedBody: string
+    }
   | { kind: 'dead-end'; node: Node | null }
 
 /**
@@ -139,6 +156,48 @@ function findNode(project: ProjectDocument, nodeId: string): Node | null {
 }
 
 /**
+ * Milestone "+1 fallo con Game Over": aplica `visitEffects` (si los hay,
+ * ver `SlideNodeSchema.visitEffects`) sobre `variables` al ENTRAR en
+ * `nodeId` — se llama desde `getInitialState`/`advance`/`choose`, los tres
+ * únicos sitios de este módulo donde cambia `currentNodeId`, para que se
+ * apliquen sea cual sea el camino por el que se llegó (elegir una
+ * respuesta, el "Continuar" de otra diapositiva, o el propio arranque del
+ * recorrido). Solo tiene efecto sobre un `slide` con `visitEffects`; sobre
+ * cualquier otro nodo (o sin `nodeId`, `currentNodeId` a `null`) devuelve
+ * `variables` intacto. No hay ninguna guarda de "solo la primera vez": no
+ * hace falta, no existe ninguna forma de "volver atrás" a un nodo ya
+ * visitado sin pasar por `restart` (que resiembra `variables` desde cero).
+ */
+function applyVisitEffects(
+  project: ProjectDocument,
+  variables: VariableState,
+  nodeId: string | null,
+): VariableState {
+  if (!nodeId) return variables
+  const node = findNode(project, nodeId)
+  if (!node || node.type !== 'slide' || !node.visitEffects || node.visitEffects.length === 0) {
+    return variables
+  }
+  return applyVariableEffects(variables, node.visitEffects)
+}
+
+/**
+ * Milestone "+1 fallo con Game Over": resuelve qué `body` debe pintarse
+ * para un nodo `final`, ver el comentario de `PlayerView` (rama `'final'`,
+ * campo `resolvedBody`) para la semántica completa.
+ */
+function resolveFinalBody(node: FinalNode, variables: VariableState): string {
+  if (
+    node.alternateCondition &&
+    node.alternateBody?.trim() &&
+    evaluateCondition(variables, node.alternateCondition)
+  ) {
+    return node.alternateBody
+  }
+  return node.body
+}
+
+/**
  * Calcula el estado inicial del recorrido a partir del documento: el
  * recorrido empieza directamente en `graph.startNodeId`, la diapositiva de
  * inicio del proyecto. Ya no hay ningún nodo "Inicio" invisible del que
@@ -164,10 +223,11 @@ function findNode(project: ProjectDocument, nodeId: string): Node | null {
 export function getInitialState(project: ProjectDocument, startNodeId?: string): PlayerState {
   const requested = startNodeId ? findNode(project, startNodeId) : null
   const start = requested ?? findNode(project, project.graph.startNodeId)
+  const startId = start ? start.id : null
   return {
-    currentNodeId: start ? start.id : null,
+    currentNodeId: startId,
     totalPoints: null,
-    variables: initialVariableState(project),
+    variables: applyVisitEffects(project, initialVariableState(project), startId),
   }
 }
 
@@ -209,7 +269,7 @@ export function getView(project: ProjectDocument, state: PlayerState): PlayerVie
   }
 
   if (node.type === 'final') {
-    return { kind: 'final', node }
+    return { kind: 'final', node, resolvedBody: resolveFinalBody(node, state.variables) }
   }
 
   if (node.responses.length > 0) {
@@ -222,7 +282,12 @@ export function getView(project: ProjectDocument, state: PlayerState): PlayerVie
     const visibleResponses = node.responses.filter(
       (response) => !response.condition || evaluateCondition(state.variables, response.condition),
     )
-    return visibleResponses.some((response) => response.targetNodeId)
+    // Milestone "+1 fallo con Game Over": una respuesta `actsAsExit` cuenta
+    // igual que una con `targetNodeId` a la hora de decidir si esto es una
+    // decisión "ofrecible" — no navega a ningún nodo, pero SÍ es una opción
+    // pulsable de verdad (termina el recorrido ahí mismo, ver
+    // `ResponseOption`/`handleExitAttempt` en `PlayerScreen.tsx`).
+    return visibleResponses.some((response) => response.targetNodeId || response.actsAsExit)
       ? { kind: 'decision', node, visibleResponses }
       : { kind: 'dead-end', node }
   }
@@ -252,14 +317,22 @@ export function advance(project: ProjectDocument, state: PlayerState): PlayerSta
 
   if (node.type === 'intro') {
     if (!node.targetNodeId) return state
-    return { ...state, currentNodeId: node.targetNodeId }
+    return {
+      ...state,
+      currentNodeId: node.targetNodeId,
+      variables: applyVisitEffects(project, state.variables, node.targetNodeId),
+    }
   }
 
   if (node.type !== 'slide') return state
   if (node.responses.length > 0) return state
   const target = resolveSlideTarget(node, state.variables)
   if (!target) return state
-  return { ...state, currentNodeId: target }
+  return {
+    ...state,
+    currentNodeId: target,
+    variables: applyVisitEffects(project, state.variables, target),
+  }
 }
 
 /**
@@ -297,6 +370,7 @@ export function choose(
   if (!response || !response.targetNodeId) return state
   const totalPoints =
     response.points === undefined ? state.totalPoints : (state.totalPoints ?? 0) + response.points
-  const variables = applyVariableEffects(state.variables, response.effects ?? [])
+  const afterResponseEffects = applyVariableEffects(state.variables, response.effects ?? [])
+  const variables = applyVisitEffects(project, afterResponseEffects, response.targetNodeId)
   return { currentNodeId: response.targetNodeId, totalPoints, variables }
 }

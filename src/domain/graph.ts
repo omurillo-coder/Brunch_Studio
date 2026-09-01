@@ -189,6 +189,11 @@ export function connect(
       const response = draftSource.responses.find((candidate) => candidate.id === responseId)
       if (response) {
         response.targetNodeId = targetNodeId
+        // Mutuamente excluyente con `actsAsExit` (milestone "+1 fallo con
+        // Game Over", ver comentario de `UpdateResponsePatch.actsAsExit` en
+        // `src/domain/responses.ts`): conectar un destino de verdad
+        // desactiva "actúa como Salir" si estaba activo.
+        response.actsAsExit = undefined
       }
     } else {
       draftSource.targetNodeId = targetNodeId
