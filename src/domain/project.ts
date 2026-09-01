@@ -2,6 +2,7 @@ import { produce } from 'immer'
 import { createId, nextNodeNumber, shiftNodeNumbersForNewIntro } from './id'
 import { connect } from './graph'
 import type {
+  CanvasBadge,
   FinalNode,
   FinalVariant,
   IntroNode,
@@ -121,6 +122,12 @@ export interface UpdateNodePatch {
    *  opcionales de este parche. */
   alternateCondition?: VariableCondition | null
   alternateBody?: string | null
+  /** Solo en `slide` (milestone "+1 fallo con Game Over", ver
+   *  `SlideNodeSchema.canvasBadge`). En la práctica, solo `addGameOverPack`
+   *  (`src/domain/nodePacks.ts`) fija este campo — no hay ningún control de
+   *  Inspector que lo edite. Mismo criterio de patch que `color`:
+   *  `undefined` no toca, `null` borra (vuelve a "sin insignia"). */
+  canvasBadge?: CanvasBadge | null
 }
 
 /**
@@ -456,10 +463,11 @@ export function updateNode(
     patch.condition !== undefined ||
     patch.elseTargetNodeId !== undefined ||
     patch.color !== undefined ||
-    patch.visitEffects !== undefined
+    patch.visitEffects !== undefined ||
+    patch.canvasBadge !== undefined
   if (setsSlideOnlyField && node && node.type !== 'slide') {
     throw new Error(
-      `El nodo "${nodeId}" es de tipo "${node.type}" y no admite texto de continuar, enrutado condicional, color ni efecto al visitar.`,
+      `El nodo "${nodeId}" es de tipo "${node.type}" y no admite texto de continuar, enrutado condicional, color, efecto al visitar ni insignia de lienzo.`,
     )
   }
   if (patch.body !== undefined && node && node.type !== 'final') {
@@ -521,6 +529,9 @@ export function updateNode(
       }
       if (patch.visitEffects !== undefined) {
         draftNode.visitEffects = patch.visitEffects === null ? undefined : patch.visitEffects
+      }
+      if (patch.canvasBadge !== undefined) {
+        draftNode.canvasBadge = patch.canvasBadge === null ? undefined : patch.canvasBadge
       }
     }
     if (draftNode.type === 'intro') {

@@ -592,8 +592,17 @@ export function LeftPanel() {
               )}
               {/* "Referencia" es la etiqueta de UI del campo `title` de
                   dominio (ver el `<label>` del Inspector) — el nombre del
-                  campo no cambia, solo el texto que ve el usuario. */}
-              <span className={styles.nodeTitle}>{node.title.trim() || 'Sin ref. oculta'}</span>
+                  campo no cambia, solo el texto que ve el usuario. Petición
+                  de usuario "el Final como el Inicio": ni `intro` ni
+                  `final` editan ya `title` desde el Inspector (ver
+                  `referenceField` en `NodeFields`, `Inspector.tsx`), así
+                  que mostrar "Sin ref. oculta" para ellos sería el mismo
+                  hueco vacío de siempre sin ninguna información real —
+                  `.nodeType` (arriba, "INICIO"/"FINAL") ya los identifica
+                  del todo, se omite esta segunda etiqueta entera. */}
+              {node.type === 'slide' && (
+                <span className={styles.nodeTitle}>{node.title.trim() || 'Sin ref. oculta'}</span>
+              )}
             </button>
           </li>
         ))}

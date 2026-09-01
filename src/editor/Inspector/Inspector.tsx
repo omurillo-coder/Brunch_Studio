@@ -12,7 +12,6 @@ import {
   CICLOS,
   COMPARISON_OPERATORS,
   DEFAULT_CONTINUE_LABEL,
-  FINAL_VARIANTS,
   MAX_RESPONSES,
   RESPONSE_LETTERS,
   SLIDE_COLORS,
@@ -23,7 +22,6 @@ import type {
   ContentBlock,
   DecisionResponse,
   FinalNode,
-  FinalVariant,
   IntroNode,
   Node,
   NodeType,
@@ -37,7 +35,7 @@ import type {
 import { useAppServices } from '../../app/AppServicesContext'
 import { useAssetDataUri } from '../../hooks/useAssetDataUri'
 import { PersistenceCommandError } from '../../persistence/wrapInvokeError'
-import { NODE_TYPE_LABEL } from '../Canvas/nodes/nodeTypes'
+import { NODE_TYPE_LABEL, shortNodeLabel } from '../Canvas/nodes/nodeTypes'
 import { RichTextEditor } from '../richText/RichTextEditor'
 import {
   clampInspectorWidth,
@@ -90,8 +88,18 @@ const NO_TARGET_VALUE = '__none__'
  * `title` del dominio (ver comentario de `NodeFields` más abajo, junto al
  * `<label>` del campo): el nombre del campo en el modelo no cambia, solo su
  * texto visible.
+ *
+ * `intro`/`final` (petición de usuario "el Final como el Inicio"): ninguno
+ * de los dos edita ya `title` desde el Inspector (ver `referenceField` en
+ * `NodeFields`, más abajo), así que mostrar "— Sin ref. oculta" tras su
+ * tipo/número sería el mismo hueco vacío de siempre sin ninguna
+ * información real — se omite el segmento entero para estos dos tipos,
+ * dejando solo "<Tipo> <número>" (p.ej. "Inicio 1", "Final 5").
  */
 function nodeOptionLabel(node: Node): string {
+  if (node.type === 'intro' || node.type === 'final') {
+    return `${NODE_TYPE_LABEL[node.type]} ${node.number}`
+  }
   const title = node.title.trim() || 'Sin ref. oculta'
   return `${NODE_TYPE_LABEL[node.type]} ${node.number} — ${title}`
 }
@@ -2232,50 +2240,19 @@ function DuplicateNodeButton({ node }: { node: Node }) {
 }
 
 /**
- * Etiqueta legible de cada variante de un nodo `final` (estructura de datos
- * únicamente por ahora, ver comentario de `FinalVariantSchema` en
- * `src/domain/schemas.ts`: el TEXTO real de cada variante lo aportará el
- * usuario más adelante, este desplegable solo fija la categoría).
+ * Milestone "+1 fallo con Game Over", petición de usuario: el desplegable
+ * de variante de un Final (general/bueno/malo, `FinalVariantSchema`) YA NO
+ * se muestra aquí — quedó redundante en cuanto la variante "buena/con
+ * fallos" pasó a decidirla la propia variable "Fallos" a través de
+ * `FinalAlternateSection` (más abajo): normalmente hay un ÚNICO nodo Final
+ * por proyecto, y su contenido alternativo (no una categoría manual
+ * aparte) es lo que distingue "Final Ok" de "Final con fallos". El campo
+ * `variant` sigue existiendo en el dominio (`FinalNodeSchema`, valor por
+ * defecto `'general'`) — se conserva por compatibilidad con documentos
+ * `.brunch` guardados antes de este cambio y con la importación de Twee
+ * (`src/import/twee/tweeConverter.ts`), pero ya no tiene ningún control de
+ * edición en la UI.
  */
-const FINAL_VARIANT_LABEL: Record<FinalVariant, string> = {
-  general: 'Final general',
-  good: 'Final bueno',
-  bad: 'Final malo',
-}
-
-/**
- * Desplegable de variante de un nodo `final` (general/bueno/malo, ver
- * `FinalVariantSchema`). Cambiar de variante es un único `updateNode` con
- * SOLO `variant` en el patch — nunca toca ni vacía `body` (el texto del
- * Final, editado aparte más abajo por `RichTextEditor`): son campos
- * completamente independientes, ver comentario de `UpdateNodePatch.variant`
- * en `src/domain/project.ts`. Sin "commit on blur": un `<select>` no tiene
- * estado intermedio que proteger, mismo criterio que el resto de selectores
- * de este archivo (`SlideColorSection`, `ConditionEditor`...).
- */
-function FinalVariantSection({ node }: { node: FinalNode }) {
-  const updateNode = useProjectStore((state) => state.updateNode)
-  const fieldId = 'inspector-final-variant'
-
-  function handleChange(event: ChangeEvent<HTMLSelectElement>) {
-    updateNode(node.id, { variant: event.target.value as FinalVariant })
-  }
-
-  return (
-    <div>
-      <label className={styles.label} htmlFor={fieldId}>
-        Variante
-      </label>
-      <select id={fieldId} className={styles.select} value={node.variant} onChange={handleChange}>
-        {FINAL_VARIANTS.map((variant) => (
-          <option key={variant} value={variant}>
-            {FINAL_VARIANT_LABEL[variant]}
-          </option>
-        ))}
-      </select>
-    </div>
-  )
-}
 
 /**
  * Variante alternativa de un Final (milestone "+1 fallo con Game Over":
@@ -2440,19 +2417,13 @@ function NodeFields({
 
   // "Ref. oculta" es la etiqueta de UI del campo `title` del dominio (el
   // nombre del campo en el modelo/schema no cambia, solo su texto visible —
-  // ver también `nodeOptionLabel` más arriba y los "Sin ref. oculta" de
-  // `LeftPanel`/`nodeTypes.tsx`, que otro proceso en paralelo actualiza a
-  // "Sin ref. oculta" — fuera de mi alcance en este archivo). `id`/`htmlFor`
-  // se dejan como estaban: son detalle interno del DOM, no texto visible.
-  // Extraído a una variable (en vez de repetir el JSX) porque Tarea 4 lo
-  // sitúa en dos posiciones distintas del árbol según el tipo de nodo (ver
-  // más abajo): dentro del grupo "sobre esta diapositiva en sí" para una
-  // `slide`, en su posición de siempre para `final`. Milestone "Inicio
-  // siempre es D1": NUNCA se renderiza para un `intro` (ver más abajo) — el
-  // Inicio no necesita esta referencia interna, su identidad ya es clara por
-  // sí misma (ciclo/asignatura/caso + ser el único punto de partida del
-  // proyecto). Antes de este milestone se mostraba también para `intro`
-  // como "una nota interna más"; ya no.
+  // ver también `nodeOptionLabel` más arriba). `id`/`htmlFor` se dejan como
+  // estaban: son detalle interno del DOM, no texto visible. Petición de
+  // usuario "el Final como el Inicio": desde ese cambio, SOLO se renderiza
+  // para una `slide` (ver más abajo) — ni `intro` (milestone "Inicio
+  // siempre es D1") ni `final` la necesitan ya: cada uno se identifica por
+  // su cabecera propia en el lienzo (`IntroHeader`/`FinalHeader`,
+  // `nodeTypes.tsx`) en vez de por este campo de texto libre.
   const referenceField = (
     <div>
       <label className={styles.label} htmlFor="inspector-node-title">
@@ -2476,6 +2447,17 @@ function NodeFields({
     </div>
   )
 
+  // Petición de usuario: "que el tipo de nodo aparezca arriba de la
+  // referencia oculta" — kicker discreto ("Diapositiva · D3") justo encima
+  // de `referenceField`. Solo tiene sentido junto a `referenceField` (que
+  // ahora, ver más abajo, SOLO se renderiza para una `slide`), así que no
+  // hace falta condicionarlo aparte: viaja siempre pegado a él.
+  const nodeKindLabel = (
+    <span className={styles.nodeKindLabel}>
+      {NODE_TYPE_LABEL[node.type]} · {shortNodeLabel(node)}
+    </span>
+  )
+
   return (
     <div className={styles.fields}>
       {node.type === 'slide' ? (
@@ -2490,6 +2472,7 @@ function NodeFields({
            `Inspector.module.css`) que ya usa el resto de la app para
            agrupar visualmente (p.ej. `VariablesPanel`). */
         <div className={styles.metaGroup}>
+          {nodeKindLabel}
           <SlideColorSection node={node} />
           {referenceField}
           <ContentBlocksSection node={node} filePath={filePath} />
@@ -2497,17 +2480,20 @@ function NodeFields({
         </div>
       ) : (
         <>
-          {/* Milestone "Inicio siempre es D1": "Ref. oculta" ya NO se
-              muestra para un `intro` — decisión deliberada (antes se
-              consideraba "solo una nota interna más" y se dejaba visible
-              también ahí, ver historial de este comentario): el Inicio no
-              necesita esa referencia interna, su identidad ya es clara por
-              sí misma (ciclo/asignatura/caso + ser el único punto de partida
-              del proyecto). Sigue exactamente igual para `final`. */}
-          {node.type !== 'intro' && referenceField}
+          {/* Milestone "Inicio siempre es D1" + petición de usuario "el
+              Final como el Inicio": "Ref. oculta" ya NO se muestra para
+              `intro` NI `final` — ninguno de los dos necesita esa
+              referencia interna: el Inicio se identifica por su propio
+              ciclo/asignatura/caso, y el Final ahora se identifica solo por
+              "FINAL" (cabecera grande en el lienzo, ver `FinalHeader` en
+              `nodeTypes.tsx`) — normalmente hay un único Final por
+              proyecto, con su variante alternativa por variable
+              (`FinalAlternateSection`, más abajo). El campo `title` sigue
+              existiendo en el dominio (`baseNodeFields`, compatibilidad con
+              documentos guardados antes de este cambio) — solo deja de
+              editarse desde aquí. */}
           {node.type === 'final' && (
             <>
-              <FinalVariantSection node={node} />
               <div>
                 <span id="inspector-node-body-label" className={styles.label}>
                   Contenido

@@ -41,8 +41,20 @@ import styles from './NodeCard.module.css'
  * `intro` es su propio ciclo/asignatura/caso, siempre único en el proyecto).
  * En su lugar, `shortNodeLabel` devuelve `'INICIO'` (nunca `'D1'`) para este
  * tipo, pintado en `IntroHeader` (más abajo) en tamaño grande y prominente
- * — sustituye por completo a `Header`, que sigue siendo exclusivo de
- * `slide`/`final`.
+ * — sustituye por completo a `Header`, que desde este mismo criterio queda
+ * exclusivo de `slide`.
+ *
+ * Petición de usuario "el Final como el Inicio": un `final` sigue el MISMO
+ * patrón que `intro` desde ese cambio — sin título/Ref. oculta (tampoco se
+ * edita ya en el Inspector), `shortNodeLabel` devuelve `'FINAL'` (nunca
+ * `'D{número}'`) para este tipo, pintado en `FinalHeader` (más abajo, mismo
+ * tamaño/criterio que `IntroHeader`) en vez de `Header`. A diferencia de
+ * `intro`, SÍ puede haber varios `final` en un proyecto — perder el número
+ * visible en el lienzo es una renuncia deliberada (normalmente hay un único
+ * Final por proyecto desde que existe `FinalAlternateSection`, milestone
+ * "+1 fallo con Game Over"); el desplegable de destino del Inspector
+ * (`nodeOptionLabel`) SÍ sigue mostrando el número, ahí hace falta para
+ * distinguir varios finales entre sí.
  */
 
 /** Exportado para que otros componentes del lienzo (p.ej. `ConnectionMenu`,
@@ -77,8 +89,13 @@ export const START_NODE_LABEL = 'Inicio'
  * `intro` nace con `number: 1` (ver `src/domain/project.ts`/`migration.ts`),
  * esta función no depende de ese número en absoluto: un `intro` se identifica
  * por ser el único punto de partida del proyecto, no por su posición en la
- * numeración. Para `slide`/`final` el comportamiento no cambia: `"D" +
- * number`.
+ * numeración.
+ *
+ * Petición de usuario "el Final como el Inicio": mismo criterio para
+ * `final`, que devuelve siempre `'FINAL'`, nunca `'D{número}'` — a
+ * diferencia de `intro` SÍ puede haber varios en un proyecto, pero el
+ * número deja de mostrarse en el lienzo/panel izquierdo de todos modos (ver
+ * comentario de cabecera del módulo). Solo `slide` conserva `"D" + number`.
  */
 export function shortNodeLabel(node: {
   number: number
@@ -86,7 +103,9 @@ export function shortNodeLabel(node: {
   nodeType?: NodeType
 }): string {
   const type = node.type ?? node.nodeType
-  return type === 'intro' ? 'INICIO' : `D${node.number}`
+  if (type === 'intro') return 'INICIO'
+  if (type === 'final') return 'FINAL'
+  return `D${node.number}`
 }
 
 /** Máximo de respuestas que se resumen dentro de la tarjeta. El propio
@@ -127,13 +146,18 @@ const SLIDE_COLOR_CARD_CLASS: Record<SlideColor, string | undefined> = {
  *  `cardIntro` (fondo verde clarito, milestone "Diapositiva de Inicio") solo
  *  a `intro`; una `slide` con `data.color` fijado usa el token de esa
  *  entrada de la paleta (ver `SLIDE_COLOR_CARD_CLASS`) — sin color, mantiene
- *  su fondo neutro sin cambios, igual que siempre. */
+ *  su fondo neutro sin cambios, igual que siempre. `cardGameOver` (marco
+ *  rojo, milestone "+1 fallo con Game Over"): solo la `slide` con
+ *  `data.canvasBadge === 'game-over'` — se combina con cualquier color de
+ *  fondo que además tenga, mismo canal `outline` que `cardFinal`/
+ *  `cardIntro` (ver su comentario en `NodeCard.module.css`). */
 function cardClassName(data: CanvasNodeData): string {
   return [
     styles.card,
     data.nodeType === 'final' && styles.cardFinal,
     data.nodeType === 'intro' && styles.cardIntro,
     data.nodeType === 'slide' && data.color && SLIDE_COLOR_CARD_CLASS[data.color],
+    data.nodeType === 'slide' && data.canvasBadge === 'game-over' && styles.cardGameOver,
     data.hasNoOutgoing && styles.cardWarning,
     data.isHighlighted && styles.cardHighlighted,
     data.isDimmed && styles.cardDimmed,
@@ -171,6 +195,12 @@ function PinBadge({ data }: { data: CanvasNodeData }) {
   )
 }
 
+/**
+ * Cabecera de una `slide`, EXCLUSIVA de este tipo desde la petición de
+ * usuario "el Final como el Inicio" (antes también servía para `final`,
+ * ver `FinalHeader` más abajo para su reemplazo). Título/Ref. oculta + código
+ * corto "D{número}".
+ */
 function Header({ data }: { data: CanvasNodeData }) {
   return (
     <div className={styles.header}>
@@ -230,6 +260,50 @@ function IntroHeader({ data }: { data: CanvasNodeData }) {
   )
 }
 
+/**
+ * Cabecera EXCLUSIVA de la tarjeta de un `final` (petición de usuario "el
+ * Final como el Inicio") — sustituye por completo a `Header` para este
+ * tipo, nunca se usa junto a ella. Mismo criterio EXACTO que `IntroHeader`
+ * (mismo layout centrado, misma clase `.introLabel` reutilizada para el
+ * tamaño grande — sin duplicar esa regla de CSS por un nombre distinto):
+ * sin título/Ref. oculta (ya no se edita para `final`, ver `NodeFields` en
+ * `Inspector.tsx`), "FINAL" (`shortNodeLabel`, nunca `'D{número}'` para
+ * este tipo) en tamaño grande y prominente en vez del badge pequeño
+ * `.type` de `Header`.
+ */
+function FinalHeader({ data }: { data: CanvasNodeData }) {
+  return (
+    <div className={styles.introHeader}>
+      <span className={styles.introLabel}>{shortNodeLabel(data)}</span>
+      <PinBadge data={data} />
+    </div>
+  )
+}
+
+/**
+ * Insignia "+1 FALLO"/"GAME OVER" (milestone "+1 fallo con Game Over",
+ * `SlideNodeSchema.canvasBadge`) — SOLO para los 2 nodos que crea
+ * `addGameOverPack`, `undefined` para cualquier otra `slide`. A diferencia
+ * de `IntroHeader`/`FinalHeader`, NO sustituye a `Header`: se pinta ANTES
+ * (ver `SlideNodeView`), como una fila extra encima — una diapositiva del
+ * pack sigue necesitando su título/Ref. oculta/D-número normales debajo,
+ * a diferencia de `intro`/`final`. El texto en sí es fijo (no configurable
+ * desde el Inspector): "+1 FALLO" en el color de acento de siempre,
+ * "GAME OVER" en el rojo de aviso (`--bs-color-danger`, mismo tono que el
+ * marco rojo de `.cardGameOver`, ver `cardClassName`).
+ */
+function SlideBadgeHeader({ data }: { data: CanvasNodeData }) {
+  if (!data.canvasBadge) return null
+  const isGameOver = data.canvasBadge === 'game-over'
+  return (
+    <div className={styles.badgeHeader}>
+      <span className={isGameOver ? styles.badgeLabelDanger : styles.badgeLabel}>
+        {isGameOver ? 'GAME OVER' : '+1 FALLO'}
+      </span>
+    </div>
+  )
+}
+
 /** Handle de entrada único, compartido por diapositivas y finales. */
 function InHandle() {
   return (
@@ -280,6 +354,7 @@ export function SlideNodeView({ data }: NodeProps<CanvasFlowNode>) {
     <div className={cardClassName(data)}>
       <NoOutgoingBadge data={data} />
       <InHandle />
+      <SlideBadgeHeader data={data} />
       <Header data={data} />
       <BodyPreview data={data} />
       {responses.length > 0 ? (
@@ -301,7 +376,7 @@ export function FinalNodeView({ data }: NodeProps<CanvasFlowNode>) {
   return (
     <div className={cardClassName(data)}>
       <InHandle />
-      <Header data={data} />
+      <FinalHeader data={data} />
       <BodyPreview data={data} />
     </div>
   )

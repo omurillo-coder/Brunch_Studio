@@ -96,6 +96,22 @@
   letter-spacing: 0.04em;
 }
 
+/* Kicker "Diapositiva · D3" (petición de usuario: "que el tipo de nodo
+   aparezca arriba de la referencia oculta") — mismo tamaño/mayúsculas que
+   `.label`, pero en el color de acento y con más peso, para que se lea
+   como una identificación del nodo (no como la etiqueta de un campo
+   editable de al lado). Vive pegado encima de `referenceField`, ver
+   `nodeKindLabel` en `Inspector.tsx`. */
+.nodeKindLabel {
+  display: block;
+  margin-bottom: var(--bs-space-2);
+  font-size: var(--bs-font-size-xs);
+  font-weight: 700;
+  color: var(--bs-color-accent);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
 /* "Actúa como botón Salir" (milestone "+1 fallo con Game Over"): checkbox +
    texto en una sola línea, mismo tamaño de fuente que el resto de campos de
    una respuesta. */

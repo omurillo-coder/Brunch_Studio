@@ -137,6 +137,27 @@ export function Canvas() {
   const nodes = toFlowNodes(project, selectedNodeIds)
   const edges = toFlowEdges(project, selectedNodeIds)
 
+  // Petición de usuario: "cuando se inicie un proyecto, los nodos
+  // aparezcan en la parte central de la pantalla, no arriba a la
+  // izquierda". `createProject` (`src/domain/project.ts`) siembra
+  // `editor.viewport` siempre con este mismo valor exacto — nunca lo pone
+  // ningún otro camino del dominio — y es también el único sitio que lo
+  // pisa después `handleMoveEnd` (más abajo): solo se persiste al TERMINAR
+  // un gesto de pan/zoom real, nunca antes (ver su comentario). Que el
+  // viewport guardado siga siendo EXACTAMENTE `{x:0, y:0, zoom:1}` es, por
+  // tanto, una señal fiable de "nadie ha tocado nunca la vista de este
+  // proyecto" — se usa en `handleInit`, más abajo, para pedir un `fitView`
+  // en vez de aceptar ese valor tal cual como `defaultViewport` (que deja
+  // cualquier nodo situado cerca del origen, como el Inicio o D1, pegado a
+  // la esquina superior izquierda — el bug reportado). Una vez el usuario
+  // haga cualquier pan/zoom, `project.editor.viewport` deja de ser este
+  // sentinela y las siguientes aperturas respetan su vista guardada de
+  // siempre.
+  const isFreshViewport =
+    project.editor.viewport.x === 0 &&
+    project.editor.viewport.y === 0 &&
+    project.editor.viewport.zoom === 1
+
   // Instancia de React Flow, capturada vía `onInit` (evita necesitar un
   // `<ReactFlowProvider>` + `useReactFlow()` solo para esto). Vive en un
   // ref, no en estado: no debe disparar un re-render propio.
@@ -182,8 +203,38 @@ export function Canvas() {
     (instance: ReactFlowInstance<CanvasFlowNode, CanvasFlowEdge>) => {
       instanceRef.current = instance
       updateViewportCenter()
+      if (isFreshViewport) {
+        // Deliberadamente NO la prop declarativa `<ReactFlow fitView>`:
+        // React Flow decide si un nodo "cuenta" para el encuadre mirando
+        // `node.measured.width/height` (`getFitViewNodes` en
+        // `@xyflow/system`), que NO están rellenos todavía en este primer
+        // instante de `onInit` — solo lo estarán tras el primer aviso del
+        // `ResizeObserver` interno, asíncrono. Con la prop declarativa el
+        // encuadre se calculaba sobre "cero nodos visibles", resultando en
+        // un zoom absurdo (comprobado en el navegador: `scale(0.1)` con
+        // todos los nodos amontonados en una esquina). Un doble
+        // `requestAnimationFrame` (patrón ya usado en la app para "esperar
+        // al siguiente pintado tras un cambio de layout", ver
+        // `RichTextEditor.test.tsx`) da tiempo de sobra a que esa primera
+        // medición real llegue antes de invocar el método imperativo
+        // `fitView()`, que si lee `measured` correctamente.
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            // `typeof ... === 'function'` (no solo `instanceRef.current?.`):
+            // mismo motivo que la guarda análoga de `updateViewportCenter`
+            // más arriba — varias suites de test (`Canvas.wiring.test.tsx`)
+            // inyectan vía `onInit` una instancia "de pega" que no
+            // implementa `fitView`, y este `requestAnimationFrame` doble
+            // puede llegar a disparase DESPUÉS de que el test ya haya
+            // corrido sus aserciones (o incluso desmontado el componente).
+            if (typeof instanceRef.current?.fitView === 'function') {
+              instanceRef.current.fitView({ duration: 0 })
+            }
+          })
+        })
+      }
     },
-    [updateViewportCenter],
+    [updateViewportCenter, isFreshViewport],
   )
 
   // -- Arrastre de nodos: una única entrada de historial (ver store) -----

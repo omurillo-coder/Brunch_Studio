@@ -120,8 +120,11 @@ describe('NodeCard — fondo de color de una diapositiva `slide`', () => {
 
     render(<Canvas />)
 
-    const finalTitle = await screen.findByText('El final')
-    const finalCard = finalTitle.closest(`.${CSS.escape(cardClass)}`)
+    // Petición de usuario "el Final como el Inicio": un `final` ya no
+    // pinta su título ("El final") — se localiza por su cabecera fija
+    // "FINAL" (`FinalHeader`, `nodeTypes.tsx`).
+    const finalLabel = await screen.findByText('FINAL')
+    const finalCard = finalLabel.closest(`.${CSS.escape(cardClass)}`)
     expect(hasAnySlideColorClass(finalCard)).toBe(false)
 
     const intro = useProjectStore.getState().project.graph.nodes.find((n) => n.type === 'intro')

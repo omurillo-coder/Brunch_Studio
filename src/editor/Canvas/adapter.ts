@@ -1,6 +1,7 @@
 import type { Edge as XyEdge, Node as XyNode } from '@xyflow/react'
 import { asignaturaWorkspaceName, CICLOS, deriveEdges, RESPONSE_LETTERS } from '../../domain'
 import type {
+  CanvasBadge,
   DecisionResponse,
   Edge as DomainEdge,
   IntroNode,
@@ -64,6 +65,14 @@ interface BaseCanvasNodeData {
    * sin colorear, fondo neutro de siempre.
    */
   color?: SlideColor
+  /**
+   * Insignia fija del pack "+1 fallo con Game Over" (milestone del mismo
+   * nombre, ver `SlideNodeSchema.canvasBadge`). Solo presente en nodos
+   * `slide` que la tengan — la inmensa mayoría no la tiene nunca, salvo los
+   * 2 que crea `addGameOverPack`. `undefined` = sin insignia, cabecera
+   * normal (`Header`, `nodeTypes.tsx`).
+   */
+  canvasBadge?: CanvasBadge
   /** `true` solo para la diapositiva de inicio (`graph.startNodeId`). */
   isStart: boolean
   /**
@@ -264,6 +273,7 @@ function toNodeData(node: DomainNode, startNodeId: string): BaseCanvasNodeData {
       text: response.text,
     }))
     base.color = node.color
+    base.canvasBadge = node.canvasBadge
   }
   return base
 }

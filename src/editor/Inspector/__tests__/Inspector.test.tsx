@@ -1317,9 +1317,13 @@ describe('Inspector — navegación rápida entre diapositivas conectadas (tarea
     const incoming = screen.getByText('Diapositivas que llevan aquí').closest('div') as HTMLElement
     expect(within(incoming).getByText(/Inicio/)).toBeInTheDocument()
 
+    // Petición de usuario "el Final como el Inicio": `nodeOptionLabel` ya no
+    // añade "— <título>" para un `final` (ya no lo edita nadie desde el
+    // Inspector) — se identifican aquí por "Final <número>", no por el
+    // título ("Final A"/"Final B") con el que se crearon.
     const outgoing = screen.getByText('A dónde lleva esta diapositiva').closest('div') as HTMLElement
-    expect(within(outgoing).getByText(/Final A/)).toBeInTheDocument()
-    expect(within(outgoing).getByText(/Final B/)).toBeInTheDocument()
+    expect(within(outgoing).getByText(`Final ${finalA.number}`)).toBeInTheDocument()
+    expect(within(outgoing).getByText(`Final ${finalB.number}`)).toBeInTheDocument()
   })
 
   it('un nodo Final solo puede tener entrantes, nunca salientes', () => {
@@ -1885,71 +1889,40 @@ describe('Inspector — etiqueta "Ref. oculta" (renombrado de UI del campo `titl
     expect(screen.queryByText('Título')).not.toBeInTheDocument()
   })
 
-  it('un nodo sin título se etiqueta "Sin ref. oculta" en el selector de destino', () => {
+  it('un nodo `slide` sin título se etiqueta "Sin ref. oculta" en el selector de destino', () => {
+    act(() => {
+      useProjectStore.getState().createNode('slide', { x: 0, y: 0 })
+      useProjectStore.getState().selectNode(startNodeId())
+    })
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    // La diapositiva recién creada, sin título, aparece como destino posible
+    // de "Continuar" con la etiqueta "Sin ref. oculta" (ver `nodeOptionLabel`)
+    // — al menos una: la propia diapositiva de inicio (también sin título)
+    // es OTRO destino posible en la misma lista.
+    expect(screen.getAllByText(/Diapositiva \d+ — Sin ref. oculta/).length).toBeGreaterThanOrEqual(1)
+    expect(screen.queryByText(/Sin título/)).not.toBeInTheDocument()
+  })
+
+  it('petición de usuario "el Final como el Inicio": un `final` (que ya no tiene título editable) aparece en el selector de destino SOLO como "Final <número>", sin "— Sin ref. oculta"', () => {
     act(() => {
       useProjectStore.getState().createNode('final', { x: 0, y: 0 })
       useProjectStore.getState().selectNode(startNodeId())
     })
     render(<Inspector filePath={TEST_FILE_PATH} />)
 
-    // El nodo final recién creado, sin título, aparece como destino posible
-    // de "Continuar" con la etiqueta "Sin ref. oculta" (ver `nodeOptionLabel`).
-    expect(screen.getByText(/Final \d+ — Sin ref. oculta/)).toBeInTheDocument()
-    expect(screen.queryByText(/Sin título/)).not.toBeInTheDocument()
+    expect(screen.getByText(/^Final \d+$/)).toBeInTheDocument()
+    expect(screen.queryByText(/Final \d+ — /)).not.toBeInTheDocument()
   })
 })
 
-describe('Inspector — variante de un Final (general/bueno/malo)', () => {
-  function createAndSelectFinal(): string {
-    useProjectStore.getState().createNode('final', { x: 0, y: 0 }, { body: 'Cuerpo del final' })
-    const finalId = useProjectStore.getState().project.graph.nodes.find((n) => n.type === 'final')?.id
-    if (!finalId) throw new Error('setup inválido: no se creó el nodo final')
-    useProjectStore.getState().selectNode(finalId)
-    return finalId
-  }
-
-  it('un Final nuevo muestra el desplegable de variante con "Final general" seleccionado por defecto', () => {
-    act(() => {
-      createAndSelectFinal()
-    })
-    render(<Inspector filePath={TEST_FILE_PATH} />)
-
-    const select = screen.getByLabelText('Variante') as HTMLSelectElement
-    expect(select).toBeInTheDocument()
-    expect(select.value).toBe('general')
-    expect(screen.getByRole('option', { name: 'Final general' })).toBeInTheDocument()
-    expect(screen.getByRole('option', { name: 'Final bueno' })).toBeInTheDocument()
-    expect(screen.getByRole('option', { name: 'Final malo' })).toBeInTheDocument()
-  })
-
-  it('el desplegable NO aparece para una diapositiva ni para el nodo intro', () => {
-    act(() => {
-      useProjectStore.getState().selectNode(startNodeId())
-    })
-    render(<Inspector filePath={TEST_FILE_PATH} />)
-
-    expect(screen.queryByLabelText('Variante')).not.toBeInTheDocument()
-  })
-
-  it('cambiar la variante actualiza el nodo sin tocar `body`', () => {
-    let finalId = ''
-    act(() => {
-      finalId = createAndSelectFinal()
-    })
-    render(<Inspector filePath={TEST_FILE_PATH} />)
-
-    fireEvent.change(screen.getByLabelText('Variante'), { target: { value: 'good' } })
-
-    const node = useProjectStore.getState().project.graph.nodes.find((n) => n.id === finalId)
-    expect(node?.type === 'final' ? node.variant : undefined).toBe('good')
-    expect(node?.type === 'final' ? node.body : undefined).toBe('Cuerpo del final')
-
-    fireEvent.change(screen.getByLabelText('Variante'), { target: { value: 'bad' } })
-    const nodeAfter = useProjectStore.getState().project.graph.nodes.find((n) => n.id === finalId)
-    expect(nodeAfter?.type === 'final' ? nodeAfter.variant : undefined).toBe('bad')
-    expect(nodeAfter?.type === 'final' ? nodeAfter.body : undefined).toBe('Cuerpo del final')
-  })
-})
+// El desplegable "Variante" (general/bueno/malo) de un Final se retiró del
+// Inspector en el milestone "+1 fallo con Game Over" (petición de usuario:
+// "no quiero el desplegable con final general, final bueno...") — quedó
+// redundante frente a `FinalAlternateSection` (variante alternativa
+// decidida por la variable "Fallos"). El campo `variant` sigue existiendo
+// en el dominio (compatibilidad, ver comentario en `Inspector.tsx` donde
+// vivía la sección), pero ya no tiene ningún control de UI que probar aquí.
 
 describe('Inspector — diapositiva de Inicio (nodo `intro`, milestone "Diapositiva de Inicio", Tarea 2)', () => {
   /** Crea el nodo `intro` (el proyecto de test, vía `createProject` de bajo
@@ -1986,7 +1959,7 @@ describe('Inspector — diapositiva de Inicio (nodo `intro`, milestone "Diaposit
     expect(screen.queryByText('Ref. oculta')).not.toBeInTheDocument()
   })
 
-  it('"Ref. oculta" sigue mostrándose igual para `slide`/`final` (solo se oculta para `intro`)', () => {
+  it('"Ref. oculta" sigue mostrándose para `slide`; petición de usuario "el Final como el Inicio": ya NO se muestra para `final` (mismo criterio que `intro`)', () => {
     act(() => {
       useProjectStore.getState().selectNode(startNodeId())
     })
@@ -2003,7 +1976,8 @@ describe('Inspector — diapositiva de Inicio (nodo `intro`, milestone "Diaposit
       useProjectStore.getState().selectNode(finalId)
     })
     render(<Inspector filePath={TEST_FILE_PATH} />)
-    expect(screen.getByLabelText('Ref. oculta')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Ref. oculta')).not.toBeInTheDocument()
+    expect(screen.queryByText('Ref. oculta')).not.toBeInTheDocument()
   })
 
   it('la Asignatura está deshabilitada, con aviso, mientras no se elija un Ciclo', () => {
@@ -2258,7 +2232,7 @@ describe('Inspector — reorganización del Inspector (Tarea 4): Color arriba de
     expect(within(metaGroup as HTMLElement).queryByText('Destino de continuar')).not.toBeInTheDocument()
   })
 
-  it('para `final`/`intro` (sin sección Color) no se envuelve "Ref. oculta" en el contenedor agrupado', () => {
+  it('petición de usuario "el Final como el Inicio": `final`/`intro` ya no muestran "Ref. oculta" en absoluto (ni dentro ni fuera del contenedor agrupado)', () => {
     act(() => {
       useProjectStore.getState().createNode('final', { x: 100, y: 0 })
     })
@@ -2271,8 +2245,7 @@ describe('Inspector — reorganización del Inspector (Tarea 4): Color arriba de
     })
     render(<Inspector filePath={TEST_FILE_PATH} />)
 
-    const referenceLabel = screen.getByText('Ref. oculta')
-    expect(referenceLabel.closest(`.${CSS.escape(styles.metaGroup as string)}`)).toBeNull()
+    expect(screen.queryByText('Ref. oculta')).not.toBeInTheDocument()
   })
 })
 
@@ -2391,7 +2364,7 @@ describe('Inspector — campos "por rellenar" en blanco, no en gris (petición d
   })
 
   it(
-    'los <select> de elección cerrada (Ciclo, Asignatura, variante de Final, operador de condición) ' +
+    'los <select> de elección cerrada (Ciclo, Asignatura, operador de condición) ' +
       'nunca llevan fieldEmpty, estén o no elegidos',
     () => {
       // Ciclo/Asignatura de la diapositiva de Inicio.
@@ -2414,19 +2387,6 @@ describe('Inspector — campos "por rellenar" en blanco, no en gris (petición d
       fireEvent.change(cicloSelect, { target: { value: ciclo.id } })
       expect(screen.getByLabelText('Asignatura').className).not.toContain(styles.fieldEmpty)
       unmount()
-
-      // Variante de un Final.
-      act(() => {
-        useProjectStore.getState().createNode('final', { x: 100, y: 0 })
-      })
-      const finalId = useProjectStore.getState().project.graph.nodes.find((n) => n.type === 'final')?.id
-      if (!finalId) throw new Error('setup inválido')
-      act(() => {
-        useProjectStore.getState().selectNode(finalId)
-      })
-      const { unmount: unmountFinal } = render(<Inspector filePath={TEST_FILE_PATH} />)
-      expect(screen.getByLabelText('Variante').className).not.toContain(styles.fieldEmpty)
-      unmountFinal()
 
       // Operador de una condición de visibilidad de respuesta (necesita al
       // menos una variable en el proyecto para no mostrar el aviso "Todavía

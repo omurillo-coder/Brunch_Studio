@@ -42,8 +42,11 @@ describe('NodeCard — fondo y contenido del nodo `intro` (Diapositiva de Inicio
     expect(introCard).not.toBeNull()
     expect(introCard?.classList.contains(cardIntroClass)).toBe(true)
 
-    const finalTitle = screen.getByText('El final')
-    const finalCard = finalTitle.closest(`.${CSS.escape(cardClass)}`)
+    // Petición de usuario "el Final como el Inicio": un `final` ya no
+    // pinta su título ("El final") — se localiza por su cabecera fija
+    // "FINAL" (`FinalHeader`, `nodeTypes.tsx`).
+    const finalLabel = screen.getByText('FINAL')
+    const finalCard = finalLabel.closest(`.${CSS.escape(cardClass)}`)
     expect(finalCard).not.toBeNull()
     expect(finalCard?.classList.contains(cardIntroClass)).toBe(false)
 

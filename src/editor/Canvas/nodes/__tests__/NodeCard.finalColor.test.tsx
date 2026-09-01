@@ -31,8 +31,12 @@ describe('NodeCard — fondo de la diapositiva `final`', () => {
 
     render(<Canvas />)
 
-    const finalTitle = await screen.findByText('El final')
-    const finalCard = finalTitle.closest(`.${CSS.escape(cardClass)}`)
+    // Petición de usuario "el Final como el Inicio": un `final` ya no
+    // pinta su título ("El final") en el lienzo — se localiza por su
+    // cabecera fija "FINAL" (`FinalHeader`, `nodeTypes.tsx`), mismo
+    // criterio que ya usan los tests de `intro`/"INICIO".
+    const finalLabel = await screen.findByText('FINAL')
+    const finalCard = finalLabel.closest(`.${CSS.escape(cardClass)}`)
     expect(finalCard).not.toBeNull()
     expect(finalCard?.classList.contains(cardFinalClass)).toBe(true)
 

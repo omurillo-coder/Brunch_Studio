@@ -52,12 +52,16 @@ describe('Canvas (montaje real de @xyflow/react)', () => {
     render(<Canvas />)
 
     expect(await screen.findByText('Diapositiva uno')).toBeInTheDocument()
-    // Tarea "Numeración corta": las tres tarjetas (dos `slide` + un `final`)
-    // muestran su código corto "D{número}" en vez de distinguirse por texto
-    // de tipo — ya no hay "Diapositiva"/"Final" en la cabecera de la
-    // tarjeta.
-    expect(screen.getAllByText(/^D\d+$/)).toHaveLength(3)
-    expect(screen.getByText('El final')).toBeInTheDocument()
+    // Tarea "Numeración corta": las dos tarjetas `slide` muestran su código
+    // corto "D{número}" en vez de distinguirse por texto de tipo — ya no
+    // hay "Diapositiva" en la cabecera de la tarjeta. Petición de usuario
+    // "el Final como el Inicio": la tarjeta `final` ya NO se suma a este
+    // recuento (muestra "FINAL" en grande en vez de "D{número}", ver
+    // `FinalHeader` en `nodeTypes.tsx`) y tampoco pinta ya su título ("El
+    // final").
+    expect(screen.getAllByText(/^D\d+$/)).toHaveLength(2)
+    expect(screen.getByText('FINAL')).toBeInTheDocument()
+    expect(screen.queryByText('El final')).not.toBeInTheDocument()
   })
 
   it('una diapositiva con respuestas muestra su texto pero nunca su letra', async () => {

@@ -18,12 +18,11 @@ beforeEach(() => {
 })
 
 describe('shortNodeLabel', () => {
-  it('devuelve "D" + el número, para varios números, cuando el tipo no es `intro`', () => {
+  it('devuelve "D" + el número, para varios números, en una `slide`', () => {
     expect(shortNodeLabel({ number: 1, type: 'slide' })).toBe('D1')
-    expect(shortNodeLabel({ number: 35, type: 'final' })).toBe('D35')
     expect(shortNodeLabel({ number: 100, type: 'slide' })).toBe('D100')
     // Sin tipo (llamada "pelada", compatibilidad con el uso histórico de
-    // esta función): se trata igual que no-`intro`.
+    // esta función): se trata igual que una `slide`.
     expect(shortNodeLabel({ number: 7 })).toBe('D7')
   })
 
@@ -36,7 +35,12 @@ describe('shortNodeLabel', () => {
     expect(shortNodeLabel({ number: 7, type: 'intro' })).toBe('INICIO')
   })
 
-  it('funciona igual para `slide`/`final`: "D" + `number`; distinto para `intro`: siempre "INICIO"', () => {
+  it('petición de usuario "el Final como el Inicio": devuelve "FINAL" para un nodo `final`, sea cual sea su `number`', () => {
+    expect(shortNodeLabel({ number: 1, type: 'final' })).toBe('FINAL')
+    expect(shortNodeLabel({ number: 35, type: 'final' })).toBe('FINAL')
+  })
+
+  it('funciona distinto para cada tipo: "D"+número en `slide`, "INICIO" en `intro`, "FINAL" en `final`', () => {
     useProjectStore.getState().createNode('intro', { x: -260, y: 0 })
     useProjectStore.getState().createNode('final', { x: 200, y: 0 }, { title: 'Final' })
     const nodes = useProjectStore.getState().project.graph.nodes
@@ -47,7 +51,7 @@ describe('shortNodeLabel', () => {
 
     expect(shortNodeLabel(intro)).toBe('INICIO')
     expect(shortNodeLabel(slide)).toBe(`D${slide.number}`)
-    expect(shortNodeLabel(final)).toBe(`D${final.number}`)
+    expect(shortNodeLabel(final)).toBe('FINAL')
   })
 })
 
@@ -128,12 +132,15 @@ describe('NodeCard — contorno negro (`outline`) en Inicio/Final', () => {
     if (!final) throw new Error('setup inválido')
 
     render(<Canvas />)
-    await screen.findByText('El final')
+    // Petición de usuario "el Final como el Inicio": un `final` ya no
+    // pinta su título ("El final") — se localiza por su cabecera fija
+    // "FINAL" (`FinalHeader`, `nodeTypes.tsx`).
+    await screen.findByText('FINAL')
 
     act(() => {
       useProjectStore.getState().selectNode(final.id)
     })
-    const finalCardAfterSelect = screen.getByText('El final').closest(`.${CSS.escape(cardClass)}`)
+    const finalCardAfterSelect = screen.getByText('FINAL').closest(`.${CSS.escape(cardClass)}`)
     // Seleccionar el nodo no quita `.cardFinal`: ambas capas (contorno +
     // anillo de selección, este último vía `.react-flow__node.selected` en
     // el wrapper) conviven sobre la misma tarjeta.

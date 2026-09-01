@@ -148,6 +148,22 @@
   background: var(--bs-color-slide-red-bg);
 }
 
+/* Milestone "+1 fallo con Game Over", petición de usuario ("el game over
+   enmarcado en rojo"): marco de la diapositiva "Game Over" del pack
+   (`data.canvasBadge === 'game-over'`, ver `cardClassName` en
+   `nodeTypes.tsx`). Mismo canal `outline` que `.cardFinal`/`.cardIntro`
+   (no `border-color`, ya en uso por el anillo de selección/aviso) para que
+   se combine sin pisarlos — pero en `--bs-color-danger` en vez de
+   `--bs-color-text`: es una advertencia real ("aquí puede terminar el
+   recorrido si el alumno se rinde"), no una simple distinción de tipo como
+   la de `.cardFinal`/`.cardIntro`. Se combina también sin conflicto con
+   cualquier `SLIDE_COLOR_CARD_CLASS` que la diapositiva tenga además (solo
+   cambia `background`, nunca `outline`). */
+.cardGameOver {
+  outline: 2px solid var(--bs-color-danger);
+  outline-offset: 2px;
+}
+
 /* Tarea "Contraste de texto" — BUG REAL reportado por el usuario ("no se lee
    el texto al colorear una diapositiva"), diagnosticado y arreglado de
    verdad en esta pasada (la anterior solo calculó el contraste WCAG sobre
@@ -240,6 +256,44 @@
   background: var(--bs-color-bg);
   border-radius: var(--bs-radius-sm);
   padding: 1px 6px;
+}
+
+/* Insignia "+1 FALLO"/"GAME OVER" (milestone "+1 fallo con Game Over",
+   `SlideBadgeHeader` en `nodeTypes.tsx`) — se pinta ANTES que `.header`
+   (nunca la sustituye, a diferencia de `.introHeader`/`.introLabel`: una
+   diapositiva del pack sigue necesitando su título/D-número normales
+   debajo). Centrada, mismo criterio que `.introHeader`: fila propia con un
+   único texto grande, sin nada más que empujar. */
+.badgeHeader {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--bs-space-2) var(--bs-space-3) 0;
+}
+
+.badgeLabel,
+.badgeLabelDanger {
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  line-height: 1;
+}
+
+/* `--bs-card-text-accent` (no el `--bs-color-accent` fijo, ver comentario
+   "Tarea 'Contraste de texto'" más arriba junto a `.cardFinal, .cardIntro,
+   ...`): mismo turquesa de acento de siempre sobre el fondo neutro por
+   defecto de esta diapositiva, pero contraste ya resuelto si además tiene
+   un color de paleta propio (`SLIDE_COLOR_CARD_CLASS`) — mismo criterio
+   que `.startMark`. */
+.badgeLabel {
+  color: var(--bs-card-text-accent);
+}
+
+/* "GAME OVER": mismo rojo de aviso que el marco de la tarjeta
+   (`.cardGameOver`, `--bs-color-danger`) — el texto y el marco se leen
+   como la misma advertencia, no como dos colores sueltos. */
+.badgeLabelDanger {
+  color: var(--bs-color-danger);
 }
 
 /* Cabecera EXCLUSIVA del nodo `intro` (milestone "Inicio siempre es D1",

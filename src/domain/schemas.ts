@@ -431,6 +431,13 @@ export const SLIDE_COLORS = ['yellow', 'orange', 'pink', 'purple', 'cyan', 'gray
 export const SlideColorSchema = z.enum(SLIDE_COLORS)
 
 /**
+ * Valores posibles de `SlideNodeSchema.canvasBadge` (ver su comentario, más
+ * abajo) — mismo criterio de "paleta cerrada con nombre" que `SLIDE_COLORS`.
+ */
+export const CANVAS_BADGES = ['plus-one-fallo', 'game-over'] as const
+export const CanvasBadgeSchema = z.enum(CANVAS_BADGES)
+
+/**
  * Diapositiva: el único tipo de nodo "con salida" del modelo narrativo
  * (aparte del nodo `intro`, que también tiene una única salida pero no es
  * narrativo, ver `IntroNodeSchema`). Una misma diapositiva puede comportarse
@@ -526,6 +533,23 @@ export const SlideNodeSchema = z.object({
    * (`applyVisitEffects`), reflejado en `exportedPlayerScript.ts`.
    */
   visitEffects: z.array(VariableEffectSchema).optional(),
+  /**
+   * Marca visual FIJA en el lienzo, exclusiva de los 2 nodos que crea el
+   * pack "+1 fallo con Game Over" (`addGameOverPack`,
+   * `src/domain/nodePacks.ts`) — decisión de producto tomada frente a la
+   * alternativa de derivarla automáticamente del propio contenido del nodo
+   * (p.ej. de `visitEffects`/`actsAsExit`), que cambiaría si el diseñador
+   * edita el efecto o la respuesta de salida, y se aplicaría también a
+   * cualquier nodo creado o duplicado a mano: en vez de eso, `addGameOverPack`
+   * fija esta marca una vez al crear el pack y ya no se toca más — no hay
+   * ningún control en el Inspector para editarla. Puramente visual
+   * (`nodeTypes.tsx`, `SlideBadgeHeader`): 'plus-one-fallo' pinta la
+   * cabecera grande "+1 FALLO" en la primera diapositiva del pack (la "de
+   * decisión", en blanco); 'game-over' pinta "GAME OVER" en grande + marco
+   * rojo en la segunda (la de consecuencia). No afecta a ningún runtime
+   * (Player in-app ni exportado) ni se valida en export — solo al lienzo.
+   */
+  canvasBadge: CanvasBadgeSchema.optional(),
 })
 
 /**
@@ -687,6 +711,7 @@ export type VariableEffect = z.infer<typeof VariableEffectSchema>
 export type DecisionResponse = z.infer<typeof DecisionResponseSchema>
 export type ContentBlock = z.infer<typeof ContentBlockSchema>
 export type SlideColor = z.infer<typeof SlideColorSchema>
+export type CanvasBadge = z.infer<typeof CanvasBadgeSchema>
 export type FinalVariant = z.infer<typeof FinalVariantSchema>
 
 export type IntroNode = z.infer<typeof IntroNodeSchema>

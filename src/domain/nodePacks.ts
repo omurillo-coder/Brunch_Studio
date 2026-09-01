@@ -119,6 +119,11 @@ export function addGameOverPack(project: ProjectDocument, position: NodePosition
   if (!slide1Id) {
     throw new Error('addGameOverPack: no se pudo identificar la primera diapositiva recién creada.')
   }
+  // Petición de usuario: insignia fija "+1 FALLO" en el lienzo (ver
+  // comentario de `SlideNodeSchema.canvasBadge`) — identifica esta
+  // diapositiva como la "de decisión" del pack de un vistazo, sin abrir el
+  // Inspector.
+  next = updateNode(next, slide1Id, { canvasBadge: 'plus-one-fallo' })
   next = addResponse(next, slide1Id)
   next = addResponse(next, slide1Id)
   const slide1AfterResponses = next.graph.nodes.find((node) => node.id === slide1Id)
@@ -154,8 +159,13 @@ export function addGameOverPack(project: ProjectDocument, position: NodePosition
     ),
   )
   next = addImageBlock(next, gameOverId)
+  // Petición de usuario: insignia fija "GAME OVER" + marco rojo en el
+  // lienzo (ver comentario de `SlideNodeSchema.canvasBadge`), en el MISMO
+  // `updateNode` que fija el efecto al visitar — un único parche, ambos
+  // campos son exclusivos de `slide`.
   next = updateNode(next, gameOverId, {
     visitEffects: [{ variableId: fallosVariableId, operation: 'increment', value: 1 }],
+    canvasBadge: 'game-over',
   })
   next = addResponse(next, gameOverId)
   next = addResponse(next, gameOverId)
