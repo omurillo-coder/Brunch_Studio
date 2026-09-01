@@ -332,12 +332,23 @@
    fondo blanco de la ilustración fuente hace de fondo de la mitad izquierda
    de la tarjeta, así que el texto de `.introContent` (por encima, `z-index:
    1`) queda "sobre" la imagen en vez de partida en dos columnas — igual que
-   la referencia de diseño entregada por Content Factory. */
+   la referencia de diseño entregada por Content Factory.
+   `display: flex; flex-direction: column` es necesario para que
+   `.introContent` (su único hijo en flujo normal — `.introIllustration` es
+   `position: absolute`, fuera de flujo) ESTIRE hasta el alto real de la
+   tarjeta: sin esto, `.introContent` medía solo lo que ocupaba su propio
+   contenido, y el `margin-top: auto` de `.introFooter` (título + botón,
+   ver ese comentario) no tenía ningún hueco sobrante que empujar hacia
+   abajo — con una diapositiva de Inicio corta (poco texto, o Probar en una
+   ventana baja) el botón "Continuar" quedaba pegado justo debajo del
+   subtítulo en vez de anclado al margen inferior de la tarjeta. */
 .introCard {
   position: relative;
   width: 100%;
   max-width: 920px;
   min-height: 440px;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
   border-radius: var(--bs-radius-lg);
   background: #ffffff;
@@ -350,6 +361,7 @@
 .introContent {
   position: relative;
   z-index: 1;
+  flex: 1 1 auto;
   display: flex;
   flex-direction: column;
   gap: 18px;
@@ -428,15 +440,17 @@
    flex column, fluye normal por encima), sea cual sea la longitud del resto
    del contenido de arriba — `.introMeta` (ciclo/asignatura) va justo debajo,
    con su propio margen pequeño, no con `margin-top: auto` propio: solo hace
-   falta empujar al fondo al PRIMERO del grupo. `flex-wrap: wrap` es la
-   salvaguarda para un `caseName` largo en una tarjeta estrecha (móvil),
-   donde el botón pasaría a su propia línea en vez de solaparse con el
-   título. */
+   falta empujar al fondo al PRIMERO del grupo. `justify-content: flex-start`
+   (no `space-between`, como en un primer borrador): el botón queda pegado
+   al título, ambos alineados a la izquierda, en vez de empujado al borde
+   derecho de la tarjeta. `flex-wrap: wrap` es la salvaguarda para un
+   `caseName` largo en una tarjeta estrecha (móvil), donde el botón pasaría
+   a su propia línea en vez de solaparse con el título. */
 .introFooter {
   margin-top: auto;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 16px;
   flex-wrap: wrap;
 }

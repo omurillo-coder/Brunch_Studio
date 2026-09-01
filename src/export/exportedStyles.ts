@@ -152,6 +152,8 @@ body {
   width: 100%;
   max-width: 920px;
   min-height: 440px;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
   border-radius: var(--bs-radius-lg);
   background: #ffffff;
@@ -164,6 +166,7 @@ body {
 .introContent {
   position: relative;
   z-index: 1;
+  flex: 1 1 auto;
   display: flex;
   flex-direction: column;
   gap: 18px;
@@ -210,7 +213,7 @@ body {
   margin-top: auto;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 16px;
   flex-wrap: wrap;
 }

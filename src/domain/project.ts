@@ -276,8 +276,16 @@ export function createNode(
       // `createNode` y de `shiftNodeNumbersForNewIntro` en
       // `src/domain/id.ts`.
       draft.graph.nodes = shiftNodeNumbersForNewIntro(draft.graph.nodes)
+      // El Inicio siempre va PRIMERO en `graph.nodes` (no al final, como el
+      // resto de tipos): ese orden es el que usa el panel izquierdo para
+      // pintar la lista (`src/domain/nodeOrder.ts`), y el Inicio es fijo ahí
+      // — nunca se puede arrastrar ni soltar por delante de él (ver
+      // `LeftPanel.tsx`). `ensureIntroNode` (`migration.ts`) aplica el mismo
+      // criterio para documentos que ya tenían un Inicio en otra posición.
+      draft.graph.nodes.unshift(newNode)
+    } else {
+      draft.graph.nodes.push(newNode)
     }
-    draft.graph.nodes.push(newNode)
     if (newNode.type === 'intro') {
       draft.graph.startNodeId = newNode.id
     }

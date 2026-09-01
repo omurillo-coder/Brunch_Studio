@@ -581,8 +581,13 @@ function migrateSingularImageDocument(
  * directamente, bien tras alguna de las migraciones de forma) que todavía no
  * tenga ninguno — el caso de CUALQUIER `.brunch` guardado antes del
  * milestone "Diapositiva de Inicio", sea cual sea su forma de origen. Si el
- * documento ya tiene un nodo `intro` (cualquier `.brunch` guardado después
- * de este milestone), lo devuelve sin tocar.
+ * documento ya tiene un nodo `intro` en la PRIMERA posición de
+ * `graph.nodes`, lo devuelve sin tocar. Si ya tiene uno pero NO está
+ * primero (milestone "Inicio siempre primero en la lista": `createNode`/
+ * `seedIntroNode` antes de ese milestone lo añadían al FINAL del array, ver
+ * comentario de `createNode` en `project.ts`), lo reubica al principio sin
+ * tocar ningún otro dato — el panel izquierdo pinta el Inicio fijo primero
+ * apoyándose en esa posición real del array.
  *
  * Transformación, cuando hace falta sintetizar uno: crea un nodo `intro`
  * nuevo (id nuevo vía `createId()`, `number` SIEMPRE 1 — milestone "Inicio
@@ -613,8 +618,37 @@ function migrateSingularImageDocument(
  * por lo que sea, no lo hiciera.
  */
 function ensureIntroNode(doc: ProjectDocument): ProjectDocument {
-  if (doc.graph.nodes.some((node) => node.type === 'intro')) {
+  const existingIntroIndex = doc.graph.nodes.findIndex((node) => node.type === 'intro')
+  if (existingIntroIndex === 0) {
+    // Ya existe y ya está primero: nada que hacer.
     return doc
+  }
+  if (existingIntroIndex > 0) {
+    // Ya existe, pero no está primero — documentos creados/reordenados
+    // antes de que "createNode"/"seedIntroNode" lo insertaran siempre en
+    // cabeza (ver comentario de `createNode` en `project.ts`): se reubica
+    // al principio de `graph.nodes`, sin tocar ningún otro dato. El panel
+    // izquierdo pinta el Inicio fijo primero apoyándose en esa posición del
+    // array (ver `LeftPanel.tsx`), así que este paso lo "autocura" en
+    // documentos antiguos la primera vez que se abren tras este cambio.
+    const introNode = doc.graph.nodes[existingIntroIndex]!
+    const reordered = [
+      introNode,
+      ...doc.graph.nodes.slice(0, existingIntroIndex),
+      ...doc.graph.nodes.slice(existingIntroIndex + 1),
+    ]
+    const withReordered: ProjectDocument = {
+      ...doc,
+      graph: { ...doc.graph, nodes: reordered },
+    }
+    const revalidated = ProjectDocumentSchema.safeParse(withReordered)
+    if (!revalidated.success) {
+      throw new ProjectMigrationError(
+        'No se ha podido reubicar la diapositiva de Inicio al principio de la lista.',
+        { cause: revalidated.error },
+      )
+    }
+    return revalidated.data
   }
 
   const previousStartId = doc.graph.startNodeId

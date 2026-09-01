@@ -353,6 +353,42 @@ describe('parseOrMigrateProjectDocument — documento ya en forma nueva', () => 
     expect(parsed.graph.startNodeId).toBe(introId)
   })
 
+  it('milestone "Inicio siempre primero en la lista": si ya tiene un nodo intro pero NO está en la primera posición, lo reubica sin tocar nada más', () => {
+    // Simula un `.brunch` guardado ANTES de que `createNode`/`seedIntroNode`
+    // insertaran siempre el intro en el índice 0 (lo añadían al final, ver
+    // comentario de `createNode` en `project.ts`): el intro existe, pero
+    // aparece SEGUNDO en `graph.nodes`.
+    const base = createProject('Escenario nuevo')
+    const introId = '00000000-0000-4000-8000-0000000000bb'
+    const introNode = {
+      id: introId,
+      number: 2,
+      type: 'intro' as const,
+      position: { x: -260, y: 0 },
+      title: '',
+      cicloId: undefined,
+      asignaturaId: undefined,
+      caseName: '',
+      targetNodeId: base.graph.startNodeId,
+    }
+    const document = {
+      ...base,
+      graph: {
+        nodes: [...base.graph.nodes, introNode],
+        startNodeId: introId,
+      },
+    }
+
+    const parsed = parseOrMigrateProjectDocument(JSON.parse(JSON.stringify(document)))
+
+    expect(parsed.graph.nodes[0]?.id).toBe(introId)
+    expect(parsed.graph.nodes[0]?.type).toBe('intro')
+    // El resto de nodos se conserva intacto, solo cambia su posición.
+    expect(parsed.graph.nodes).toHaveLength(document.graph.nodes.length)
+    expect(parsed.graph.nodes[1]).toEqual(JSON.parse(JSON.stringify(base.graph.nodes[0])))
+    expect(parsed.graph.startNodeId).toBe(introId)
+  })
+
   it('si NO tiene ningún nodo intro (la forma que producía createProject hasta este milestone), le sintetiza uno', () => {
     const document = createProject('Escenario nuevo')
     const parsed = parseOrMigrateProjectDocument(JSON.parse(JSON.stringify(document)))

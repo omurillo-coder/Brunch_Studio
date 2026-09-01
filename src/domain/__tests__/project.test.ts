@@ -656,6 +656,18 @@ describe('nodo "intro" (milestone "Diapositiva de Inicio")', () => {
       expect(project.graph.startNodeId).toBe(oldStartId)
     })
 
+    it('milestone "Inicio siempre primero en la lista": el intro se inserta en el índice 0 de graph.nodes, no al final', () => {
+      const project = createProject('P')
+      const originalFirstNodeId = project.graph.nodes[0]!.id
+
+      const updated = createNode(project, 'intro', { x: -260, y: 0 })
+
+      expect(updated.graph.nodes[0]?.type).toBe('intro')
+      expect(updated.graph.nodes[0]?.id).toBe(introIdOf(updated))
+      // La diapositiva original sigue existiendo, ahora en segunda posición.
+      expect(updated.graph.nodes[1]?.id).toBe(originalFirstNodeId)
+    })
+
     it('lanza si el proyecto ya tiene un nodo intro', () => {
       const project = createNode(createProject('P'), 'intro', { x: -260, y: 0 })
       expect(() => createNode(project, 'intro', { x: -260, y: 100 })).toThrow()

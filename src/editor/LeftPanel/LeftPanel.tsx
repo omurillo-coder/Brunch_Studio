@@ -268,6 +268,15 @@ export function LeftPanel() {
    *  `toIndex` fuera de rango. */
   function findDropTargetAt(clientY: number): { index: number; position: 'before' | 'after' } | null {
     if (visibleNodes.length === 0) return null
+    // El Inicio es fijo (siempre `visibleNodes[0]` cuando existe, ver
+    // `createNode`/`ensureIntroNode`): ningún nodo puede soltarse POR
+    // DELANTE de él, así que un `{ index: 0, position: 'before' }` (el
+    // único hueco que lo desplazaría de la primera posición) se convierte
+    // aquí mismo en `{ index: 0, position: 'after' }` — "justo después del
+    // Inicio", el primer hueco realmente disponible. El propio Inicio nunca
+    // llega a ser `drag.nodeId` (ver `handlePointerDown`), así que esta
+    // guarda solo afecta a soltar OTRO nodo por delante suyo.
+    const introIsFirst = visibleNodes[0]?.type === 'intro'
     // Estilo funcional (`map`/`findIndex`/`find`) a propósito, en vez de un
     // `for` imperativo con una variable mutable: mismo resultado, pero deja
     // el cálculo como una cadena de expresiones sin reasignaciones, más
@@ -280,11 +289,14 @@ export function LeftPanel() {
     const hitRect = hitIndex !== -1 ? rects[hitIndex] : undefined
     if (hitIndex !== -1 && hitRect) {
       const position: 'before' | 'after' = clientY - hitRect.top < hitRect.height / 2 ? 'before' : 'after'
+      if (hitIndex === 0 && position === 'before' && introIsFirst) {
+        return { index: 0, position: 'after' }
+      }
       return { index: hitIndex, position }
     }
     const firstRect = rects.find((rect) => rect !== null) ?? null
     if (firstRect !== null && clientY < firstRect.top) {
-      return { index: 0, position: 'before' }
+      return introIsFirst ? { index: 0, position: 'after' } : { index: 0, position: 'before' }
     }
     return { index: visibleNodes.length - 1, position: 'after' }
   }
@@ -302,8 +314,13 @@ export function LeftPanel() {
     // `button !== 0`: ignora clic derecho/central (solo el botón principal
     // inicia un arrastre). `!isPrimary`: ignora punteros "secundarios" de un
     // gesto multi-táctil — no se usa en esta app de escritorio, pero es una
-    // comprobación estándar y gratuita.
-    if (isSearching || event.button !== 0 || !event.isPrimary) return
+    // comprobación estándar y gratuita. El Inicio es fijo (siempre primero
+    // en la lista, ver `createNode`/`ensureIntroNode`): nunca arranca un
+    // arrastre desde su fila, así que ni siquiera puede intentar moverse —
+    // mismo criterio que `isSearching`, ambos casos simplemente no inician
+    // el gesto.
+    const draggedNode = project.graph.nodes.find((candidate) => candidate.id === nodeId)
+    if (isSearching || event.button !== 0 || !event.isPrimary || draggedNode?.type === 'intro') return
     pointerDragRef.current = {
       pointerId: event.pointerId,
       nodeId,
@@ -490,7 +507,7 @@ export function LeftPanel() {
             ]
               .filter(Boolean)
               .join(' ')}
-            data-draggable={isSearching ? 'false' : 'true'}
+            data-draggable={isSearching || node.type === 'intro' ? 'false' : 'true'}
             onPointerDown={(event) => handlePointerDown(event, node.id)}
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}

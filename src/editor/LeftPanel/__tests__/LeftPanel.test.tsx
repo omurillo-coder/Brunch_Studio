@@ -593,4 +593,65 @@ describe('LeftPanel — arrastrar-y-soltar la lista de diapositivas (único meca
     expect(nodeIds()).toEqual(before)
     expect(draggedRow.className).not.toMatch(/nodeRowDragging/)
   })
+
+  it('el Inicio (nodo `intro`) es fijo: no se puede arrastrar su fila', () => {
+    render(<LeftPanel />)
+    act(() => {
+      useProjectStore.getState().createNode('intro', { x: -260, y: 0 })
+      useProjectStore.getState().createNode('slide', { x: 0, y: 0 }, { title: 'Segunda' })
+    })
+    const before = nodeIds()
+    const intro = useProjectStore.getState().project.graph.nodes.find((n) => n.type === 'intro')
+    if (!intro) throw new Error('setup inválido')
+
+    const introRow = rowFor(intro)
+    expect(introRow).toHaveAttribute('data-draggable', 'false')
+
+    stubAllRowRects()
+    fireEvent.pointerDown(introRow, pointerOpts(0, 0))
+    // Desplazamiento de sobra por encima del umbral de activación (5px):
+    // con cualquier otra fila, esto ya habría activado el arrastre
+    // (`nodeRowDragging`) y calculado un destino.
+    fireEvent.pointerMove(introRow, pointerOpts(0, 200))
+    expect(introRow.className).not.toMatch(/nodeRowDragging/)
+    fireEvent.pointerUp(introRow, pointerOpts(0, 200))
+
+    expect(nodeIds()).toEqual(before)
+
+    // El clic normal (selección) sigue funcionando: `handlePointerDown`
+    // solo bloquea el ARRASTRE, no todo el gesto de puntero.
+    fireEvent.click(screen.getByText(shortNodeLabel(intro)))
+    expect(useProjectStore.getState().selection.selectedNodeIds).toEqual([intro.id])
+  })
+
+  it('ningún nodo puede soltarse por delante del Inicio: cae siempre justo después', () => {
+    render(<LeftPanel />)
+    act(() => {
+      useProjectStore.getState().createNode('intro', { x: -260, y: 0 })
+      useProjectStore.getState().createNode('slide', { x: 0, y: 0 }, { title: 'Segunda' })
+    })
+    // Orden real: [Inicio(0), diapositiva original de resetProjectStore(1),
+    // Segunda(2)].
+    const [introId, originalId, segundaId] = nodeIds()
+    if (!introId || !originalId || !segundaId) throw new Error('setup inválido')
+    const segunda = useProjectStore.getState().project.graph.nodes[2]
+    if (!segunda) throw new Error('setup inválido')
+
+    // Rectángulos de 40px cada una: Inicio [0,40), original [40,80), Segunda
+    // [80,120).
+    stubAllRowRects()
+    const draggedRow = rowFor(segunda)
+
+    fireEvent.pointerDown(draggedRow, pointerOpts(0, 100))
+    // clientY=10 cae en la mitad SUPERIOR del rectángulo del Inicio (igual
+    // que el test equivalente sin Inicio de más arriba) — pero esta vez SÍ
+    // hay un Inicio fijo en el índice 0, así que el hueco "antes de él" no
+    // es válido: se convierte en "justo después" en vez de desplazarlo.
+    fireEvent.pointerMove(draggedRow, pointerOpts(0, 10))
+    fireEvent.pointerUp(draggedRow, pointerOpts(0, 10))
+
+    // "Segunda" pasa a ir justo DESPUÉS del Inicio (no antes, que lo habría
+    // desplazado de la primera posición): [Inicio, Segunda, original].
+    expect(nodeIds()).toEqual([introId, segundaId, originalId])
+  })
 })
