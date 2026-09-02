@@ -122,6 +122,11 @@ export interface UpdateNodePatch {
    *  opcionales de este parche. */
   alternateCondition?: VariableCondition | null
   alternateBody?: string | null
+  /** Solo en `final` (milestone "+1 fallo con Game Over", ver
+   *  `FinalNodeSchema.celebrateDefault`). No admite `null` (a diferencia de
+   *  `alternateCondition`/`alternateBody`): siempre es un booleano
+   *  definido, mismo criterio que `caseName` de un `intro`. */
+  celebrateDefault?: boolean
   /** Solo en `slide` (milestone "+1 fallo con Game Over", ver
    *  `SlideNodeSchema.canvasBadge`). En la práctica, solo `addGameOverPack`
    *  (`src/domain/nodePacks.ts`) fija este campo — no hay ningún control de
@@ -481,10 +486,12 @@ export function updateNode(
     )
   }
   const setsFinalAlternateField =
-    patch.alternateCondition !== undefined || patch.alternateBody !== undefined
+    patch.alternateCondition !== undefined ||
+    patch.alternateBody !== undefined ||
+    patch.celebrateDefault !== undefined
   if (setsFinalAlternateField && node && node.type !== 'final') {
     throw new Error(
-      `El nodo "${nodeId}" es de tipo "${node.type}" y no admite variante alternativa de Final.`,
+      `El nodo "${nodeId}" es de tipo "${node.type}" y no admite variante alternativa ni confeti de Final.`,
     )
   }
   const setsIntroOnlyField =
@@ -512,6 +519,7 @@ export function updateNode(
       if (patch.alternateBody !== undefined) {
         draftNode.alternateBody = patch.alternateBody === null ? undefined : patch.alternateBody
       }
+      if (patch.celebrateDefault !== undefined) draftNode.celebrateDefault = patch.celebrateDefault
     }
     if (draftNode.type === 'slide') {
       if (patch.continueLabel !== undefined) {

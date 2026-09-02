@@ -22,6 +22,18 @@ import type { ProjectDocument } from './schemas'
  * - `checkSpelling`: no tiene relación con la validez del grafo en absoluto
  *   (es sobre el TEXTO de las diapositivas), así que no tenía cabida en
  *   `validation.ts` de ningún modo.
+ *
+ * Milestone "+1 fallo con Game Over", petición de usuario: dos exclusiones
+ * deliberadas, ambas porque el patrón que detectarían es INTENCIONAL en
+ * este pack, no un error a revisar —
+ * - `detectCycles` descarta cualquier bucle que pase por un nodo marcado con
+ *   `SlideNode.canvasBadge` ("+1 Fallo"/"Game Over"): es casi siempre el
+ *   bucle de reintento a propósito ("Vale, voy a intentarlo" vuelve a la
+ *   diapositiva de decisión).
+ * - `detectUnlinkedResponses` descarta cualquier respuesta con
+ *   `actsAsExit: true` ("No, me rindo."): no tiene destino a propósito,
+ *   actúa como el botón Salir — no es una respuesta "sin terminar de
+ *   conectar".
  */
 
 // ---------------------------------------------------------------------------
@@ -70,6 +82,16 @@ export function cycleIssueId(cycle: CycleIssue): string {
  * informativo) — es suficiente para el propósito de "avisar de que existe
  * al menos un bucle por aquí".
  */
+/** Ids de los nodos `slide` marcados con `canvasBadge` (milestone "+1 fallo
+ *  con Game Over", ver comentario de cabecera del módulo). */
+function gameOverPackNodeIds(project: ProjectDocument): Set<string> {
+  const ids = new Set<string>()
+  for (const node of project.graph.nodes) {
+    if (node.type === 'slide' && node.canvasBadge) ids.add(node.id)
+  }
+  return ids
+}
+
 export function detectCycles(project: ProjectDocument): CycleIssue[] {
   const edges = deriveEdges(project)
   const adjacency = new Map<string, string[]>()
@@ -114,7 +136,11 @@ export function detectCycles(project: ProjectDocument): CycleIssue[] {
     }
   }
 
-  return cycles
+  // Petición de usuario: un bucle que pasa por la diapositiva "+1 Fallo" o
+  // "Game Over" del pack (`gameOverPackNodeIds`) es casi siempre el bucle de
+  // reintento intencional de ese pack — no cuenta como aviso.
+  const badgeIds = gameOverPackNodeIds(project)
+  return cycles.filter((cycle) => !cycle.nodeIds.some((id) => badgeIds.has(id)))
 }
 
 // ---------------------------------------------------------------------------
@@ -155,7 +181,10 @@ export function detectUnlinkedResponses(project: ProjectDocument): UnlinkedRespo
     if (node.type !== 'slide') continue
 
     for (const response of node.responses) {
-      if (!response.targetNodeId) {
+      // Petición de usuario: `actsAsExit` (milestone "+1 fallo con Game
+      // Over") nunca tiene `targetNodeId` A PROPÓSITO — actúa como el
+      // botón Salir, no es una respuesta a la que le falte conectar algo.
+      if (!response.targetNodeId && !response.actsAsExit) {
         issues.push({
           nodeId: node.id,
           responseId: response.id,

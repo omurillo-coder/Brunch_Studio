@@ -20,7 +20,7 @@ import type {
  *
  * 1. Sobre el string generado: que contenga lo que debe (títulos, cuerpo ya
  *    renderizado desde Tiptap, `data:` URI de los assets, acento iLERNA,
- *    "Volver a jugar") y que NO contenga lo que no debe (letras A/B/C/D como
+ *    "Reintentar") y que NO contenga lo que no debe (letras A/B/C/D como
  *    etiqueta de opción, React/Tiptap/ProseMirror, peticiones de red).
  *
  * 2. Ejecutando de verdad el `<script>` del propio HTML generado en jsdom
@@ -296,10 +296,10 @@ describe('buildHtmlBundle — contenido del archivo generado', () => {
     expect(html).toContain('#00aec7')
   })
 
-  it('incluye los textos de interfaz del Player, con "Volver a jugar"', () => {
+  it('incluye los textos de interfaz del Player, con "Reintentar"', () => {
     const html = buildHtmlBundle(sampleProject(), sampleAssets)
 
-    expect(html).toContain('Volver a jugar')
+    expect(html).toContain('Reintentar')
     expect(html).toContain('Puntuación final: ')
     expect(html).toContain('Continuar')
     expect(html).toContain('Fin de la experiencia')
@@ -561,7 +561,7 @@ describe('buildHtmlBundle — comportamiento del HTML generado (jsdom)', () => {
     expect(card.querySelector('.title')?.textContent).toBe('Fin de la experiencia')
     expect(card.querySelector('.body')?.textContent).toContain('Has terminado el recorrido.')
     expect(card.querySelector('.points')?.textContent).toBe('Puntuación final: 10 puntos')
-    expect(card.querySelector('.primaryButton')?.textContent).toBe('Volver a jugar')
+    expect(card.querySelector('.primaryButton')?.textContent).toBe('Reintentar')
   })
 
   it('la respuesta con puntuación negativa también se acumula tal cual', () => {
@@ -574,11 +574,11 @@ describe('buildHtmlBundle — comportamiento del HTML generado (jsdom)', () => {
     )
   })
 
-  it('"Volver a jugar" vuelve al inicio y descarta la puntuación acumulada', () => {
+  it('"Reintentar" vuelve al inicio y descarta la puntuación acumulada', () => {
     runExportedBundle(buildHtmlBundle(sampleProject(), sampleAssets))
     clickButton('Empezar el caso')
     clickButton('Avisar al responsable')
-    clickButton('Volver a jugar')
+    clickButton('Reintentar')
 
     // De vuelta a la diapositiva de inicio: se reconoce por su botón de
     // continuar personalizado, no por su título (que no se pinta).
@@ -638,7 +638,7 @@ describe('buildHtmlBundle — comportamiento del HTML generado (jsdom)', () => {
     )
   })
 
-  it('"Salir" aparece junto a "Volver a jugar" en el Final, llama a window.close() y muestra el aviso de cierre', () => {
+  it('"Salir" aparece junto a "Reintentar" en el Final, llama a window.close() y muestra el aviso de cierre', () => {
     const closeSpy = vi.spyOn(window, 'close').mockImplementation(() => {})
 
     runExportedBundle(buildHtmlBundle(sampleProject(), sampleAssets))
@@ -647,7 +647,7 @@ describe('buildHtmlBundle — comportamiento del HTML generado (jsdom)', () => {
 
     const card = currentCard()
     expect(card.textContent).toContain('Salir')
-    expect(card.querySelector('.primaryButton')?.textContent).toBe('Volver a jugar')
+    expect(card.querySelector('.primaryButton')?.textContent).toBe('Reintentar')
     expect(card.textContent).not.toContain('Ya puedes cerrar esta pestaña.')
 
     clickButton('Salir')
@@ -961,11 +961,11 @@ describe('buildHtmlBundle — comportamiento del HTML generado: variables/condic
     )
   })
 
-  it('"Volver a jugar" reinicia las variables: tras reiniciar, la respuesta condicionada vuelve a estar oculta', () => {
+  it('"Reintentar" reinicia las variables: tras reiniciar, la respuesta condicionada vuelve a estar oculta', () => {
     runExportedBundle(buildHtmlBundle(variablesProject(), {}))
     clickButton('Activar')
     clickButton('Ver resultado')
-    clickButton('Volver a jugar')
+    clickButton('Reintentar')
 
     const optionTexts = [
       ...document.querySelectorAll<HTMLButtonElement>('#brunch-root .optionButton'),
@@ -1479,5 +1479,52 @@ describe('buildHtmlBundle — milestone "+1 fallo con Game Over"', () => {
     runExportedBundle(buildHtmlBundle(project, {}))
 
     expect(currentCard().querySelector('img')).toBeNull()
+  })
+
+  describe('confeti del Final "Perfecto" (petición de usuario: "con confeti")', () => {
+    it('celebrateDefault + contenido por defecto -> confeti presente en el HTML exportado', () => {
+      const project = gameOverFeaturesProject()
+      project.graph.startNodeId = VISIT_DECISION_ID
+      const final = project.graph.nodes.find((node) => node.id === VISIT_FINAL_ID)
+      if (!final || final.type !== 'final') throw new Error('setup inválido')
+      final.celebrateDefault = true
+      // Sin visitar "Inicio" (que suma +5 a Fallos): la condición del
+      // alternativo (>= 5) es falsa, se resuelve al contenido por defecto.
+      runExportedBundle(buildHtmlBundle(project, {}))
+
+      clickButton('Seguir')
+
+      expect(currentCard().textContent).toContain('Final normal')
+      const confetti = currentCard().querySelector('.confetti')
+      expect(confetti).not.toBeNull()
+      expect(confetti?.querySelectorAll('.confettiPiece').length).toBeGreaterThan(0)
+    })
+
+    it('celebrateDefault + contenido ALTERNATIVO -> sin confeti', () => {
+      const project = gameOverFeaturesProject()
+      const final = project.graph.nodes.find((node) => node.id === VISIT_FINAL_ID)
+      if (!final || final.type !== 'final') throw new Error('setup inválido')
+      final.celebrateDefault = true
+      // Arranca en "Inicio" (+5 a Fallos): la condición del alternativo
+      // (>= 5) se cumple, se resuelve al contenido ALTERNATIVO.
+      runExportedBundle(buildHtmlBundle(project, {}))
+
+      clickButton('Continuar')
+      clickButton('Seguir')
+
+      expect(currentCard().textContent).toContain('Final alternativo por fallos')
+      expect(currentCard().querySelector('.confetti')).toBeNull()
+    })
+
+    it('sin celebrateDefault, nunca hay confeti aunque se muestre el contenido por defecto', () => {
+      const project = gameOverFeaturesProject()
+      project.graph.startNodeId = VISIT_DECISION_ID
+      runExportedBundle(buildHtmlBundle(project, {}))
+
+      clickButton('Seguir')
+
+      expect(currentCard().textContent).toContain('Final normal')
+      expect(currentCard().querySelector('.confetti')).toBeNull()
+    })
   })
 })

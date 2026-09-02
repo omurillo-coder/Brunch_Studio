@@ -165,7 +165,7 @@ describe('PlayerScreen', () => {
     expect(screen.queryByText('B')).not.toBeInTheDocument()
   })
 
-  it('el Final muestra un botón "Volver a jugar" que vuelve al principio', () => {
+  it('el Final muestra un botón "Reintentar" que vuelve al principio', () => {
     buildGraphInStore()
     renderPlayer()
 
@@ -173,22 +173,22 @@ describe('PlayerScreen', () => {
     fireEvent.click(screen.getByText('Camino A'))
     expect(screen.getByText('Fin de la experiencia')).toBeInTheDocument()
 
-    fireEvent.click(screen.getByText('Volver a jugar'))
+    fireEvent.click(screen.getByText('Reintentar'))
 
     expect(screen.getByText('Bienvenida')).toBeInTheDocument()
   })
 
-  it('"Volver a jugar" solo aparece en la tarjeta de Final, con el mismo estilo de acento que "Continuar"', () => {
+  it('"Reintentar" solo aparece en la tarjeta de Final, con el mismo estilo de acento que "Continuar"', () => {
     buildGraphInStore()
     renderPlayer()
 
-    expect(screen.queryByText('Volver a jugar')).not.toBeInTheDocument()
+    expect(screen.queryByText('Reintentar')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByText('Continuar'))
-    expect(screen.queryByText('Volver a jugar')).not.toBeInTheDocument()
+    expect(screen.queryByText('Reintentar')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByText('Camino A'))
-    const replayButton = screen.getByText('Volver a jugar')
+    const replayButton = screen.getByText('Reintentar')
     expect(replayButton).toBeInTheDocument()
     expect(replayButton.className).toBe(styles.primaryButton)
   })
@@ -758,7 +758,7 @@ describe('PlayerScreen: botón "Salir" (vista Final)', () => {
     expect(screen.getByText('Fin de la experiencia')).toBeInTheDocument()
   }
 
-  it('aparece junto a "Volver a jugar", solo en la tarjeta de Final, con estilo neutro (no de acento)', () => {
+  it('aparece junto a "Reintentar", solo en la tarjeta de Final, con estilo neutro (no de acento)', () => {
     buildGraphInStore()
     renderPlayer()
 
@@ -770,7 +770,7 @@ describe('PlayerScreen: botón "Salir" (vista Final)', () => {
     fireEvent.click(screen.getByText('Camino A'))
     const exitButton = screen.getByText('Salir')
     expect(exitButton).toBeInTheDocument()
-    // Estilo neutro, no el de "Volver a jugar" (acento, ver test de abajo).
+    // Estilo neutro, no el de "Reintentar" (acento, ver test de abajo).
     expect(exitButton.className).toBe(styles.neutralButton)
     expect(exitButton.className).not.toBe(styles.primaryButton)
   })
@@ -869,6 +869,103 @@ describe('PlayerScreen: milestone "+1 fallo con Game Over"', () => {
 
     expect(screen.getByText('Llegaste al final A.')).toBeInTheDocument()
     expect(screen.queryByText('Contenido alternativo por fallos.')).not.toBeInTheDocument()
+  })
+
+  describe('indicador de fallos (petición de usuario: "un indicador de fallos... durante la experiencia")', () => {
+    it('sin ninguna variable "Fallos" en el proyecto, no muestra nada', () => {
+      buildGraphInStore()
+      renderPlayer()
+
+      expect(screen.queryByText(/^Fallos: /)).not.toBeInTheDocument()
+    })
+
+    it('con la variable "Fallos", muestra su valor inicial y lo actualiza en vivo al aplicarse un visitEffect', () => {
+      const { startId } = buildGraphInStore()
+      act(() => {
+        useProjectStore.getState().addVariable({ name: 'Fallos', type: 'number', initialValue: 0 })
+      })
+      const fallosVar = useProjectStore.getState().project.variables[0]
+      if (!fallosVar) throw new Error('setup inválido')
+      act(() => {
+        useProjectStore.getState().updateNode(startId, {
+          visitEffects: [{ variableId: fallosVar.id, operation: 'increment', value: 1 }],
+        })
+      })
+
+      renderPlayer()
+      // El arranque ya visita `startId`: el efecto se aplica desde
+      // `getInitialState` (ver `runtime.ts`), así que el indicador ya
+      // debería reflejar 1, no 0, incluso antes de pulsar nada.
+      expect(screen.getByText('Fallos: 1')).toBeInTheDocument()
+    })
+
+    it('una variable "Fallos" de tipo boolean (no number) no cuenta: el indicador no aparece', () => {
+      buildGraphInStore()
+      act(() => {
+        useProjectStore.getState().addVariable({ name: 'Fallos', type: 'boolean', initialValue: false })
+      })
+
+      renderPlayer()
+
+      expect(screen.queryByText(/^Fallos: /)).not.toBeInTheDocument()
+    })
+  })
+
+  describe('confeti del Final "Perfecto" (petición de usuario: "con confeti")', () => {
+    function confettiPieceCount(): number {
+      return document.querySelectorAll(`.${styles.confettiPiece}`).length
+    }
+
+    it('celebrateDefault + contenido por defecto -> confeti visible', () => {
+      const { finalId } = buildGraphInStore()
+      act(() => {
+        useProjectStore.getState().updateNode(finalId, { celebrateDefault: true })
+      })
+
+      renderPlayer()
+      fireEvent.click(screen.getByText('Continuar'))
+      fireEvent.click(screen.getByText('Camino A'))
+
+      expect(document.querySelector(`.${styles.confetti}`)).toBeInTheDocument()
+      expect(confettiPieceCount()).toBeGreaterThan(0)
+    })
+
+    it('celebrateDefault + contenido ALTERNATIVO (condición cumplida) -> sin confeti', () => {
+      const { startId, finalId } = buildGraphInStore()
+      act(() => {
+        useProjectStore.getState().addVariable({ name: 'Fallos', type: 'number', initialValue: 0 })
+      })
+      const fallosVar = useProjectStore.getState().project.variables[0]
+      if (!fallosVar) throw new Error('setup inválido')
+      act(() => {
+        useProjectStore.getState().updateNode(startId, {
+          visitEffects: [{ variableId: fallosVar.id, operation: 'increment', value: 1 }],
+        })
+        useProjectStore.getState().updateNode(finalId, {
+          celebrateDefault: true,
+          alternateCondition: { variableId: fallosVar.id, operator: '>=', value: 1 },
+          alternateBody: 'Contenido alternativo por fallos.',
+        })
+      })
+
+      renderPlayer()
+      fireEvent.click(screen.getByText('Continuar'))
+      fireEvent.click(screen.getByText('Camino A'))
+
+      expect(screen.getByText('Contenido alternativo por fallos.')).toBeInTheDocument()
+      expect(document.querySelector(`.${styles.confetti}`)).not.toBeInTheDocument()
+    })
+
+    it('sin celebrateDefault, nunca hay confeti aunque se muestre el contenido por defecto', () => {
+      buildGraphInStore()
+
+      renderPlayer()
+      fireEvent.click(screen.getByText('Continuar'))
+      fireEvent.click(screen.getByText('Camino A'))
+
+      expect(screen.getByText('Llegaste al final A.')).toBeInTheDocument()
+      expect(document.querySelector(`.${styles.confetti}`)).not.toBeInTheDocument()
+    })
   })
 })
 

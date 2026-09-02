@@ -1,14 +1,20 @@
-/* Insignia flotante discreta, esquina superior derecha del lienzo (ver
-   comentario de `DiagnosticsPanel.tsx`) -- deliberadamente lejos de
-   `Controls`/auto-layout, anclados abajo a la izquierda por
-   `@xyflow/react`. */
+/* Insignia flotante discreta, esquina INFERIOR derecha del lienzo (ver
+   comentario de `DiagnosticsPanel.tsx`) — petición de usuario: en la
+   esquina superior derecha chocaba visualmente con el menú "Exportar" de
+   la barra superior. `Controls`/auto-layout de `@xyflow/react` siguen
+   ancladas abajo a la IZQUIERDA, así que esta esquina sigue libre.
+   `column-reverse` (en vez de `column`): el botón (`.badge`/
+   `.badgeResolved`, primero en el DOM) se queda pegado abajo, y la lista
+   expandida (`.list`, segunda en el DOM) crece hacia ARRIBA desde él —
+   con `column` normal la lista se dibujaría por debajo del botón y saldría
+   del viewport. */
 .wrapper {
   position: absolute;
-  top: var(--bs-space-4);
+  bottom: var(--bs-space-4);
   right: var(--bs-space-4);
   z-index: 30;
   display: flex;
-  flex-direction: column;
+  flex-direction: column-reverse;
   align-items: flex-end;
   gap: var(--bs-space-2);
 }

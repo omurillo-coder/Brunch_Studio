@@ -1728,6 +1728,44 @@ describe('Inspector — variante alternativa de un Final (milestone "+1 fallo co
     expect(
       screen.queryByRole('button', { name: '+ Añadir variante alternativa' }),
     ).not.toBeInTheDocument()
+    // Petición de usuario ("Final Perfecto... con confeti"): la casilla de
+    // confeti SÍ sigue disponible aunque no haya variables — celebra el
+    // contenido por defecto, no depende de tener una variante alternativa.
+    expect(
+      screen.getByRole('checkbox', { name: /Mostrar confeti con el contenido principal/ }),
+    ).toBeInTheDocument()
+  })
+
+  it('petición de usuario ("Final Perfecto... con confeti"): la casilla de confeti fija/limpia `celebrateDefault`', () => {
+    act(() => {
+      useProjectStore.getState().createNode('final', { x: 0, y: 0 })
+    })
+    const finalId = useProjectStore.getState().project.graph.nodes.find((n) => n.type === 'final')?.id
+    if (!finalId) throw new Error('setup inválido')
+    act(() => {
+      useProjectStore.getState().selectNode(finalId)
+    })
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    const checkbox = screen.getByRole('checkbox', {
+      name: /Mostrar confeti con el contenido principal/,
+    })
+    expect(checkbox).not.toBeChecked()
+
+    fireEvent.click(checkbox)
+    expect(
+      useProjectStore
+        .getState()
+        .project.graph.nodes.find((n) => n.id === finalId && n.type === 'final'),
+    ).toMatchObject({ celebrateDefault: true })
+    expect(checkbox).toBeChecked()
+
+    fireEvent.click(checkbox)
+    expect(
+      useProjectStore
+        .getState()
+        .project.graph.nodes.find((n) => n.id === finalId && n.type === 'final'),
+    ).toMatchObject({ celebrateDefault: false })
   })
 
   it('"+ Añadir variante alternativa" fija una condición por defecto y muestra el editor de contenido alternativo', () => {

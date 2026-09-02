@@ -279,9 +279,9 @@ describe('buildHtmlBundle con opciones de revisión — comportamiento en jsdom'
     clickButtonWithText('Ir al final A') // Diapositiva 4 (4/5)
     expect(indicatorButton().textContent).toBe('80% revisado')
 
-    // "Volver a jugar" reinicia el RECORRIDO (vuelve al Inicio), pero el
+    // "Reintentar" reinicia el RECORRIDO (vuelve al Inicio), pero el
     // PROGRESO de cobertura no retrocede: Diapositiva 1 ya estaba visitada.
-    clickButtonWithText('Volver a jugar')
+    clickButtonWithText('Reintentar')
     expect(indicatorButton().textContent).toBe('80% revisado')
   })
 

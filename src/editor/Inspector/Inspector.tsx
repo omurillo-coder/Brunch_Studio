@@ -2272,13 +2272,40 @@ function DuplicateNodeButton({ node }: { node: Node }) {
 function FinalAlternateSection({ node, variables }: { node: FinalNode; variables: VariableDef[] }) {
   const updateNode = useProjectStore((state) => state.updateNode)
   const bodyLabelId = 'inspector-final-alternate-body-label'
+  const celebrateFieldId = `inspector-final-celebrate-${node.id}`
+
+  // Petición de usuario ("Final Perfecto... con confeti"): independiente de
+  // si hay variables/variante alternativa configurada — celebra el
+  // contenido POR DEFECTO de este Final (nunca el alternativo, ver
+  // `PlayerView.celebrate` en `src/player/runtime.ts`), así que tiene
+  // sentido incluso sin ninguna variante (un Final "siempre celebra").
+  // Vive DENTRO de esta sección (no junto al editor de "Contenido" de
+  // arriba) porque temáticamente es parte de "los dos desenlaces posibles"
+  // que gestiona esta sección, aunque el campo que controla en sí sea del
+  // contenido por defecto.
+  const celebrateCheckbox = (
+    <div className={styles.actsAsExitField}>
+      <label htmlFor={celebrateFieldId}>
+        <input
+          id={celebrateFieldId}
+          type="checkbox"
+          checked={node.celebrateDefault ?? false}
+          onChange={(event) => updateNode(node.id, { celebrateDefault: event.target.checked })}
+        />
+        Mostrar confeti con el contenido principal (nunca con el alternativo)
+      </label>
+    </div>
+  )
 
   if (variables.length === 0) {
     return (
-      <p className={styles.noVariablesNotice}>
-        Todavía no hay variables en el proyecto. Créalas desde el panel "Variables" para poder
-        definir una variante alternativa de este Final.
-      </p>
+      <div className={styles.conditionSection}>
+        {celebrateCheckbox}
+        <p className={styles.noVariablesNotice}>
+          Todavía no hay variables en el proyecto. Créalas desde el panel "Variables" para poder
+          definir una variante alternativa de este Final.
+        </p>
+      </div>
     )
   }
 
@@ -2297,6 +2324,7 @@ function FinalAlternateSection({ node, variables }: { node: FinalNode; variables
   return (
     <div className={styles.conditionSection}>
       <span className={styles.label}>Variante alternativa</span>
+      {celebrateCheckbox}
       {!node.alternateCondition && (
         <button type="button" className={styles.addResponseButton} onClick={handleEnable}>
           + Añadir variante alternativa

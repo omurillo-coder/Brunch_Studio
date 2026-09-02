@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useProject, useProjectStore, usePreviewStartNodeId } from '../store'
 import {
   CICLOS,
@@ -13,7 +13,7 @@ import {
   INTRO_SUBTITLE_SUFFIX,
   RESPONSE_LETTERS,
 } from '../domain'
-import type { ContentBlock, DecisionResponse, IntroNode, SlideNode } from '../domain'
+import type { ContentBlock, DecisionResponse, IntroNode, ProjectDocument, SlideNode, VariableState } from '../domain'
 import { advance, choose, getInitialState, getView } from './runtime'
 import type { PlayerState } from './runtime'
 import { useAppServices } from '../app/AppServicesContext'
@@ -368,6 +368,113 @@ function IntroCard({ node, onContinue }: { node: IntroNode; onContinue: () => vo
   )
 }
 
+/** Paleta fija de piezas de confeti (milestone "+1 fallo con Game Over",
+ *  petición de usuario: "Final Perfecto... con confeti") — colores vivos
+ *  DELIBERADAMENTE fijos, no tokens `--bs-color-*`: es una decoración
+ *  festiva puntual, no una superficie de la interfaz que deba respetar el
+ *  tema claro/oscuro (igual criterio que la portada de marca iLERNA,
+ *  `.introCard`, con sus propios colores fijos). Traducción literal en
+ *  `buildConfetti` de `src/export/exportedPlayerScript.ts`. */
+const CONFETTI_COLORS = ['#f0677a', '#22a5a0', '#f5b342', '#7c6bf0', '#4fb0e8', '#f2836b']
+const CONFETTI_PIECE_COUNT = 60
+
+interface ConfettiPiece {
+  id: number
+  leftPercent: number
+  color: string
+  durationSeconds: number
+  delaySeconds: number
+  rotateDegrees: number
+}
+
+/** Genera `CONFETTI_PIECE_COUNT` piezas con posición/color/temporización
+ *  aleatorios — extraído de `Confetti` para poder memoizarlo (una sola
+ *  tanda por montaje, ver su comentario). */
+function randomConfettiPieces(): ConfettiPiece[] {
+  return Array.from({ length: CONFETTI_PIECE_COUNT }, (_, index) => ({
+    id: index,
+    leftPercent: Math.random() * 100,
+    color: CONFETTI_COLORS[index % CONFETTI_COLORS.length] as string,
+    durationSeconds: 2.2 + Math.random() * 1.6,
+    delaySeconds: Math.random() * 0.4,
+    rotateDegrees: Math.random() * 360,
+  }))
+}
+
+/**
+ * Lluvia de confeti (milestone "+1 fallo con Game Over"): puramente
+ * decorativa (`aria-hidden`, `pointer-events: none` vía `.confetti`/
+ * `.confettiPiece` en `PlayerScreen.module.css`), montada SOLO cuando
+ * `view.celebrate` es `true` (ver `getView` en `./runtime`) — nunca se monta
+ * "apagada", así que no hace falta ningún prop de visibilidad aparte.
+ *
+ * `useMemo` con deps `[]`: las piezas se sortean UNA vez por montaje, no en
+ * cada render — como este componente entero se monta/desmonta con la vista
+ * Final (ver `key={view.node.id}` en su llamador), cada vez que el alumno
+ * vuelve a llegar a un Final que celebra, `PlayerScreen` lo desmonta primero
+ * (al pasar por vistas intermedias) y lo remonta después, así que la
+ * animación se repite igual sin necesitar ningún `key` adicional aquí.
+ */
+function Confetti() {
+  const pieces = useMemo(() => randomConfettiPieces(), [])
+  return (
+    <div className={styles.confetti} aria-hidden="true">
+      {pieces.map((piece) => (
+        <span
+          key={piece.id}
+          className={styles.confettiPiece}
+          style={{
+            left: `${piece.leftPercent}%`,
+            backgroundColor: piece.color,
+            animationDuration: `${piece.durationSeconds}s`,
+            animationDelay: `${piece.delaySeconds}s`,
+            transform: `rotate(${piece.rotateDegrees}deg)`,
+          }}
+        />
+      ))}
+    </div>
+  )
+}
+
+/** Nombre EXACTO de la variable "Fallos" que crea `addGameOverPack`
+ *  (`src/domain/nodePacks.ts`) — mismo literal, no importado de ahí para no
+ *  acoplar este componente de UI a un detalle interno de ese módulo de
+ *  dominio (mismo criterio que el resto de este archivo, que tampoco
+ *  importa nada de `nodePacks.ts`). */
+const FALLOS_VARIABLE_NAME = 'Fallos'
+
+/**
+ * Indicador de fallos (petición de usuario: "un indicador de fallos, que te
+ * diga que conteo de fallos llevas durante la experiencia"), SOLO dentro de
+ * la app ("▶ Probar") — deliberadamente sin ningún equivalente en
+ * `exportedPlayerScript.ts`: el alumno real, en el HTML/SCORM publicado, no
+ * debe ver este contador, es una ayuda de depuración para quien diseña el
+ * caso mientras lo prueba.
+ *
+ * Busca la variable "Fallos" por NOMBRE EXACTO en `project.variables` (la
+ * misma que crea/reutiliza `addGameOverPack`) — si el proyecto no tiene
+ * ninguna con ese nombre (no usa el pack "+1 fallo con Game Over", o la
+ * renombró), no pinta nada: el indicador no tiene sentido sin ella. Lee su
+ * valor ACTUAL de `PlayerState.variables` (nunca `initialValue`), así que se
+ * actualiza en vivo con cada `advance`/`choose` que aplique su efecto.
+ */
+function FailureIndicator({
+  project,
+  variables,
+}: {
+  project: ProjectDocument
+  variables: VariableState
+}) {
+  const fallosVariable = project.variables.find(
+    (variable) => variable.name === FALLOS_VARIABLE_NAME && variable.type === 'number',
+  )
+  if (!fallosVariable) return null
+  const value = variables[fallosVariable.id]
+  return (
+    <span className={styles.failureIndicator}>Fallos: {typeof value === 'number' ? value : 0}</span>
+  )
+}
+
 export interface PlayerScreenProps {
   /**
    * Ruta absoluta del `.brunch` abierto. La necesita el Player para pedir
@@ -450,7 +557,10 @@ export function PlayerScreen({ filePath }: PlayerScreenProps) {
   return (
     <div className={styles.screen}>
       <header className={styles.bar}>
-        <span className={styles.label}>Modo de prueba</span>
+        <div className={styles.barLeft}>
+          <span className={styles.label}>Modo de prueba</span>
+          <FailureIndicator project={project} variables={playerState.variables} />
+        </div>
         <div className={styles.controls}>
           <button type="button" className={styles.secondaryButton} onClick={handleRestart}>
             ↺ Reiniciar experiencia
@@ -545,6 +655,14 @@ export function PlayerScreen({ filePath }: PlayerScreenProps) {
 
         {view.kind === 'final' && (
           <div key={view.node.id} className={styles.card}>
+            {/* Confeti (milestone "+1 fallo con Game Over"): SOLO sobre el
+                contenido por defecto de un Final con `celebrateDefault`
+                (ver `view.celebrate` en `./runtime`) — nunca sobre el
+                alternativo. Montado dentro de la tarjeta pero pintado a
+                pantalla completa (`.confetti` es `position: fixed`, ver
+                `PlayerScreen.module.css`), así que su posición en el árbol
+                es irrelevante. */}
+            {view.celebrate && <Confetti />}
             <h1 className={styles.title}>Fin de la experiencia</h1>
             {view.resolvedBody.trim() ? (
               <RichTextView body={view.resolvedBody} className={styles.body} />
@@ -557,16 +675,17 @@ export function PlayerScreen({ filePath }: PlayerScreenProps) {
               <p className={styles.points}>Puntuación final: {playerState.totalPoints} puntos</p>
             )}
             <div className={styles.finalActions}>
-              {/* Volver a jugar: mismo efecto que "↺ Reiniciar experiencia" de
+              {/* Reintentar: mismo efecto que "↺ Reiniciar experiencia" de
                   la cabecera, pero dentro de la propia tarjeta de Final, que
                   es donde el usuario está mirando al terminar el recorrido.
                   Mismo estilo/color de acento que "Continuar" (`.primaryButton`,
                   ver comentario de esa clase en `PlayerScreen.module.css`) —
                   antes era un botón de peligro (rojo) porque descartaba el
-                  recorrido en curso, pero "volver a jugar" es una acción
-                  habitual y esperada al terminar, no destructiva. */}
+                  recorrido en curso, pero "reintentar" es una acción
+                  habitual y esperada al terminar, no destructiva. Petición
+                  de usuario: renombrado de "Volver a jugar" a "Reintentar". */}
               <button type="button" className={styles.primaryButton} onClick={handleRestart}>
-                Volver a jugar
+                Reintentar
               </button>
               {/* Salir: estilo neutro (no es la acción principal de esta
                   fila). Ver `handleExitAttempt`. */}

@@ -104,6 +104,16 @@ export type PlayerView =
        * para `kind: 'decision'`.
        */
       resolvedBody: string
+      /**
+       * Milestone "+1 fallo con Game Over", petición de usuario ("Final
+       * Perfecto con confeti"): `true` cuando debe celebrarse con confeti
+       * esta vista — `node.celebrateDefault` Y el contenido mostrado es el
+       * de por defecto (`resolvedBody === node.body`, nunca cuando se está
+       * mostrando `alternateBody`). Calculado aquí (no en quien pinta la
+       * vista) para que `PlayerScreen.tsx`/`exportedPlayerScript.ts` no
+       * dupliquen la lógica de "qué contenido se resolvió de verdad".
+       */
+      celebrate: boolean
     }
   | { kind: 'dead-end'; node: Node | null }
 
@@ -183,18 +193,24 @@ function applyVisitEffects(
 
 /**
  * Milestone "+1 fallo con Game Over": resuelve qué `body` debe pintarse
- * para un nodo `final`, ver el comentario de `PlayerView` (rama `'final'`,
- * campo `resolvedBody`) para la semántica completa.
+ * para un nodo `final` (ver el comentario de `PlayerView`, rama `'final'`,
+ * campo `resolvedBody`), Y si el contenido resuelto es el de por defecto
+ * (`usedAlternate: false`) o el alternativo (`true`) — esto último alimenta
+ * `celebrate` (confeti solo sobre el contenido por defecto, nunca sobre el
+ * alternativo).
  */
-function resolveFinalBody(node: FinalNode, variables: VariableState): string {
+function resolveFinalContent(
+  node: FinalNode,
+  variables: VariableState,
+): { body: string; usedAlternate: boolean } {
   if (
     node.alternateCondition &&
     node.alternateBody?.trim() &&
     evaluateCondition(variables, node.alternateCondition)
   ) {
-    return node.alternateBody
+    return { body: node.alternateBody, usedAlternate: true }
   }
-  return node.body
+  return { body: node.body, usedAlternate: false }
 }
 
 /**
@@ -269,7 +285,13 @@ export function getView(project: ProjectDocument, state: PlayerState): PlayerVie
   }
 
   if (node.type === 'final') {
-    return { kind: 'final', node, resolvedBody: resolveFinalBody(node, state.variables) }
+    const { body, usedAlternate } = resolveFinalContent(node, state.variables)
+    return {
+      kind: 'final',
+      node,
+      resolvedBody: body,
+      celebrate: node.celebrateDefault === true && !usedAlternate,
+    }
   }
 
   if (node.responses.length > 0) {

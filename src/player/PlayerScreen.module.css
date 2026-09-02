@@ -24,6 +24,32 @@
   letter-spacing: 0.04em;
 }
 
+/* Agrupa ".label" ("Modo de prueba") con ".failureIndicator" (petición de
+   usuario: indicador de fallos, milestone "+1 fallo con Game Over") a la
+   izquierda de la cabecera, separado de ".controls" a la derecha —
+   `.bar` ya es `justify-content: space-between`, así que basta con que
+   ambos grupos sean un único flex item cada uno. */
+.barLeft {
+  display: flex;
+  align-items: center;
+  gap: var(--bs-space-3);
+}
+
+/* Indicador de fallos (petición de usuario, milestone "+1 fallo con Game
+   Over"): sobrio a propósito, mismo tono de aviso que `.exitMessage`/
+   `--bs-color-warning` — es información de apoyo para quien prueba el
+   caso, no una alerta urgente. Solo dentro de la app (`FailureIndicator`
+   en `PlayerScreen.tsx`, SIN equivalente en `exportedPlayerScript.ts`). */
+.failureIndicator {
+  font-size: var(--bs-font-size-sm);
+  font-weight: 600;
+  color: var(--bs-color-warning-contrast);
+  background: var(--bs-color-warning-bg);
+  border: 1px solid var(--bs-color-warning);
+  border-radius: var(--bs-radius-sm);
+  padding: 2px var(--bs-space-2);
+}
+
 .controls {
   display: flex;
   align-items: center;
@@ -291,6 +317,41 @@
 
 .muted {
   color: var(--bs-color-text-muted);
+}
+
+/* Confeti (milestone "+1 fallo con Game Over", `Confetti` en
+   `PlayerScreen.tsx`) — `position: fixed` a pantalla completa (no relativo
+   a `.card`/`.stage`): así cae de forma consistente sea cual sea el tamaño
+   de la tarjeta o si `.stage` tiene scroll. `pointer-events: none` +
+   `aria-hidden` (en el propio componente): puramente decorativo, nunca
+   bloquea clics en los botones de debajo ni se anuncia a lectores de
+   pantalla. `z-index` alto para quedar por encima de la tarjeta/cabecera.
+   Traducción literal en `buildConfetti` de
+   `src/export/exportedPlayerScript.ts`. */
+.confetti {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 50;
+}
+
+.confettiPiece {
+  position: absolute;
+  top: -14px;
+  width: 8px;
+  height: 14px;
+  opacity: 0.9;
+  animation-name: confettiFall;
+  animation-timing-function: cubic-bezier(0.15, 0.65, 0.35, 1);
+  animation-fill-mode: forwards;
+}
+
+@keyframes confettiFall {
+  to {
+    transform: translateY(115vh) rotate(720deg);
+    opacity: 0.4;
+  }
 }
 
 /* ---------------------------------------------------------------------

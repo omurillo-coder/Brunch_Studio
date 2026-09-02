@@ -613,6 +613,20 @@ export const FinalNodeSchema = z.object({
    */
   alternateCondition: VariableConditionSchema.optional(),
   alternateBody: z.string().optional(),
+  /**
+   * Milestone "+1 fallo con Game Over", petición de usuario ("Final Perfecto
+   * con confeti"): cuando es `true`, el Player celebra con confeti al
+   * mostrar el contenido POR DEFECTO de este Final (`body`, nunca
+   * `alternateBody`) — pensado para el desenlace "sin contratiempos"
+   * (`alternateCondition` ausente o evaluada a falsa). Deliberadamente NO
+   * ligado automáticamente a "tiene variante alternativa": un Final puede
+   * tener las dos cosas por separado (unas variantes son "buena/mala" con
+   * celebración, otras podrían ser dos desenlaces neutros sin ninguna). Sin
+   * variante alternativa configurada, `true` aquí celebra siempre (el
+   * contenido por defecto es lo único que se muestra). `undefined`/`false`
+   * = comportamiento de siempre, sin confeti — cambio puramente aditivo.
+   */
+  celebrateDefault: z.boolean().optional(),
 })
 
 export const NodeSchema = z.discriminatedUnion('type', [

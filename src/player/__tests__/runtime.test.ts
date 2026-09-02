@@ -953,4 +953,50 @@ describe('runtime del Player: variante alternativa de un Final ("Final Ok"/"Fina
       expect(view.resolvedBody).toBe('Cuerpo por defecto')
     }
   })
+
+  describe('celebrate (milestone "+1 fallo con Game Over", petición de usuario: "Final Perfecto con confeti")', () => {
+    it('celebrateDefault true + contenido por defecto (condición falsa) -> celebrate: true', () => {
+      const { project: base, counter } = withTwoVariables()
+      let { project, finalId } = buildFinalWithAlternate(counter)
+      project = updateNode(project, finalId, { celebrateDefault: true })
+      const merged = { ...project, variables: base.variables }
+
+      const state = { currentNodeId: finalId, totalPoints: null, variables: { [counter.id]: 0 } }
+      const view = getView(merged, state)
+      expect(view.kind).toBe('final')
+      if (view.kind === 'final') {
+        expect(view.resolvedBody).toBe('Cuerpo por defecto')
+        expect(view.celebrate).toBe(true)
+      }
+    })
+
+    it('celebrateDefault true + contenido ALTERNATIVO (condición verdadera) -> celebrate: false (nunca sobre el alternativo)', () => {
+      const { project: base, counter } = withTwoVariables()
+      let { project, finalId } = buildFinalWithAlternate(counter)
+      project = updateNode(project, finalId, { celebrateDefault: true })
+      const merged = { ...project, variables: base.variables }
+
+      const state = { currentNodeId: finalId, totalPoints: null, variables: { [counter.id]: 5 } }
+      const view = getView(merged, state)
+      expect(view.kind).toBe('final')
+      if (view.kind === 'final') {
+        expect(view.resolvedBody).toBe('Cuerpo alternativo')
+        expect(view.celebrate).toBe(false)
+      }
+    })
+
+    it('sin celebrateDefault (undefined/false), nunca celebra aunque se muestre el contenido por defecto', () => {
+      let project = createProject('P')
+      project = createNode(project, 'final', { x: 200, y: 0 }, { body: 'Cuerpo por defecto' })
+      const finalId = project.graph.nodes.find((node) => node.type === 'final')!.id
+
+      const state = getInitialState(project)
+      const withFinal = { ...state, currentNodeId: finalId }
+      const view = getView(project, withFinal)
+      expect(view.kind).toBe('final')
+      if (view.kind === 'final') {
+        expect(view.celebrate).toBe(false)
+      }
+    })
+  })
 })

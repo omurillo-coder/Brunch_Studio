@@ -362,7 +362,11 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
    *  cambiar el otro). Esta función decide solo QUÉ CLAVE/texto plano usar,
    *  nunca genera HTML — eso ya está hecho. \`rawBody\` viaja además del id
    *  porque \`appendBody\` lo necesita para decidir "vacío = nada" (mismo
-   *  criterio que con \`node.body\` de siempre). */
+   *  criterio que con \`node.body\` de siempre). \`usedAlternate\` (milestone
+   *  "+1 fallo con Game Over", petición de usuario: confeti en el Final
+   *  "Perfecto") alimenta el confeti — \`true\` solo cuando se resolvió al
+   *  contenido alternativo, para que quien pinta la vista pueda decidir
+   *  "\`celebrateDefault\` Y no es el alternativo" sin recalcular nada. */
   function resolveFinalContent(node, variables) {
     if (
       node.alternateCondition &&
@@ -370,9 +374,40 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
       trimmed(node.alternateBody) &&
       evaluateCondition(variables, node.alternateCondition)
     ) {
-      return { bodyId: node.id + ':alternate', rawBody: node.alternateBody };
+      return { bodyId: node.id + ':alternate', rawBody: node.alternateBody, usedAlternate: true };
     }
-    return { bodyId: node.id, rawBody: node.body };
+    return { bodyId: node.id, rawBody: node.body, usedAlternate: false };
+  }
+
+  /** Traducción literal de \`Confetti\` (\`src/player/PlayerScreen.tsx\`,
+   *  milestone "+1 fallo con Game Over") a DOM vanilla: mismo número de
+   *  piezas, misma paleta, mismo criterio de posición/color/temporización
+   *  aleatorios, fijados aquí vía \`style.cssText\` en vez de una prop de
+   *  estilo declarativa. Se llama una única vez por vista Final que celebra
+   *  (ver su único punto de llamada en \`render()\`, más abajo) — nunca se
+   *  actualiza in-place. */
+  var CONFETTI_COLORS = ['#f0677a', '#22a5a0', '#f5b342', '#7c6bf0', '#4fb0e8', '#f2836b'];
+  var CONFETTI_PIECE_COUNT = 60;
+
+  function buildConfetti() {
+    var wrapper = el('div', 'confetti');
+    wrapper.setAttribute('aria-hidden', 'true');
+    for (var i = 0; i < CONFETTI_PIECE_COUNT; i += 1) {
+      var piece = el('span', 'confettiPiece');
+      var left = Math.random() * 100;
+      var color = CONFETTI_COLORS[i % CONFETTI_COLORS.length];
+      var duration = 2.2 + Math.random() * 1.6;
+      var delay = Math.random() * 0.4;
+      var rotate = Math.random() * 360;
+      piece.style.cssText =
+        'left:' + left + '%;' +
+        'background-color:' + color + ';' +
+        'animation-duration:' + duration + 's;' +
+        'animation-delay:' + delay + 's;' +
+        'transform:rotate(' + rotate + 'deg);';
+      wrapper.appendChild(piece);
+    }
+    return wrapper;
   }
 
   function getInitialState() {
@@ -934,10 +969,21 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
 
     if (view.kind === 'final') {
       scormReportCompletion(state.totalPoints);
+      var finalContent = resolveFinalContent(view.node, state.variables);
+      // Confeti (milestone "+1 fallo con Game Over"): traducción literal de
+      // \`view.celebrate\` en \`src/player/runtime.ts\`/\`PlayerScreen.tsx\` —
+      // SOLO cuando \`celebrateDefault\` está fijado Y se está mostrando el
+      // contenido POR DEFECTO (nunca el alternativo). Insertado como
+      // PRIMER hijo de la tarjeta (\`insertBefore\`, mismo criterio que
+      // \`.introIllustration\`/\`.reviewSlideLabel\`) — \`.confetti\` es
+      // \`position: fixed\`, así que su posición en el DOM es irrelevante
+      // visualmente, pero mantiene el resto del contenido en orden.
+      if (view.node.celebrateDefault === true && !finalContent.usedAlternate) {
+        card.appendChild(buildConfetti());
+      }
       var heading = el('h1', 'title');
       heading.textContent = texts.finalTitle;
       card.appendChild(heading);
-      var finalContent = resolveFinalContent(view.node, state.variables);
       appendBody(
         card,
         finalContent.bodyId,
@@ -950,7 +996,7 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
         card.appendChild(points);
       }
 
-      // Fila de acciones: "Volver a jugar" (acento, mismo estilo que
+      // Fila de acciones: "Reintentar" (acento, mismo estilo que
       // "Continuar") + "Salir" (neutro), una junto a la otra. Sin clase
       // propia en exportedStyles.ts (fuera de alcance): flex simple vía
       // \`style.cssText\`.

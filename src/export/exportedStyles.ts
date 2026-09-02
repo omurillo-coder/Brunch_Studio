@@ -541,6 +541,37 @@ button:focus-visible {
   color: var(--bs-color-text);
 }
 
+/* Confeti (milestone "+1 fallo con Game Over", petición de usuario: "Final
+   Perfecto... con confeti") — traducción literal de \`.confetti\`/
+   \`.confettiPiece\`/\`@keyframes confettiFall\` en
+   \`src/player/PlayerScreen.module.css\` (mismos nombres de clase, mismos
+   valores), pintadas por \`buildConfetti\` en \`exportedPlayerScript.ts\`. */
+.confetti {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 50;
+}
+
+.confettiPiece {
+  position: absolute;
+  top: -14px;
+  width: 8px;
+  height: 14px;
+  opacity: 0.9;
+  animation-name: confettiFall;
+  animation-timing-function: cubic-bezier(0.15, 0.65, 0.35, 1);
+  animation-fill-mode: forwards;
+}
+
+@keyframes confettiFall {
+  to {
+    transform: translateY(115vh) rotate(720deg);
+    opacity: 0.4;
+  }
+}
+
 /* ---------------------------------------------------------------------
    Modo revisión profes ("Exportar revisión profes"): clases pintadas
    ÚNICAMENTE por \`exportedPlayerScript.ts\` cuando \`bundle.reviewMode\` está

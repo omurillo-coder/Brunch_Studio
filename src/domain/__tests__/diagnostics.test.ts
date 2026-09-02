@@ -81,6 +81,21 @@ describe('detectCycles', () => {
     expect(cycles).toHaveLength(1)
     expect(cycles[0]?.nodeIds).toEqual([startId])
   })
+
+  it('petición de usuario (milestone "+1 fallo con Game Over"): un ciclo que pasa por un nodo con `canvasBadge` NO cuenta — es el bucle de reintento intencional del pack', () => {
+    let project = createProject('P')
+    project = createNode(project, 'slide', { x: 100, y: 0 })
+    const startId = project.graph.startNodeId
+    const badgeSlideId = otherNodeIdOf(project, 'slide')
+
+    project = connect(project, startId, badgeSlideId)
+    project = connect(project, badgeSlideId, startId)
+    // Sin marcar todavía: el mismo bucle SÍ cuenta como aviso normal.
+    expect(detectCycles(project)).toHaveLength(1)
+
+    project = updateNode(project, badgeSlideId, { canvasBadge: 'game-over' })
+    expect(detectCycles(project)).toEqual([])
+  })
 })
 
 // -----------------------------------------------------------------------
@@ -122,6 +137,20 @@ describe('detectUnlinkedResponses', () => {
     // validateProject cubriría este caso, pero detectUnlinkedResponses no
     // debe confundirlo con una respuesta suelta.
     const project = createProject('P')
+
+    expect(detectUnlinkedResponses(project)).toEqual([])
+  })
+
+  it('petición de usuario (milestone "+1 fallo con Game Over"): una respuesta `actsAsExit` sin destino NO cuenta — actúa como el botón Salir a propósito', () => {
+    let project = createProject('P')
+    const startId = project.graph.startNodeId
+    project = addResponse(project, startId)
+    const [responseId] = responseIdsOf(project, startId)
+    if (!responseId) throw new Error('setup inválido')
+    project = updateResponse(project, startId, responseId, {
+      text: 'No, me rindo.',
+      actsAsExit: true,
+    })
 
     expect(detectUnlinkedResponses(project)).toEqual([])
   })

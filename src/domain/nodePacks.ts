@@ -7,35 +7,58 @@ import type { NodePosition, ProjectDocument } from './schemas'
 
 /**
  * ---------------------------------------------------------------------------
- * "+1 fallo con Game Over" (paquete de 2 diapositivas)
+ * "+1 fallo con Game Over" (paquete de 3 nodos)
  * ---------------------------------------------------------------------------
  *
  * Botón de creación rápida del panel izquierdo (`LeftPanel.tsx`, junto a "+
  * Diapositiva"/"+ Final") que añade DE UNA VEZ, ya cableadas entre sí, dos
- * diapositivas con contenido predefinido — mismo criterio de composición que
- * las plantillas de `src/domain/templates.ts` (encadenar funciones de
- * dominio reales: `createNode`, `addResponse`, `updateResponse`, `connect`,
- * `updateTextBlockBody`), pero invocable sobre un proyecto YA EN MARCHA (las
- * plantillas solo se usan al crear un proyecto nuevo desde `HomeScreen`).
+ * diapositivas y un Final con contenido predefinido — mismo criterio de
+ * composición que las plantillas de `src/domain/templates.ts` (encadenar
+ * funciones de dominio reales: `createNode`, `addResponse`,
+ * `updateResponse`, `connect`, `updateTextBlockBody`), pero invocable sobre
+ * un proyecto YA EN MARCHA (las plantillas solo se usan al crear un
+ * proyecto nuevo desde `HomeScreen`).
  *
  * Contenido exacto (texto acordado con Content Factory, no un placeholder):
  *
- * 1. Diapositiva "de decisión" en blanco (para que el diseñador la rellene):
- *    un bloque de texto vacío + 2 respuestas de texto vacío —
+ * 1. Diapositiva "+1 Fallo" — la "de decisión" en blanco (para que el
+ *    diseñador la rellene): un bloque de texto vacío + 2 respuestas de
+ *    texto vacío —
  *    - Respuesta 1: sin destino (el diseñador la conecta donde quiera).
  *    - Respuesta 2: conectada a la diapositiva 2 (Game Over).
+ *    - `visitEffects`: +1 a la variable "Fallos" al entrar en ELLA (no en
+ *      "Game Over", ver más abajo), sea cual sea el camino — corrección
+ *      de petición de usuario: al ser la diapositiva que se REVISITA en
+ *      cada vuelta del bucle de reintento ("Vale, voy a intentarlo" de
+ *      "Game Over" vuelve aquí), el contador de Fallos crece con cada
+ *      intento, no solo con el primer fallo (milestone "+1 fallo con Game
+ *      Over" en `runtime.ts`).
  *
  * 2. Diapositiva "Game Over", con contenido fijo:
  *    - Texto: "Lástima, parece que este caso se quedará sin resolver." +
  *      "¿De verdad quieres rendirte ahora?" (dos párrafos separados).
  *    - Un bloque de imagen "pendiente de subir" (sin `assetId` todavía, ver
  *      `ContentBlockSchema` — el "[imagen pendiente]" del encargo).
- *    - `visitEffects`: +1 a la variable "Fallos" al entrar en ella, sea cual
- *      sea el camino (milestone "+1 fallo con Game Over" en `runtime.ts`).
  *    - Respuesta "Vale, voy a intentarlo.": sin destino (el diseñador la
- *      conecta donde quiera).
+ *      conecta donde quiera — normalmente, de vuelta a "+1 Fallo").
  *    - Respuesta "No, me rindo.": `actsAsExit: true` (termina el recorrido
  *      ahí mismo, sin navegar a ningún nodo).
+ *
+ * 3. Final "Perfecto"/"con fallos" — un ÚNICO nodo `final`, sin conectar a
+ *    propósito (el diseñador lo cablea donde termine su propia narrativa):
+ *    - Contenido por defecto ("Perfecto", cuando Fallos = 0): "¡Impresionante!"
+ *      + "Lo has resuelto en un momento." + "¿Quieres explorar otros
+ *      caminos?", con `celebrateDefault: true` (confeti, ver
+ *      `PlayerView.celebrate` en `src/player/runtime.ts`).
+ *    - Contenido alternativo ("con fallos", cuando Fallos > 0):
+ *      "¡Buen trabajo!" + "Has conseguido resolver el caso, aunque has
+ *      tenido algunos contratiempos." + "¿Qué decisiones cambiarías?", vía
+ *      `alternateCondition`/`alternateBody` (milestone "+1 fallo con Game
+ *      Over", `FinalNodeSchema`) — sin confeti, nunca se celebra el
+ *      contenido alternativo.
+ *    - Los botones "Reintentar"/"Salir" de esta pantalla son los genéricos
+ *      de cualquier Final (`PlayerScreen.tsx`/`exportedPlayerScript.ts`),
+ *      no algo que fije este pack.
  *
  * La variable "Fallos" se crea automáticamente (número, valor inicial 0) si
  * el proyecto todavía no tiene ninguna con ese nombre exacto; si ya existe,
@@ -51,6 +74,24 @@ function twoParagraphBody(first: string, second: string): string {
   return serializeRichBody({
     type: 'doc',
     content: [
+      { type: 'paragraph', content: [{ type: 'text', text: first }] },
+      { type: 'paragraph', content: [{ type: 'text', text: second }] },
+    ],
+  })
+}
+
+/** Cuerpo Tiptap de un titular (encabezado nivel 2) + dos párrafos,
+ *  serializado — mismo criterio que `twoParagraphBody`, con un nodo
+ *  `heading` como primera línea: el titular "¡Impresionante!"/"¡Buen
+ *  trabajo!" de cada variante del Final de este pack (ver comentario de
+ *  cabecera del archivo), más prominente que un párrafo normal — mismo
+ *  nodo `heading` que ya produce el botón "H" del editor de texto
+ *  enriquecido (`RICH_TEXT_EXTENSIONS`, que incluye `StarterKit`). */
+function headingBody(heading: string, first: string, second: string): string {
+  return serializeRichBody({
+    type: 'doc',
+    content: [
+      { type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: heading }] },
       { type: 'paragraph', content: [{ type: 'text', text: first }] },
       { type: 'paragraph', content: [{ type: 'text', text: second }] },
     ],
@@ -100,13 +141,17 @@ function firstTextBlockId(project: ProjectDocument, slideNodeId: string): string
 }
 
 /**
- * Añade el paquete "+1 fallo con Game Over" a `project`: dos diapositivas
- * nuevas, ya conectadas entre sí y con el contenido predefinido descrito en
- * el comentario de cabecera de este archivo. `position` es la posición de la
- * PRIMERA diapositiva (la "en blanco"); la de Game Over nace a su derecha,
- * con un offset fijo — no pretende ser una disposición final perfecta, el
- * diseñador puede mover cualquiera de las dos desde el lienzo, mismo
- * criterio que `seedIntroNode` en `templates.ts`.
+ * Añade el paquete "+1 fallo con Game Over" a `project`: dos diapositivas y
+ * un Final, ya conectados entre sí donde corresponde (ver comentario de
+ * cabecera del archivo) y con el contenido predefinido. `position` es la
+ * posición de la PRIMERA diapositiva (la "en blanco"); "Game Over" nace a su
+ * derecha y el Final debajo de ella, ambos con un offset fijo — no
+ * pretende ser una disposición final perfecta, el diseñador puede mover
+ * cualquiera de los tres desde el lienzo, mismo criterio que `seedIntroNode`
+ * en `templates.ts`. El Final nace SIN conectar (ninguna respuesta de este
+ * pack apunta a él): a diferencia de "Game Over" (destino fijo de la
+ * segunda respuesta de "+1 Fallo"), dónde termina la narrativa del
+ * diseñador es algo que este pack no puede decidir por él.
  */
 export function addGameOverPack(project: ProjectDocument, position: NodePosition): ProjectDocument {
   const { project: withVariable, variableId: fallosVariableId } = ensureFallosVariable(project)
@@ -122,8 +167,13 @@ export function addGameOverPack(project: ProjectDocument, position: NodePosition
   // Petición de usuario: insignia fija "+1 FALLO" en el lienzo (ver
   // comentario de `SlideNodeSchema.canvasBadge`) — identifica esta
   // diapositiva como la "de decisión" del pack de un vistazo, sin abrir el
-  // Inspector.
-  next = updateNode(next, slide1Id, { canvasBadge: 'plus-one-fallo' })
+  // Inspector — Y el efecto de sumar Fallos al visitarla (movido aquí desde
+  // "Game Over", ver comentario de cabecera del archivo). Un único
+  // `updateNode`: ambos campos son exclusivos de `slide`.
+  next = updateNode(next, slide1Id, {
+    canvasBadge: 'plus-one-fallo',
+    visitEffects: [{ variableId: fallosVariableId, operation: 'increment', value: 1 }],
+  })
   next = addResponse(next, slide1Id)
   next = addResponse(next, slide1Id)
   const slide1AfterResponses = next.graph.nodes.find((node) => node.id === slide1Id)
@@ -160,13 +210,10 @@ export function addGameOverPack(project: ProjectDocument, position: NodePosition
   )
   next = addImageBlock(next, gameOverId)
   // Petición de usuario: insignia fija "GAME OVER" + marco rojo en el
-  // lienzo (ver comentario de `SlideNodeSchema.canvasBadge`), en el MISMO
-  // `updateNode` que fija el efecto al visitar — un único parche, ambos
-  // campos son exclusivos de `slide`.
-  next = updateNode(next, gameOverId, {
-    visitEffects: [{ variableId: fallosVariableId, operation: 'increment', value: 1 }],
-    canvasBadge: 'game-over',
-  })
+  // lienzo (ver comentario de `SlideNodeSchema.canvasBadge`). Sin
+  // `visitEffects` aquí — el efecto de sumar Fallos vive en "+1 Fallo"
+  // (más arriba), no en esta diapositiva.
+  next = updateNode(next, gameOverId, { canvasBadge: 'game-over' })
   next = addResponse(next, gameOverId)
   next = addResponse(next, gameOverId)
   const gameOverAfterResponses = next.graph.nodes.find((node) => node.id === gameOverId)
@@ -189,6 +236,36 @@ export function addGameOverPack(project: ProjectDocument, position: NodePosition
   // respuesta (`response1Id`, la primera, se deja deliberadamente sin
   // destino: el diseñador la conecta donde quiera).
   next = connect(next, slide1Id, gameOverId, response2Id)
+
+  // Final "Perfecto"/"con fallos": un único nodo, sin conectar (ver
+  // comentario de esta función). Nace con `body`/`variant` vacíos por
+  // defecto (`createNode`); el `updateNode` de después fija TODO su
+  // contenido de una vez — `body` (por defecto), `alternateCondition`/
+  // `alternateBody` (Fallos > 0) y `celebrateDefault` (confeti solo sobre
+  // el contenido por defecto).
+  const finalPosition = { x: position.x, y: position.y + 240 }
+  const beforeFinal = next
+  next = createNode(next, 'final', finalPosition)
+  const finalId = next.graph.nodes.find(
+    (node) => !beforeFinal.graph.nodes.some((existing) => existing.id === node.id),
+  )?.id
+  if (!finalId) {
+    throw new Error('addGameOverPack: no se pudo identificar el Final recién creado.')
+  }
+  next = updateNode(next, finalId, {
+    body: headingBody(
+      '¡Impresionante!',
+      'Lo has resuelto en un momento.',
+      '¿Quieres explorar otros caminos?',
+    ),
+    alternateCondition: { variableId: fallosVariableId, operator: '>', value: 0 },
+    alternateBody: headingBody(
+      '¡Buen trabajo!',
+      'Has conseguido resolver el caso, aunque has tenido algunos contratiempos.',
+      '¿Qué decisiones cambiarías?',
+    ),
+    celebrateDefault: true,
+  })
 
   return next
 }
