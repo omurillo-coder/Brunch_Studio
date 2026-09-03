@@ -110,7 +110,7 @@ function sampleProject(): ProjectDocument {
     position: { x: 0, y: 0 },
     title: '',
     body: richBody('Caso resuelto sin incidencias.'),
-    celebrateDefault: true,
+    celebrate: true,
     alternateCondition: { variableId: COUNTER_VAR_ID, operator: '>', value: 0 },
     alternateBody: richBody('Además, conseguiste puntos extra.'),
   }
@@ -211,17 +211,19 @@ describe('buildAiReviewDocument (petición de usuario: "que este archivo lo pudi
     expect(section).toContain('- B) "No, me rindo." → sale de la experiencia')
   })
 
-  it('un Final con celebrateDefault y variante alternativa describe ambos contenidos', () => {
+  it('un Final con celebrate y variante alternativa describe ambos contenidos, con un único aviso de confeti para los dos', () => {
     const doc = buildAiReviewDocument(sampleProject())
     const section = sectionOf(doc, '## Final 4')
 
     expect(section).toContain('Caso resuelto sin incidencias.')
-    expect(section).toContain('🎉 Este contenido se celebra con confeti al mostrarse.')
+    expect(section).toContain(
+      '🎉 Este Final se celebra con confeti al mostrarse (con o sin condición alternativa).',
+    )
     expect(section).toContain('Contenido alternativo (se muestra en vez del anterior si Puntos > 0):')
     expect(section).toContain('Además, conseguiste puntos extra.')
   })
 
-  it('un Final sin body ni celebrateDefault ni alternativo se pinta "(sin contenido)", sin secciones de más', () => {
+  it('un Final sin body ni celebrate ni alternativo se pinta "(sin contenido)", sin secciones de más', () => {
     const doc = buildAiReviewDocument(sampleProject())
     const section = sectionOf(doc, '## Final 5')
 

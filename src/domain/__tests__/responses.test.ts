@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createNode, createProject } from '../project'
 import { connect } from '../graph'
-import { addResponse, removeResponse, updateResponse } from '../responses'
+import { addResponse, moveResponse, removeResponse, updateResponse } from '../responses'
 import type { DecisionResponse, ProjectDocument } from '../schemas'
 
 /**
@@ -266,5 +266,62 @@ describe('updateResponse', () => {
     const found = responsesOf(project, slideId).find((r) => r.id === responseA.id)
     expect(found?.effects).toBeUndefined()
     expect(found?.condition).toBeUndefined()
+  })
+})
+
+describe('moveResponse (petición de usuario: "que te deje cambiar el orden como quieras")', () => {
+  /** Diapositiva con 3 respuestas A/B/C (en ese orden de creación). */
+  function withThreeResponses(): { project: ProjectDocument; slideId: string; ids: string[] } {
+    const { project: initial, slideId } = withSlide()
+    let project = initial
+    project = addResponse(project, slideId)
+    project = addResponse(project, slideId)
+    project = addResponse(project, slideId)
+    const ids = responsesOf(project, slideId).map((r) => r.id)
+    return { project, slideId, ids }
+  }
+
+  it('mueve una respuesta a una posición posterior, sin tocar id/letra de ninguna', () => {
+    const { project: initial, slideId, ids } = withThreeResponses()
+    const [a, b, c] = ids as [string, string, string]
+
+    const project = moveResponse(initial, slideId, a, 2)
+
+    const responses = responsesOf(project, slideId)
+    expect(responses.map((r) => r.id)).toEqual([b, c, a])
+    // Letras intactas: solo cambia el orden, nunca el identificador.
+    expect(responses.map((r) => r.letter).sort()).toEqual(['A', 'B', 'C'])
+    // Inmutabilidad: el proyecto original no se toca.
+    expect(responsesOf(initial, slideId).map((r) => r.id)).toEqual([a, b, c])
+  })
+
+  it('mueve una respuesta a una posición anterior', () => {
+    const { project: initial, slideId, ids } = withThreeResponses()
+    const [a, b, c] = ids as [string, string, string]
+
+    const project = moveResponse(initial, slideId, c, 0)
+
+    expect(responsesOf(project, slideId).map((r) => r.id)).toEqual([c, a, b])
+  })
+
+  it('un índice fuera de rango se recorta al primer/último hueco válido, en vez de lanzar', () => {
+    const { project: initial, slideId, ids } = withThreeResponses()
+    const [a, b, c] = ids as [string, string, string]
+
+    const movedPastEnd = moveResponse(initial, slideId, a, 999)
+    expect(responsesOf(movedPastEnd, slideId).map((r) => r.id)).toEqual([b, c, a])
+
+    const movedBeforeStart = moveResponse(initial, slideId, c, -5)
+    expect(responsesOf(movedBeforeStart, slideId).map((r) => r.id)).toEqual([c, a, b])
+  })
+
+  it('lanza si la respuesta no existe, o si el nodo no es una diapositiva', () => {
+    const { project, slideId } = withThreeResponses()
+    let withFinal = createNode(project, 'final', { x: 200, y: 0 })
+    const finalId = withFinal.graph.nodes.find((n) => n.type === 'final')?.id
+    if (!finalId) throw new Error('setup inválido')
+
+    expect(() => moveResponse(project, slideId, 'no-existe', 0)).toThrow()
+    expect(() => moveResponse(withFinal, finalId, 'no-existe', 0)).toThrow()
   })
 })

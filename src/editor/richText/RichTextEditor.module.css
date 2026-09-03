@@ -66,6 +66,56 @@
   color: var(--bs-color-accent);
 }
 
+/* Desplegable de justificación de texto (petición de usuario): mismo
+   criterio visual que el menú "Exportar" de `Topbar.module.css`
+   (`.exportMenuWrapper`/`.exportMenu`/`.exportMenuItem`) — panel flotante
+   con borde + sombra suave, anclado justo debajo del botón que lo abre. */
+.alignMenuWrapper {
+  position: relative;
+  display: inline-flex;
+}
+
+.alignMenu {
+  position: absolute;
+  top: calc(100% + var(--bs-space-1));
+  left: 0;
+  z-index: 20;
+  min-width: 140px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--bs-space-1);
+  background: var(--bs-color-surface);
+  border: 1px solid var(--bs-color-border);
+  border-radius: var(--bs-radius-md);
+  box-shadow: var(--bs-shadow-sm);
+}
+
+.alignMenuItem,
+.alignMenuItemActive {
+  display: flex;
+  align-items: center;
+  gap: var(--bs-space-2);
+  padding: var(--bs-space-1) var(--bs-space-2);
+  border: none;
+  border-radius: var(--bs-radius-sm);
+  background: transparent;
+  color: var(--bs-color-text);
+  font-size: var(--bs-font-size-sm);
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.alignMenuItem:hover {
+  background: var(--bs-color-bg);
+}
+
+.alignMenuItemActive {
+  background: color-mix(in srgb, var(--bs-color-accent) 16%, transparent);
+  color: var(--bs-color-accent);
+}
+
 /* Barra contextual de tabla (fase 9): mismo aspecto que la barra principal,
    pero como segunda fila separada por un borde propio — solo se monta
    mientras el cursor está dentro de una tabla (ver `RichTextEditor.tsx`). */

@@ -20,6 +20,7 @@ import {
   moveContentBlock as domainMoveContentBlock,
   moveNode as domainMoveNode,
   moveNodes as domainMoveNodes,
+  moveResponse as domainMoveResponse,
   reorderNode as domainReorderNode,
   removeContentBlock as domainRemoveContentBlock,
   removeResponse as domainRemoveResponse,
@@ -212,6 +213,9 @@ export interface ProjectStoreActions {
   addResponse: (slideNodeId: string) => void
   removeResponse: (slideNodeId: string, responseId: string) => void
   updateResponse: (slideNodeId: string, responseId: string, patch: UpdateResponsePatch) => void
+  /** Petición de usuario ("Ordenar"/"Random" + botones Subir/Bajar): mismo
+   *  patrón que `moveContentBlock`. */
+  moveResponse: (slideNodeId: string, responseId: string, toIndex: number) => void
   connect: (sourceNodeId: string, targetNodeId: string, responseId?: string) => void
   disconnect: (sourceNodeId: string, responseId?: string) => void
 
@@ -440,6 +444,15 @@ export const useProjectStore = create<ProjectStoreState>()(
 
     updateResponse: (slideNodeId, responseId, patch) => {
       const next = domainUpdateResponse(get().project, slideNodeId, responseId, patch)
+      set((state) => {
+        state.history.past.push(state.project as ProjectDocument)
+        state.history.future = []
+        state.project = next
+      })
+    },
+
+    moveResponse: (slideNodeId, responseId, toIndex) => {
+      const next = domainMoveResponse(get().project, slideNodeId, responseId, toIndex)
       set((state) => {
         state.history.past.push(state.project as ProjectDocument)
         state.history.future = []

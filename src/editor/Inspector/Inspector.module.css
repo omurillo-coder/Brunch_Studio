@@ -297,6 +297,15 @@
   background: var(--bs-color-accent-bg);
 }
 
+/* Fila del título "Respuestas" + interruptor "Ordenar"/"Random" (petición
+   de usuario), uno a cada lado. */
+.responsesHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--bs-space-2);
+}
+
 .responsesTitle {
   margin: 0;
   font-size: var(--bs-font-size-sm);
@@ -304,6 +313,45 @@
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--bs-color-text-muted);
+}
+
+/* Interruptor "Ordenar"/"Random" (petición de usuario): dos botones
+   contiguos con un único borde exterior — mismo criterio visual de
+   "segmented control" que el desplegable de tamaño de imagen a su lado en
+   otras secciones del Inspector, pero sin desplegable: dos posiciones
+   fijas, ambas visibles a la vez. */
+.responseOrderToggle {
+  display: inline-flex;
+  border: 1px solid var(--bs-color-border);
+  border-radius: var(--bs-radius-sm);
+  overflow: hidden;
+}
+
+.responseOrderButton,
+.responseOrderButtonActive {
+  padding: var(--bs-space-1) var(--bs-space-2);
+  border: none;
+  background: var(--bs-color-bg);
+  color: var(--bs-color-text);
+  font-size: var(--bs-font-size-xs);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.responseOrderButton + .responseOrderButton,
+.responseOrderButton + .responseOrderButtonActive,
+.responseOrderButtonActive + .responseOrderButton,
+.responseOrderButtonActive + .responseOrderButtonActive {
+  border-left: 1px solid var(--bs-color-border);
+}
+
+.responseOrderButton:hover {
+  background: var(--bs-color-surface);
+}
+
+.responseOrderButtonActive {
+  background: var(--bs-color-accent);
+  color: #fff;
 }
 
 .addResponseButton {
@@ -340,6 +388,16 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+}
+
+/* Agrupa el punto identificador + los botones Subir/Bajar (petición de
+   usuario) en un único flex item, para que `.responseRowHeader` los separe
+   de "Eliminar" en dos bloques (`space-between`) en vez de repartir 3+
+   elementos sueltos de forma poco predecible. */
+.responseRowHeaderStart {
+  display: flex;
+  align-items: center;
+  gap: var(--bs-space-1);
 }
 
 /* Punto que identifica visualmente una respuesta. Sustituye al antiguo

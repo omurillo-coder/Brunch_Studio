@@ -464,6 +464,16 @@ export const CANVAS_BADGES = ['plus-one-fallo', 'game-over'] as const
 export const CanvasBadgeSchema = z.enum(CANVAS_BADGES)
 
 /**
+ * Orden de presentación de `SlideNodeSchema.responses` para quien juega
+ * (petición de usuario: interruptor "Ordenar"/"Random" junto al título
+ * "Respuestas" del Inspector — visible solo con más de una respuesta, ver
+ * `ResponsesSection`). Mismo criterio de "paleta cerrada con nombre" que
+ * `SLIDE_COLORS`/`CANVAS_BADGES`.
+ */
+export const RESPONSE_ORDERS = ['ordered', 'random'] as const
+export const ResponseOrderSchema = z.enum(RESPONSE_ORDERS)
+
+/**
  * Diapositiva: el único tipo de nodo "con salida" del modelo narrativo
  * (aparte del nodo `intro`, que también tiene una única salida pero no es
  * narrativo, ver `IntroNodeSchema`). Una misma diapositiva puede comportarse
@@ -576,6 +586,33 @@ export const SlideNodeSchema = z.object({
    * (Player in-app ni exportado) ni se valida en export — solo al lienzo.
    */
   canvasBadge: CanvasBadgeSchema.optional(),
+  /**
+   * Petición de usuario (interruptor "Ordenar"/"Random" junto al título
+   * "Respuestas" del Inspector):
+   * - `'ordered'`/ausente (valor por defecto): `responses` se presenta en
+   *   el ORDEN DEL PROPIO ARRAY — el mismo que ya determina el resto del
+   *   dominio (posición al añadir/eliminar, ver `addResponse`/
+   *   `removeResponse` en `src/domain/responses.ts`), ahora también
+   *   reordenable a mano con `moveResponse` (arriba/abajo, mismo mecanismo
+   *   que `moveContentBlock` en `src/domain/content.ts`). Independiente de
+   *   `letter` (A/B/C/D, ver `DecisionResponseSchema`): la letra sigue
+   *   siendo el identificador estable de cada respuesta (usado para
+   *   referenciarla en el Inspector/exportaciones), no su posición visual
+   *   — dos cosas que hasta esta petición siempre habían coincidido (el
+   *   Player/Inspector ordenaban SIEMPRE por letra), así que un documento
+   *   guardado antes de esta fase con respuestas borradas y vueltas a
+   *   crear en un orden concreto podría, en el caso límite en que letra y
+   *   posición ya hubieran divergido, mostrarse en un orden ligeramente
+   *   distinto la primera vez que se abra — cambio aceptado
+   *   conscientemente, sin migración: no hay forma de distinguir esa
+   *   divergencia histórica de una reordenación deliberada.
+   * - `'random'`: el Player (in-app y exportado) baraja `responses` CADA
+   *   VEZ que se entra en esta diapositiva (una vez por visita, no en cada
+   *   render — ver `PlayerState.shuffledResponseIds` en
+   *   `src/player/runtime.ts`); la letra de cada respuesta no cambia con
+   *   esto, solo el orden en que se muestran.
+   */
+  responseOrder: ResponseOrderSchema.optional(),
 })
 
 /**
@@ -642,17 +679,25 @@ export const FinalNodeSchema = z.object({
   /**
    * Milestone "+1 fallo con Game Over", petición de usuario ("Final Perfecto
    * con confeti"): cuando es `true`, el Player celebra con confeti al
-   * mostrar el contenido POR DEFECTO de este Final (`body`, nunca
-   * `alternateBody`) — pensado para el desenlace "sin contratiempos"
-   * (`alternateCondition` ausente o evaluada a falsa). Deliberadamente NO
-   * ligado automáticamente a "tiene variante alternativa": un Final puede
-   * tener las dos cosas por separado (unas variantes son "buena/mala" con
-   * celebración, otras podrían ser dos desenlaces neutros sin ninguna). Sin
-   * variante alternativa configurada, `true` aquí celebra siempre (el
-   * contenido por defecto es lo único que se muestra). `undefined`/`false`
-   * = comportamiento de siempre, sin confeti — cambio puramente aditivo.
+   * mostrar el contenido de este Final — CON o SIN fallos, el `body` por
+   * defecto tanto como el `alternateBody` (petición de usuario explícita:
+   * "el confeti lo quiero si llegas al final sin fallos y con fallos, en
+   * los dos"; antes solo celebraba sobre el contenido por defecto, nunca
+   * sobre el alternativo — de ahí el nombre original del campo,
+   * `celebrateDefault`, renombrado a `celebrate` al perder ese matiz).
+   * Deliberadamente NO ligado automáticamente a "tiene variante
+   * alternativa": un Final puede tener las dos cosas por separado (algunas
+   * variantes celebran, otras no). `undefined`/`false` = comportamiento de
+   * siempre, sin confeti — cambio puramente aditivo.
+   *
+   * Renombrado sin migración: un documento `.brunch` guardado con el campo
+   * antiguo (`celebrateDefault`) durante el breve periodo en que existió
+   * con ese nombre y ese comportamiento más limitado deja de celebrar al
+   * reabrirse — riesgo aceptado conscientemente (campo recién introducido
+   * en esta misma sesión de trabajo, sin proyectos reales guardados con
+   * él todavía).
    */
-  celebrateDefault: z.boolean().optional(),
+  celebrate: z.boolean().optional(),
 })
 
 export const NodeSchema = z.discriminatedUnion('type', [
@@ -752,6 +797,7 @@ export type DecisionResponse = z.infer<typeof DecisionResponseSchema>
 export type ContentBlock = z.infer<typeof ContentBlockSchema>
 export type SlideColor = z.infer<typeof SlideColorSchema>
 export type CanvasBadge = z.infer<typeof CanvasBadgeSchema>
+export type ResponseOrder = z.infer<typeof ResponseOrderSchema>
 export type ImageSize = z.infer<typeof ImageSizeSchema>
 export type FinalVariant = z.infer<typeof FinalVariantSchema>
 

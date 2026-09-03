@@ -1,6 +1,5 @@
 import type {
   ContentBlock,
-  DecisionResponse,
   FinalNode,
   IntroNode,
   Node,
@@ -10,7 +9,6 @@ import type {
   VariableDef,
   VariableEffect,
 } from '../domain'
-import { RESPONSE_LETTERS } from '../domain'
 import { extractPlainText, parseRichBody } from '../editor/richText/richTextContent'
 import { resolveIntroCatalogNames } from './htmlBundle'
 
@@ -135,14 +133,6 @@ function describeContentBlocks(blocks: ContentBlock[]): string {
   return parts.join('\n\n')
 }
 
-/** Igual criterio de orden que el Inspector/Player: por letra (A→B→C→D)
- *  fijo, independiente del orden interno de creación/borrado del array. */
-function sortByLetter(responses: DecisionResponse[]): DecisionResponse[] {
-  return [...responses].sort(
-    (a, b) => RESPONSE_LETTERS.indexOf(a.letter) - RESPONSE_LETTERS.indexOf(b.letter),
-  )
-}
-
 function renderIntroSection(
   node: IntroNode,
   project: ProjectDocument,
@@ -182,8 +172,18 @@ function renderSlideSection(
       )
     }
   } else {
-    lines.push('Respuestas:')
-    for (const response of sortByLetter(node.responses)) {
+    // Petición de usuario ("Ordenar"/"Random"): ya NO se ordena por letra
+    // — se listan en el propio orden del array `node.responses` (el mismo
+    // que ve quien juega con `responseOrder: 'ordered'`/ausente, ver
+    // `orderResponses` en `src/player/runtime.ts`). Con `'random'` ese
+    // orden no es el que verá el alumnado (se baraja en cada visita), así
+    // que se avisa en vez de dar a entender un orden fijo que no existe.
+    if (node.responseOrder === 'random') {
+      lines.push('Respuestas (el orden real se baraja en cada visita, "Random"):')
+    } else {
+      lines.push('Respuestas:')
+    }
+    for (const response of node.responses) {
       const text = response.text.trim() || '(sin texto)'
       const destination = response.actsAsExit
         ? 'sale de la experiencia'
@@ -206,10 +206,6 @@ function renderFinalSection(node: FinalNode, project: ProjectDocument): string {
   const body = extractPlainText(parseRichBody(node.body))
   const lines = [`## ${nodeLabel(node)}`, '', body || '(sin contenido)']
 
-  if (node.celebrateDefault) {
-    lines.push('', '🎉 Este contenido se celebra con confeti al mostrarse.')
-  }
-
   if (node.alternateCondition) {
     const altBody = node.alternateBody ? extractPlainText(parseRichBody(node.alternateBody)) : ''
     lines.push(
@@ -217,6 +213,13 @@ function renderFinalSection(node: FinalNode, project: ProjectDocument): string {
       `Contenido alternativo (se muestra en vez del anterior si ${describeCondition(node.alternateCondition, project.variables)}):`,
       altBody || '(sin definir; si se diera el caso, se seguiría mostrando el contenido por defecto de arriba)',
     )
+  }
+
+  // Petición de usuario ("el confeti lo quiero... en los dos"): `celebrate`
+  // aplica a los DOS contenidos de arriba (por defecto y alternativo, si lo
+  // hay) — un único aviso al final de la sección, no uno por contenido.
+  if (node.celebrate) {
+    lines.push('', '🎉 Este Final se celebra con confeti al mostrarse (con o sin condición alternativa).')
   }
 
   return lines.join('\n')

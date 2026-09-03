@@ -89,7 +89,7 @@ describe('addGameOverPack', () => {
     expect(giveUp?.targetNodeId).toBeUndefined()
   })
 
-  it('el Final tiene el contenido "Perfecto" por defecto, "con fallos" como alternativo (Fallos > 0) y confeti solo en el por defecto', () => {
+  it('el Final tiene el contenido "Perfecto" por defecto, "con fallos" como alternativo (Fallos > 0) y confeti en los dos', () => {
     const project = createProject('P')
     const updated = addGameOverPack(project, { x: 0, y: 0 })
     const [, , finalId] = newNodeIds(project, updated)
@@ -114,7 +114,7 @@ describe('addGameOverPack', () => {
       value: 0,
     })
 
-    expect(final.celebrateDefault).toBe(true)
+    expect(final.celebrate).toBe(true)
   })
 
   it('reutiliza la variable "Fallos" si el proyecto ya tiene una con ese nombre, sin duplicarla ni reiniciar su valor', () => {

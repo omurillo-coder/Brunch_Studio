@@ -14,7 +14,7 @@ import {
   DEFAULT_CONTINUE_LABEL,
   IMAGE_SIZES,
   MAX_RESPONSES,
-  RESPONSE_LETTERS,
+  RESPONSE_ORDERS,
   SLIDE_COLORS,
   deriveEdges,
 } from '../../domain'
@@ -28,6 +28,7 @@ import type {
   Node,
   NodeType,
   ProjectDocument,
+  ResponseOrder,
   SlideColor,
   SlideNode,
   VariableCondition,
@@ -140,16 +141,6 @@ function fieldClassName(base: string | undefined, value: string): string {
   // de llamada.
   const safeBase = base ?? ''
   return value.trim() === '' ? `${safeBase} ${styles.fieldEmpty}` : safeBase
-}
-
-/** Respuestas de una diapositiva, siempre en el orden fijo interno A→B→C→D
- *  (la letra nunca se muestra; solo ordena) — el array interno conserva el
- *  orden de creación, que puede no coincidir con el orden de letra tras
- *  eliminar y reañadir una intermedia. */
-function sortByLetter(responses: DecisionResponse[]): DecisionResponse[] {
-  return [...responses].sort(
-    (a, b) => RESPONSE_LETTERS.indexOf(a.letter) - RESPONSE_LETTERS.indexOf(b.letter),
-  )
 }
 
 /** Etiqueta legible de cada color de la paleta cerrada (Tarea "Colorear
@@ -1834,19 +1825,40 @@ function ResponseRow({
   slideNodeId,
   response,
   index,
+  arrayIndex,
   allNodes,
   filePath,
   variables,
+  canReorder,
+  isFirst,
+  isLast,
 }: {
   slideNodeId: string
   response: DecisionResponse
+  /** Posición 1-based para mostrar ("Respuesta {index}", aria-labels) —
+   *  NO el índice real del array, ver `arrayIndex`. */
   index: number
+  /** Índice 0-based real dentro de `node.responses`, el que espera
+   *  `moveResponse` (`src/domain/responses.ts`) — aparte de `index` (que
+   *  ya viene desplazado +1 para mostrar) para no repetir la aritmética
+   *  "±1" en cada sitio que lo usa. */
+  arrayIndex: number
   allNodes: Node[]
   filePath: string
   variables: VariableDef[]
+  /** Petición de usuario ("si está en ordenar te deje poner una arriba o
+   *  una abajo"): `true` solo con `responseOrder: 'ordered'` (o ausente,
+   *  su valor por defecto) Y más de una respuesta — en `'random'` el orden
+   *  manual no tiene efecto en el Player (ver `orderResponses` en
+   *  `src/player/runtime.ts`), así que los botones "Subir"/"Bajar" no
+   *  tendrían ningún sentido ahí. */
+  canReorder: boolean
+  isFirst: boolean
+  isLast: boolean
 }) {
   const updateResponse = useProjectStore((state) => state.updateResponse)
   const removeResponse = useProjectStore((state) => state.removeResponse)
+  const moveResponse = useProjectStore((state) => state.moveResponse)
   const connect = useProjectStore((state) => state.connect)
   const disconnect = useProjectStore((state) => state.disconnect)
 
@@ -1928,7 +1940,35 @@ function ResponseRow({
   return (
     <div className={styles.responseRow}>
       <div className={styles.responseRowHeader}>
-        <span className={styles.responseBullet} aria-hidden="true" />
+        <div className={styles.responseRowHeaderStart}>
+          <span className={styles.responseBullet} aria-hidden="true" />
+          {/* Subir/Bajar (petición de usuario): mismo mecanismo/estilo que
+              "Subir bloque"/"Bajar bloque" de `ContentBlockRow` — solo
+              visibles con `responseOrder: 'ordered'` (ver `canReorder`),
+              porque en `'random'` el orden manual no afecta a nada. */}
+          {canReorder && (
+            <>
+              <button
+                type="button"
+                className={styles.contentBlockMoveButton}
+                onClick={() => moveResponse(slideNodeId, response.id, arrayIndex - 1)}
+                disabled={isFirst}
+                aria-label={`Subir respuesta ${index}`}
+              >
+                ↑
+              </button>
+              <button
+                type="button"
+                className={styles.contentBlockMoveButton}
+                onClick={() => moveResponse(slideNodeId, response.id, arrayIndex + 1)}
+                disabled={isLast}
+                aria-label={`Bajar respuesta ${index}`}
+              >
+                ↓
+              </button>
+            </>
+          )}
+        </div>
         <button
           type="button"
           className={styles.removeResponseButton}
@@ -2056,6 +2096,46 @@ function ResponseRow({
  * respuesta añadida: el flujo natural es "añades una, el botón para la
  * siguiente aparece justo debajo". Desaparece al llegar a `MAX_RESPONSES`.
  */
+/**
+ * Interruptor "Ordenar"/"Random" (petición de usuario) junto al título
+ * "Respuestas": dos posiciones excluyentes, mismo criterio de paleta
+ * cerrada que `RESPONSE_ORDERS` (`src/domain/schemas.ts`). "Ordenar" es el
+ * valor por defecto (`null` al guardarlo — vuelve a `undefined` en el
+ * documento, mismo patrón "por defecto = no escribir nada" que el resto de
+ * opciones puramente visuales de la app), así que solo se guarda un valor
+ * explícito al elegir "Random".
+ */
+function ResponseOrderToggle({
+  slideNodeId,
+  responseOrder,
+}: {
+  slideNodeId: string
+  responseOrder: ResponseOrder
+}) {
+  const updateNode = useProjectStore((state) => state.updateNode)
+  const labels: Record<ResponseOrder, string> = { ordered: 'Ordenar', random: 'Random' }
+
+  return (
+    <div className={styles.responseOrderToggle} role="group" aria-label="Orden de las respuestas">
+      {RESPONSE_ORDERS.map((order) => (
+        <button
+          key={order}
+          type="button"
+          className={
+            responseOrder === order ? styles.responseOrderButtonActive : styles.responseOrderButton
+          }
+          aria-pressed={responseOrder === order}
+          onClick={() =>
+            updateNode(slideNodeId, { responseOrder: order === 'ordered' ? null : order })
+          }
+        >
+          {labels[order]}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 function ResponsesSection({
   node,
   allNodes,
@@ -2069,11 +2149,27 @@ function ResponsesSection({
 }) {
   const addResponse = useProjectStore((state) => state.addResponse)
   const canAddResponse = node.responses.length < MAX_RESPONSES
-  const responses = sortByLetter(node.responses)
+  // Petición de usuario ("Ordenar"/"Random"): ya NO se ordena por letra —
+  // se pinta el propio orden del array `node.responses` (el mismo que
+  // `moveResponse` reordena a mano), que además es justo lo que el Player
+  // presenta cuando `responseOrder` es `'ordered'`/ausente (ver
+  // `orderResponses` en `src/player/runtime.ts`).
+  const responses = node.responses
+  const responseOrder: ResponseOrder = node.responseOrder ?? 'ordered'
+  const canReorder = responseOrder === 'ordered' && responses.length > 1
+  const lastIndex = responses.length - 1
 
   return (
     <div className={styles.responsesSection}>
-      <h3 className={styles.responsesTitle}>Respuestas</h3>
+      <div className={styles.responsesHeader}>
+        <h3 className={styles.responsesTitle}>Respuestas</h3>
+        {/* Interruptor "Ordenar"/"Random" (petición de usuario): solo con
+            más de una respuesta — con 0 o 1 no hay nada que ordenar ni
+            barajar. */}
+        {responses.length > 1 && (
+          <ResponseOrderToggle slideNodeId={node.id} responseOrder={responseOrder} />
+        )}
+      </div>
       <div className={styles.responsesList}>
         {responses.map((response, index) => (
           <ResponseRow
@@ -2081,9 +2177,13 @@ function ResponsesSection({
             slideNodeId={node.id}
             response={response}
             index={index + 1}
+            arrayIndex={index}
             allNodes={allNodes}
             filePath={filePath}
             variables={variables}
+            canReorder={canReorder}
+            isFirst={index === 0}
+            isLast={index === lastIndex}
           />
         ))}
         {canAddResponse && (
@@ -2348,25 +2448,25 @@ function FinalAlternateSection({ node, variables }: { node: FinalNode; variables
   const bodyLabelId = 'inspector-final-alternate-body-label'
   const celebrateFieldId = `inspector-final-celebrate-${node.id}`
 
-  // Petición de usuario ("Final Perfecto... con confeti"): independiente de
-  // si hay variables/variante alternativa configurada — celebra el
-  // contenido POR DEFECTO de este Final (nunca el alternativo, ver
-  // `PlayerView.celebrate` en `src/player/runtime.ts`), así que tiene
-  // sentido incluso sin ninguna variante (un Final "siempre celebra").
-  // Vive DENTRO de esta sección (no junto al editor de "Contenido" de
-  // arriba) porque temáticamente es parte de "los dos desenlaces posibles"
-  // que gestiona esta sección, aunque el campo que controla en sí sea del
-  // contenido por defecto.
+  // Petición de usuario ("Final Perfecto... con confeti", ampliada después:
+  // "el confeti lo quiero si llegas al final sin fallos y con fallos, en
+  // los dos"): independiente de si hay variables/variante alternativa
+  // configurada — celebra CUALQUIER contenido de este Final, el por
+  // defecto y el alternativo (ver `PlayerView.celebrate` en
+  // `src/player/runtime.ts`), así que tiene sentido incluso sin ninguna
+  // variante (un Final "siempre celebra"). Vive DENTRO de esta sección (no
+  // junto al editor de "Contenido" de arriba) porque temáticamente es
+  // parte de "los dos desenlaces posibles" que gestiona esta sección.
   const celebrateCheckbox = (
     <div className={styles.actsAsExitField}>
       <label htmlFor={celebrateFieldId}>
         <input
           id={celebrateFieldId}
           type="checkbox"
-          checked={node.celebrateDefault ?? false}
-          onChange={(event) => updateNode(node.id, { celebrateDefault: event.target.checked })}
+          checked={node.celebrate ?? false}
+          onChange={(event) => updateNode(node.id, { celebrate: event.target.checked })}
         />
-        Mostrar confeti con el contenido principal (nunca con el alternativo)
+        Mostrar confeti al llegar a este Final (con o sin la condición alternativa)
       </label>
     </div>
   )

@@ -12,7 +12,6 @@ import {
   INTRO_SUBTITLE_ACCENT,
   INTRO_SUBTITLE_PREFIX,
   INTRO_SUBTITLE_SUFFIX,
-  RESPONSE_LETTERS,
 } from '../domain'
 import type {
   ContentBlock,
@@ -32,14 +31,6 @@ import { RichTextView } from '../editor/richText/RichTextView'
 import ilernaLogoUrl from '../assets/playerIntro/ilerna-logo.png'
 import styles from './PlayerScreen.module.css'
 
-/** Mismo criterio de orden que `Inspector`: por letra (A→B→C→D) fijo,
- *  independiente del orden interno de creación/borrado del array. La letra
- *  solo ordena: nunca se muestra al usuario. */
-function sortByLetter(responses: DecisionResponse[]): DecisionResponse[] {
-  return [...responses].sort(
-    (a, b) => RESPONSE_LETTERS.indexOf(a.letter) - RESPONSE_LETTERS.indexOf(b.letter),
-  )
-}
 
 /** Clase de tamaño de `.media` para una imagen (petición de usuario: "un
  *  desplegable... Pequeño/Normal/Grande") — `undefined`/`'normal'` usa el
@@ -809,7 +800,7 @@ export function PlayerScreen({ filePath }: PlayerScreenProps) {
               onExpandImage={setLightboxImage}
             />
             <div className={styles.options}>
-              {sortByLetter(view.visibleResponses).map((response, index) => (
+              {view.visibleResponses.map((response, index) => (
                 <ResponseOption
                   key={response.id}
                   response={response}
@@ -834,11 +825,13 @@ export function PlayerScreen({ filePath }: PlayerScreenProps) {
 
         {view.kind === 'final' && (
           <div key={view.node.id} className={styles.card}>
-            {/* Confeti (milestone "+1 fallo con Game Over"): SOLO sobre el
-                contenido por defecto de un Final con `celebrateDefault`
-                (ver `view.celebrate` en `./runtime`) — nunca sobre el
-                alternativo. Montado dentro de la tarjeta pero pintado a
-                pantalla completa (`.confetti` es `position: fixed`, ver
+            {/* Confeti (milestone "+1 fallo con Game Over", petición de
+                usuario ampliada después: "si llegas al final sin fallos y
+                con fallos, en los dos"): sobre CUALQUIER contenido de un
+                Final con `node.celebrate` (ver `view.celebrate` en
+                `./runtime`), el por defecto y el alternativo. Montado
+                dentro de la tarjeta pero pintado a pantalla completa
+                (`.confetti` es `position: fixed`, ver
                 `PlayerScreen.module.css`), así que su posición en el árbol
                 es irrelevante. */}
             {view.celebrate && <Confetti />}

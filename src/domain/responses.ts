@@ -158,6 +158,48 @@ export function updateResponse(
   })
 }
 
+function clampIndex(index: number, max: number): number {
+  return Math.min(Math.max(index, 0), max)
+}
+
+/**
+ * Reordena una respuesta dentro de `responses` (petición de usuario:
+ * botones "Subir"/"Bajar" junto a cada respuesta, visibles solo con
+ * `responseOrder: 'ordered'` — ver `ResponseRow` en `Inspector.tsx`). Mismo
+ * mecanismo que `moveContentBlock` (`src/domain/content.ts`): saca la
+ * respuesta de `fromIndex` y la reinserta en `toIndex`, recortado a un
+ * índice válido si se pasa de los límites del array (así el llamador puede
+ * pasar sin más `index - 1`/`index + 1` sin comprobar los bordes él mismo).
+ *
+ * Puramente de PRESENTACIÓN: no toca `letter` (sigue siendo el
+ * identificador estable de cada respuesta) ni ningún otro campo — ver el
+ * comentario de `SlideNodeSchema.responseOrder` en `schemas.ts` para el
+ * porqué de separar "posición" de "letra".
+ */
+export function moveResponse(
+  project: ProjectDocument,
+  slideNodeId: string,
+  responseId: string,
+  toIndex: number,
+): ProjectDocument {
+  const node = findSlideNode(project, slideNodeId)
+  const fromIndex = node.responses.findIndex((response) => response.id === responseId)
+  if (fromIndex === -1) {
+    throw new Error(`La diapositiva "${slideNodeId}" no tiene una respuesta con id "${responseId}".`)
+  }
+  const clampedTarget = clampIndex(toIndex, node.responses.length - 1)
+
+  return produce(project, (draft) => {
+    const draftNode = draft.graph.nodes.find((candidate) => candidate.id === slideNodeId)
+    if (!draftNode || draftNode.type !== 'slide') return
+    const [moved] = draftNode.responses.splice(fromIndex, 1)
+    if (moved) {
+      draftNode.responses.splice(clampedTarget, 0, moved)
+    }
+    draft.metadata.updatedAt = new Date().toISOString()
+  })
+}
+
 /**
  * Elimina una respuesta de una diapositiva. Las respuestas restantes
  * conservan su id/letra/orden relativo — no se reindexan letras. Si era la

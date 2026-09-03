@@ -333,6 +333,38 @@ describe('updateNode — color (paleta cerrada de color de una diapositiva)', ()
   })
 })
 
+describe('updateNode — responseOrder (petición de usuario: interruptor "Ordenar"/"Random")', () => {
+  it('fija "random" y lo borra con null (vuelve a "ordered" implícito)', () => {
+    let project = createProject('P')
+    const startId = project.graph.startNodeId
+
+    project = updateNode(project, startId, { responseOrder: 'random' })
+    let node = project.graph.nodes.find((n) => n.id === startId)
+    expect(node?.type === 'slide' ? node.responseOrder : undefined).toBe('random')
+
+    // `undefined` no toca el campo.
+    project = updateNode(project, startId, { title: 'X' })
+    node = project.graph.nodes.find((n) => n.id === startId)
+    expect(node?.type === 'slide' ? node.responseOrder : undefined).toBe('random')
+
+    // `null` lo borra (vuelve a "ordered" implícito, sin guardar nada).
+    project = updateNode(project, startId, { responseOrder: null })
+    node = project.graph.nodes.find((n) => n.id === startId)
+    expect(node?.type === 'slide' ? node.responseOrder : 'missing').toBeUndefined()
+  })
+
+  it('lanza error al fijar responseOrder en un nodo final o en el nodo intro', () => {
+    let project = createNode(createProject('P'), 'final', { x: 0, y: 0 })
+    const finalId = otherNodeIdOf(project, 'final')
+    expect(() => updateNode(project, finalId, { responseOrder: 'random' })).toThrow()
+
+    project = createNode(createProject('P'), 'intro', { x: 0, y: 0 })
+    const introId = project.graph.nodes.find((n) => n.type === 'intro')?.id
+    if (!introId) throw new Error('No se creó el nodo intro')
+    expect(() => updateNode(project, introId, { responseOrder: 'random' })).toThrow()
+  })
+})
+
 describe('updateNode — variant (tres variantes de Final: general/bueno/malo)', () => {
   it('un Final nuevo nace con variant "general"', () => {
     const project = createNode(createProject('P'), 'final', { x: 0, y: 0 })
@@ -604,13 +636,24 @@ describe('duplicateNode', () => {
     expect(copy.canvasBadge).toBe('plus-one-fallo')
   })
 
-  it('corrección de revisión de código (milestone "+1 fallo con Game Over"): la copia de un Final SÍ conserva alternateCondition/alternateBody/celebrateDefault', () => {
+  it('petición de usuario ("Ordenar"/"Random"): la copia conserva responseOrder de la diapositiva original', () => {
+    let project = createProject('P')
+    const startId = project.graph.startNodeId
+    project = updateNode(project, startId, { responseOrder: 'random' })
+
+    const { project: updated, nodeId } = duplicateNode(project, startId, { x: 40, y: 40 })
+    const copy = updated.graph.nodes.find((n) => n.id === nodeId) as SlideNode
+
+    expect(copy.responseOrder).toBe('random')
+  })
+
+  it('corrección de revisión de código (milestone "+1 fallo con Game Over"): la copia de un Final SÍ conserva alternateCondition/alternateBody/celebrate', () => {
     let project = createNode(createProject('P'), 'final', { x: 0, y: 0 }, { body: 'Perfecto' })
     const finalId = otherNodeIdOf(project, 'final')
     project = updateNode(project, finalId, {
       alternateCondition: { variableId: 'v1', operator: '>', value: 0 },
       alternateBody: 'Con fallos',
-      celebrateDefault: true,
+      celebrate: true,
     })
 
     const { project: updated, nodeId } = duplicateNode(project, finalId, { x: 50, y: 50 })
@@ -620,7 +663,7 @@ describe('duplicateNode', () => {
     if (copy?.type !== 'final') throw new Error('esperaba un nodo final')
     expect(copy.alternateCondition).toEqual({ variableId: 'v1', operator: '>', value: 0 })
     expect(copy.alternateBody).toBe('Con fallos')
-    expect(copy.celebrateDefault).toBe(true)
+    expect(copy.celebrate).toBe(true)
   })
 })
 

@@ -839,6 +839,35 @@ describe('PlayerScreen: imágenes ampliables + tamaño (petición de usuario)', 
   })
 })
 
+describe('PlayerScreen: orden de las respuestas (petición de usuario: interruptor "Ordenar"/"Random")', () => {
+  it('sin responseOrder ("ordenar" implícito), las respuestas se pintan en el orden del ARRAY, no el de la letra', () => {
+    const startId = startNodeId()
+    const responseAId = addResponseTo(startId)
+    const responseBId = addResponseTo(startId)
+    act(() => {
+      useProjectStore.getState().updateResponse(startId, responseAId, { text: 'Opción A' })
+      useProjectStore.getState().updateResponse(startId, responseBId, { text: 'Opción B' })
+      useProjectStore.getState().createNode('final', { x: 200, y: 0 })
+    })
+    const finalId = otherNodeIdOf('final')
+    act(() => {
+      useProjectStore.getState().connect(startId, finalId, responseAId)
+      useProjectStore.getState().connect(startId, finalId, responseBId)
+      // Invierte el orden del array (B antes que A) sin tocar letras/ids —
+      // exactamente lo que el botón "Bajar"/"Subir" del Inspector deja
+      // hacer.
+      useProjectStore.getState().moveResponse(startId, responseBId, 0)
+    })
+
+    const { container } = renderPlayer()
+
+    const optionEls = [...container.querySelectorAll(`.${styles.option}`)]
+    expect(optionEls).toHaveLength(2)
+    expect(optionEls[0]?.textContent).toContain('Opción B')
+    expect(optionEls[1]?.textContent).toContain('Opción A')
+  })
+})
+
 describe('PlayerScreen: puntuación acumulada', () => {
   function buildGraphWithPoints() {
     const startId = startNodeId()
@@ -1035,15 +1064,15 @@ describe('PlayerScreen: milestone "+1 fallo con Game Over"', () => {
     })
   })
 
-  describe('confeti del Final "Perfecto" (petición de usuario: "con confeti")', () => {
+  describe('confeti del Final "Perfecto" (petición de usuario: "con confeti", ampliada después: "si llegas al final sin fallos y con fallos, en los dos")', () => {
     function confettiPieceCount(): number {
       return document.querySelectorAll(`.${styles.confettiPiece}`).length
     }
 
-    it('celebrateDefault + contenido por defecto -> confeti visible', () => {
+    it('celebrate + contenido por defecto -> confeti visible', () => {
       const { finalId } = buildGraphInStore()
       act(() => {
-        useProjectStore.getState().updateNode(finalId, { celebrateDefault: true })
+        useProjectStore.getState().updateNode(finalId, { celebrate: true })
       })
 
       renderPlayer()
@@ -1054,7 +1083,7 @@ describe('PlayerScreen: milestone "+1 fallo con Game Over"', () => {
       expect(confettiPieceCount()).toBeGreaterThan(0)
     })
 
-    it('celebrateDefault + contenido ALTERNATIVO (condición cumplida) -> sin confeti', () => {
+    it('petición de usuario ("en los dos"): celebrate + contenido ALTERNATIVO (condición cumplida) -> confeti TAMBIÉN visible', () => {
       const { startId, finalId } = buildGraphInStore()
       act(() => {
         useProjectStore.getState().addVariable({ name: 'Fallos', type: 'number', initialValue: 0 })
@@ -1066,7 +1095,7 @@ describe('PlayerScreen: milestone "+1 fallo con Game Over"', () => {
           visitEffects: [{ variableId: fallosVar.id, operation: 'increment', value: 1 }],
         })
         useProjectStore.getState().updateNode(finalId, {
-          celebrateDefault: true,
+          celebrate: true,
           alternateCondition: { variableId: fallosVar.id, operator: '>=', value: 1 },
           alternateBody: 'Contenido alternativo por fallos.',
         })
@@ -1077,10 +1106,11 @@ describe('PlayerScreen: milestone "+1 fallo con Game Over"', () => {
       fireEvent.click(screen.getByText('Camino A'))
 
       expect(screen.getByText('Contenido alternativo por fallos.')).toBeInTheDocument()
-      expect(document.querySelector(`.${styles.confetti}`)).not.toBeInTheDocument()
+      expect(document.querySelector(`.${styles.confetti}`)).toBeInTheDocument()
+      expect(confettiPieceCount()).toBeGreaterThan(0)
     })
 
-    it('sin celebrateDefault, nunca hay confeti aunque se muestre el contenido por defecto', () => {
+    it('sin celebrate, nunca hay confeti, ni con el contenido por defecto ni con el alternativo', () => {
       buildGraphInStore()
 
       renderPlayer()

@@ -48,14 +48,16 @@ import type { NodePosition, ProjectDocument } from './schemas'
  *    propósito (el diseñador lo cablea donde termine su propia narrativa):
  *    - Contenido por defecto ("Perfecto", cuando Fallos = 0): "¡Impresionante!"
  *      + "Lo has resuelto en un momento." + "¿Quieres explorar otros
- *      caminos?", con `celebrateDefault: true` (confeti, ver
- *      `PlayerView.celebrate` en `src/player/runtime.ts`).
+ *      caminos?".
  *    - Contenido alternativo ("con fallos", cuando Fallos > 0):
  *      "¡Buen trabajo!" + "Has conseguido resolver el caso, aunque has
  *      tenido algunos contratiempos." + "¿Qué decisiones cambiarías?", vía
  *      `alternateCondition`/`alternateBody` (milestone "+1 fallo con Game
- *      Over", `FinalNodeSchema`) — sin confeti, nunca se celebra el
- *      contenido alternativo.
+ *      Over", `FinalNodeSchema`).
+ *    - `celebrate: true` (petición de usuario: "el confeti lo quiero si
+ *      llegas al final sin fallos y con fallos, en los dos" — ver
+ *      `PlayerView.celebrate` en `src/player/runtime.ts`): confeti sobre
+ *      AMBOS contenidos, el por defecto y el alternativo.
  *    - Los botones "Reintentar"/"Salir" de esta pantalla son los genéricos
  *      de cualquier Final (`PlayerScreen.tsx`/`exportedPlayerScript.ts`),
  *      no algo que fije este pack.
@@ -241,8 +243,8 @@ export function addGameOverPack(project: ProjectDocument, position: NodePosition
   // comentario de esta función). Nace con `body`/`variant` vacíos por
   // defecto (`createNode`); el `updateNode` de después fija TODO su
   // contenido de una vez — `body` (por defecto), `alternateCondition`/
-  // `alternateBody` (Fallos > 0) y `celebrateDefault` (confeti solo sobre
-  // el contenido por defecto).
+  // `alternateBody` (Fallos > 0) y `celebrate` (confeti sobre los dos
+  // contenidos, petición de usuario).
   const finalPosition = { x: position.x, y: position.y + 240 }
   const beforeFinal = next
   next = createNode(next, 'final', finalPosition)
@@ -264,7 +266,7 @@ export function addGameOverPack(project: ProjectDocument, position: NodePosition
       'Has conseguido resolver el caso, aunque has tenido algunos contratiempos.',
       '¿Qué decisiones cambiarías?',
     ),
-    celebrateDefault: true,
+    celebrate: true,
   })
 
   return next

@@ -106,12 +106,13 @@ export type PlayerView =
       resolvedBody: string
       /**
        * Milestone "+1 fallo con Game Over", petición de usuario ("Final
-       * Perfecto con confeti"): `true` cuando debe celebrarse con confeti
-       * esta vista — `node.celebrateDefault` Y el contenido mostrado es el
-       * de por defecto (`resolvedBody === node.body`, nunca cuando se está
-       * mostrando `alternateBody`). Calculado aquí (no en quien pinta la
-       * vista) para que `PlayerScreen.tsx`/`exportedPlayerScript.ts` no
-       * dupliquen la lógica de "qué contenido se resolvió de verdad".
+       * Perfecto con confeti", ampliada después: "el confeti lo quiero si
+       * llegas al final sin fallos y con fallos, en los dos"): `true`
+       * cuando debe celebrarse con confeti esta vista — directamente
+       * `node.celebrate`, sea cual sea el contenido resuelto (por defecto
+       * o alternativo). Se sigue calculando aquí (no en quien pinta la
+       * vista) por consistencia con el resto de este tipo, aunque ya no
+       * dependa de `usedAlternate`.
        */
       celebrate: boolean
     }
@@ -149,6 +150,21 @@ export interface PlayerState {
    * `applyVariableEffects` (`src/domain/variables.ts`).
    */
   variables: VariableState
+  /**
+   * Petición de usuario (interruptor "Ordenar"/"Random" del Inspector, ver
+   * `SlideNodeSchema.responseOrder`): orden barajado de los `id` de
+   * `node.responses` del nodo ACTUAL, sembrado UNA VEZ al entrar en él
+   * (mismo criterio "al entrar" que `applyVisitEffects`, ver más abajo) —
+   * nunca recalculado en cada render de `getView`, que se llama en cada
+   * pintado sin que eso deba barajar de nuevo. `null` cuando el nodo actual
+   * no es una diapositiva con `responseOrder: 'random'` y más de una
+   * respuesta (no hay nada que barajar), o mientras no haya ninguna
+   * respuesta que ofrecer. Solo lo lee `getView` (`orderResponses`, más
+   * abajo); el resto del runtime lo trata como parte opaca del estado, se
+   * copia sin más de una transición a la siguiente cuando el nodo no
+   * cambia.
+   */
+  shuffledResponseIds: string[] | null
 }
 
 /** Estado inicial de `variables`: un valor por cada `VariableDef` del
@@ -191,26 +207,78 @@ function applyVisitEffects(
   return applyVariableEffects(variables, node.visitEffects)
 }
 
+/** Fisher-Yates in-place sobre una COPIA de `ids` — nunca muta el array que
+ *  recibe. Usada únicamente por `computeShuffledResponseIds`, más abajo. */
+function shuffleIds(ids: string[]): string[] {
+  const shuffled = [...ids]
+  for (let i = shuffled.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1))
+    const swap = shuffled[i] as string
+    shuffled[i] = shuffled[j] as string
+    shuffled[j] = swap
+  }
+  return shuffled
+}
+
+/**
+ * Petición de usuario ("Random"): calcula el `shuffledResponseIds` que debe
+ * sembrar `PlayerState` al ENTRAR en `nodeId` — mismos tres puntos de
+ * llamada que `applyVisitEffects` (`getInitialState`/`advance`/`choose`),
+ * por el mismo motivo: da igual el camino por el que se llega, el barajado
+ * debe repetirse en cada visita nueva. `null` si `nodeId` no es una
+ * diapositiva, no tiene `responseOrder: 'random'`, o tiene 0-1 respuestas
+ * (nada que barajar) — ver comentario de `PlayerState.shuffledResponseIds`.
+ */
+function computeShuffledResponseIds(
+  project: ProjectDocument,
+  nodeId: string | null,
+): string[] | null {
+  if (!nodeId) return null
+  const node = findNode(project, nodeId)
+  if (!node || node.type !== 'slide' || node.responseOrder !== 'random' || node.responses.length <= 1) {
+    return null
+  }
+  return shuffleIds(node.responses.map((response) => response.id))
+}
+
+/**
+ * Ordena `responses` (ya filtradas por `condition`, ver `getView`) para
+ * presentación: si `shuffledResponseIds` está sembrado (`responseOrder:
+ * 'random'`), por su posición ahí dentro; si no (`'ordered'`/ausente, el
+ * caso por defecto), TAL CUAL vienen — el propio orden del array
+ * `node.responses`, que es justo lo que `moveResponse`
+ * (`src/domain/responses.ts`) deja reordenar a mano. Ya NO se ordena por
+ * `letter`: desde esta petición de usuario, la letra es solo el
+ * identificador estable de una respuesta, no su posición visual (ver
+ * comentario de `SlideNodeSchema.responseOrder`).
+ */
+function orderResponses(
+  responses: DecisionResponse[],
+  shuffledResponseIds: string[] | null,
+): DecisionResponse[] {
+  if (!shuffledResponseIds) return responses
+  const position = new Map(shuffledResponseIds.map((id, index) => [id, index]))
+  return [...responses].sort((a, b) => (position.get(a.id) ?? 0) - (position.get(b.id) ?? 0))
+}
+
 /**
  * Milestone "+1 fallo con Game Over": resuelve qué `body` debe pintarse
  * para un nodo `final` (ver el comentario de `PlayerView`, rama `'final'`,
- * campo `resolvedBody`), Y si el contenido resuelto es el de por defecto
- * (`usedAlternate: false`) o el alternativo (`true`) — esto último alimenta
- * `celebrate` (confeti solo sobre el contenido por defecto, nunca sobre el
- * alternativo).
+ * campo `resolvedBody`). Ya NO distingue si resolvió al contenido por
+ * defecto o al alternativo en su valor de retorno (`usedAlternate`,
+ * quitado): con la petición de usuario de celebrar en los dos casos,
+ * `celebrate` es directamente `node.celebrate`, sin necesitar saber cuál de
+ * los dos se está mostrando.
  */
-function resolveFinalContent(
-  node: FinalNode,
-  variables: VariableState,
-): { body: string; usedAlternate: boolean } {
+function resolveFinalContent(node: FinalNode, variables: VariableState): { body: string } {
   if (
     node.alternateCondition &&
     node.alternateBody?.trim() &&
     evaluateCondition(variables, node.alternateCondition)
   ) {
-    return { body: node.alternateBody, usedAlternate: true }
+    return { body: node.alternateBody }
   }
-  return { body: node.body, usedAlternate: false }
+  return { body: node.body }
 }
 
 /**
@@ -244,6 +312,7 @@ export function getInitialState(project: ProjectDocument, startNodeId?: string):
     currentNodeId: startId,
     totalPoints: null,
     variables: applyVisitEffects(project, initialVariableState(project), startId),
+    shuffledResponseIds: computeShuffledResponseIds(project, startId),
   }
 }
 
@@ -285,12 +354,12 @@ export function getView(project: ProjectDocument, state: PlayerState): PlayerVie
   }
 
   if (node.type === 'final') {
-    const { body, usedAlternate } = resolveFinalContent(node, state.variables)
+    const { body } = resolveFinalContent(node, state.variables)
     return {
       kind: 'final',
       node,
       resolvedBody: body,
-      celebrate: node.celebrateDefault === true && !usedAlternate,
+      celebrate: node.celebrate === true,
     }
   }
 
@@ -301,9 +370,10 @@ export function getView(project: ProjectDocument, state: PlayerState): PlayerVie
     // ofrecer quien pinte la vista (`visibleResponses`). Si el filtrado deja
     // la lista vacía, o ninguna visible tiene destino, es un dead-end —
     // mismo mecanismo que ya existía para "ninguna respuesta con destino".
-    const visibleResponses = node.responses.filter(
+    const filteredResponses = node.responses.filter(
       (response) => !response.condition || evaluateCondition(state.variables, response.condition),
     )
+    const visibleResponses = orderResponses(filteredResponses, state.shuffledResponseIds)
     // Milestone "+1 fallo con Game Over": una respuesta `actsAsExit` cuenta
     // igual que una con `targetNodeId` a la hora de decidir si esto es una
     // decisión "ofrecible" — no navega a ningún nodo, pero SÍ es una opción
@@ -343,6 +413,7 @@ export function advance(project: ProjectDocument, state: PlayerState): PlayerSta
       ...state,
       currentNodeId: node.targetNodeId,
       variables: applyVisitEffects(project, state.variables, node.targetNodeId),
+      shuffledResponseIds: computeShuffledResponseIds(project, node.targetNodeId),
     }
   }
 
@@ -354,6 +425,7 @@ export function advance(project: ProjectDocument, state: PlayerState): PlayerSta
     ...state,
     currentNodeId: target,
     variables: applyVisitEffects(project, state.variables, target),
+    shuffledResponseIds: computeShuffledResponseIds(project, target),
   }
 }
 
@@ -394,5 +466,10 @@ export function choose(
     response.points === undefined ? state.totalPoints : (state.totalPoints ?? 0) + response.points
   const afterResponseEffects = applyVariableEffects(state.variables, response.effects ?? [])
   const variables = applyVisitEffects(project, afterResponseEffects, response.targetNodeId)
-  return { currentNodeId: response.targetNodeId, totalPoints, variables }
+  return {
+    currentNodeId: response.targetNodeId,
+    totalPoints,
+    variables,
+    shuffledResponseIds: computeShuffledResponseIds(project, response.targetNodeId),
+  }
 }

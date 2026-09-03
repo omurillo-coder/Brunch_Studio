@@ -503,89 +503,156 @@ describe('RichTextEditor: corrector ortotipográfico nativo (fase 8; petición d
   })
 })
 
-describe('RichTextEditor: justificación de texto (petición de usuario)', () => {
-  const ALIGN_BUTTONS = [
-    { name: 'Alinear texto a la izquierda', align: 'left' },
-    { name: 'Centrar texto', align: 'center' },
-    { name: 'Alinear texto a la derecha', align: 'right' },
-    { name: 'Justificar texto', align: 'justify' },
+describe('RichTextEditor: justificación de texto (petición de usuario: desplegable con icono)', () => {
+  const ALIGN_OPTIONS = [
+    { label: 'Izquierda', align: 'left' },
+    { label: 'Centro', align: 'center' },
+    { label: 'Derecha', align: 'right' },
+    { label: 'Justificado', align: 'justify' },
   ] as const
 
-  it('las 4 alineaciones existen en la barra, ninguna activa por defecto (párrafo sin alineación explícita)', async () => {
-    render(<RichTextEditor body="Hola" onCommit={vi.fn()} />)
+  function openAlignMenu() {
+    const trigger = screen.getByRole('button', { name: 'Justificación de texto' })
+    fireEvent.mouseDown(trigger)
+    fireEvent.click(trigger)
+  }
 
+  function chooseAlignOption(label: string) {
+    const option = screen.getByRole('menuitem', { name: label })
+    fireEvent.mouseDown(option)
+    fireEvent.click(option)
+  }
+
+  it('el botón que abre el menú existe, cerrado por defecto (sin los 4 botones sueltos de antes)', async () => {
+    render(<RichTextEditor body="Hola" onCommit={vi.fn()} />)
     await waitFor(() => {
       expect(screen.getByText('Hola')).toBeInTheDocument()
     })
 
-    for (const { name } of ALIGN_BUTTONS) {
-      expect(screen.getByRole('button', { name })).toHaveAttribute('aria-pressed', 'false')
+    const trigger = screen.getByRole('button', { name: 'Justificación de texto' })
+    expect(trigger).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByRole('menu', { name: 'Justificación de texto' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Alinear texto a la izquierda' })).not.toBeInTheDocument()
+  })
+
+  it('al abrirlo, muestra las 4 opciones; "Izquierda" activa por defecto (el aspecto visual de un párrafo sin alineación explícita), el resto no', async () => {
+    render(<RichTextEditor body="Hola" onCommit={vi.fn()} />)
+    await waitFor(() => {
+      expect(screen.getByText('Hola')).toBeInTheDocument()
+    })
+
+    openAlignMenu()
+    expect(screen.getByRole('button', { name: 'Justificación de texto' })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    )
+    expect(screen.getByRole('menuitem', { name: 'Izquierda' })).toHaveAttribute('aria-pressed', 'true')
+    for (const { label } of ALIGN_OPTIONS) {
+      if (label === 'Izquierda') continue
+      expect(screen.getByRole('menuitem', { name: label })).toHaveAttribute('aria-pressed', 'false')
     }
   })
 
-  it.each(ALIGN_BUTTONS)(
-    'pulsar "$name" aplica esa alineación al párrafo y marca el botón como activo',
-    async ({ name, align }) => {
+  it.each(ALIGN_OPTIONS)(
+    'elegir "$label" aplica esa alineación al párrafo y cierra el menú',
+    async ({ label, align }) => {
       render(<RichTextEditor body="Hola" onCommit={vi.fn()} />)
       await waitFor(() => {
         expect(screen.getByText('Hola')).toBeInTheDocument()
       })
 
-      const button = screen.getByRole('button', { name })
-      fireEvent.mouseDown(button)
-      fireEvent.click(button)
+      openAlignMenu()
+      chooseAlignOption(label)
 
       await waitFor(() => {
-        expect(button).toHaveAttribute('aria-pressed', 'true')
+        expect(screen.queryByRole('menu', { name: 'Justificación de texto' })).not.toBeInTheDocument()
       })
       const paragraph = document.querySelector('[contenteditable="true"] p') as HTMLElement
       expect(paragraph.style.textAlign).toBe(align)
     },
   )
 
-  it('pulsar dos veces la misma alineación la quita (vuelve al valor por defecto, sin guardar nada)', async () => {
+  // Nota: `paragraph` se consulta FRESCO en cada `waitFor` (nunca cacheado
+  // en una variable reutilizada entre pasos) — ProseMirror puede
+  // reemplazar el nodo `<p>` del DOM al aplicar un atributo, así que una
+  // referencia capturada antes de un cambio queda "colgada" (detached),
+  // apuntando al nodo antiguo en vez del real.
+  function currentParagraph(): HTMLElement {
+    return document.querySelector('[contenteditable="true"] p') as HTMLElement
+  }
+
+  it('elegir dos veces la misma alineación la quita (vuelve al valor por defecto, sin guardar nada)', async () => {
     render(<RichTextEditor body="Hola" onCommit={vi.fn()} />)
     await waitFor(() => {
       expect(screen.getByText('Hola')).toBeInTheDocument()
     })
 
-    const centerButton = screen.getByRole('button', { name: 'Centrar texto' })
-    fireEvent.mouseDown(centerButton)
-    fireEvent.click(centerButton)
+    openAlignMenu()
+    chooseAlignOption('Centro')
     await waitFor(() => {
-      expect(centerButton).toHaveAttribute('aria-pressed', 'true')
+      expect(currentParagraph().style.textAlign).toBe('center')
     })
 
-    fireEvent.mouseDown(centerButton)
-    fireEvent.click(centerButton)
+    openAlignMenu()
+    expect(screen.getByRole('menuitem', { name: 'Centro' })).toHaveAttribute('aria-pressed', 'true')
+    chooseAlignOption('Centro')
     await waitFor(() => {
-      expect(centerButton).toHaveAttribute('aria-pressed', 'false')
+      expect(currentParagraph().style.textAlign).toBe('')
     })
+  })
+
+  it('cambiar de alineación desactiva la anterior (son mutuamente excluyentes) y el icono del botón la refleja', async () => {
+    render(<RichTextEditor body="Hola" onCommit={vi.fn()} />)
+    await waitFor(() => {
+      expect(screen.getByText('Hola')).toBeInTheDocument()
+    })
+
+    openAlignMenu()
+    chooseAlignOption('Izquierda')
+    await waitFor(() => {
+      expect(currentParagraph().style.textAlign).toBe('left')
+    })
+
+    openAlignMenu()
+    expect(screen.getByRole('menuitem', { name: 'Izquierda' })).toHaveAttribute('aria-pressed', 'true')
+    chooseAlignOption('Derecha')
+
+    await waitFor(() => {
+      expect(currentParagraph().style.textAlign).toBe('right')
+    })
+    openAlignMenu()
+    expect(screen.getByRole('menuitem', { name: 'Derecha' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('menuitem', { name: 'Izquierda' })).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it('se cierra al pulsar Escape, sin aplicar ningún cambio', async () => {
+    render(<RichTextEditor body="Hola" onCommit={vi.fn()} />)
+    await waitFor(() => {
+      expect(screen.getByText('Hola')).toBeInTheDocument()
+    })
+
+    openAlignMenu()
+    expect(screen.getByRole('menu', { name: 'Justificación de texto' })).toBeInTheDocument()
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+
+    expect(screen.queryByRole('menu', { name: 'Justificación de texto' })).not.toBeInTheDocument()
     const paragraph = document.querySelector('[contenteditable="true"] p') as HTMLElement
     expect(paragraph.style.textAlign).toBe('')
   })
 
-  it('cambiar de alineación desactiva la anterior (son mutuamente excluyentes)', async () => {
+  it('se cierra al hacer clic fuera', async () => {
     render(<RichTextEditor body="Hola" onCommit={vi.fn()} />)
     await waitFor(() => {
       expect(screen.getByText('Hola')).toBeInTheDocument()
     })
 
-    const leftButton = screen.getByRole('button', { name: 'Alinear texto a la izquierda' })
-    const rightButton = screen.getByRole('button', { name: 'Alinear texto a la derecha' })
+    openAlignMenu()
+    expect(screen.getByRole('menu', { name: 'Justificación de texto' })).toBeInTheDocument()
 
-    fireEvent.mouseDown(leftButton)
-    fireEvent.click(leftButton)
-    await waitFor(() => {
-      expect(leftButton).toHaveAttribute('aria-pressed', 'true')
-    })
+    fireEvent.mouseDown(document.body)
 
-    fireEvent.mouseDown(rightButton)
-    fireEvent.click(rightButton)
-    await waitFor(() => {
-      expect(rightButton).toHaveAttribute('aria-pressed', 'true')
-    })
-    expect(leftButton).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.queryByRole('menu', { name: 'Justificación de texto' })).not.toBeInTheDocument()
   })
 })
 

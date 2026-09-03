@@ -10,6 +10,7 @@ import type {
   NodePosition,
   NodeType,
   ProjectDocument,
+  ResponseOrder,
   SlideColor,
   SlideNode,
   VariableCondition,
@@ -123,16 +124,20 @@ export interface UpdateNodePatch {
   alternateCondition?: VariableCondition | null
   alternateBody?: string | null
   /** Solo en `final` (milestone "+1 fallo con Game Over", ver
-   *  `FinalNodeSchema.celebrateDefault`). No admite `null` (a diferencia de
+   *  `FinalNodeSchema.celebrate`). No admite `null` (a diferencia de
    *  `alternateCondition`/`alternateBody`): siempre es un booleano
    *  definido, mismo criterio que `caseName` de un `intro`. */
-  celebrateDefault?: boolean
+  celebrate?: boolean
   /** Solo en `slide` (milestone "+1 fallo con Game Over", ver
    *  `SlideNodeSchema.canvasBadge`). En la práctica, solo `addGameOverPack`
    *  (`src/domain/nodePacks.ts`) fija este campo — no hay ningún control de
    *  Inspector que lo edite. Mismo criterio de patch que `color`:
    *  `undefined` no toca, `null` borra (vuelve a "sin insignia"). */
   canvasBadge?: CanvasBadge | null
+  /** Solo en `slide` (petición de usuario, ver `SlideNodeSchema.responseOrder`).
+   *  Mismo criterio de patch que `color`: `undefined` no toca, `null` borra
+   *  (vuelve a `'ordered'` implícito). */
+  responseOrder?: ResponseOrder | null
 }
 
 /**
@@ -469,10 +474,11 @@ export function updateNode(
     patch.elseTargetNodeId !== undefined ||
     patch.color !== undefined ||
     patch.visitEffects !== undefined ||
-    patch.canvasBadge !== undefined
+    patch.canvasBadge !== undefined ||
+    patch.responseOrder !== undefined
   if (setsSlideOnlyField && node && node.type !== 'slide') {
     throw new Error(
-      `El nodo "${nodeId}" es de tipo "${node.type}" y no admite texto de continuar, enrutado condicional, color, efecto al visitar ni insignia de lienzo.`,
+      `El nodo "${nodeId}" es de tipo "${node.type}" y no admite texto de continuar, enrutado condicional, color, efecto al visitar, insignia de lienzo ni orden de respuestas.`,
     )
   }
   if (patch.body !== undefined && node && node.type !== 'final') {
@@ -488,7 +494,7 @@ export function updateNode(
   const setsFinalAlternateField =
     patch.alternateCondition !== undefined ||
     patch.alternateBody !== undefined ||
-    patch.celebrateDefault !== undefined
+    patch.celebrate !== undefined
   if (setsFinalAlternateField && node && node.type !== 'final') {
     throw new Error(
       `El nodo "${nodeId}" es de tipo "${node.type}" y no admite variante alternativa ni confeti de Final.`,
@@ -519,7 +525,7 @@ export function updateNode(
       if (patch.alternateBody !== undefined) {
         draftNode.alternateBody = patch.alternateBody === null ? undefined : patch.alternateBody
       }
-      if (patch.celebrateDefault !== undefined) draftNode.celebrateDefault = patch.celebrateDefault
+      if (patch.celebrate !== undefined) draftNode.celebrate = patch.celebrate
     }
     if (draftNode.type === 'slide') {
       if (patch.continueLabel !== undefined) {
@@ -540,6 +546,9 @@ export function updateNode(
       }
       if (patch.canvasBadge !== undefined) {
         draftNode.canvasBadge = patch.canvasBadge === null ? undefined : patch.canvasBadge
+      }
+      if (patch.responseOrder !== undefined) {
+        draftNode.responseOrder = patch.responseOrder === null ? undefined : patch.responseOrder
       }
     }
     if (draftNode.type === 'intro') {
@@ -727,6 +736,10 @@ export function duplicateNode(
         // su insignia como el propio efecto de sumar Fallos al visitarla.
         visitEffects: source.visitEffects,
         canvasBadge: source.canvasBadge,
+        // Petición de usuario ("Ordenar"/"Random"): mismo criterio que
+        // `color` de arriba — comportamiento de la diapositiva, no una
+        // conexión saliente que deba limpiarse.
+        responseOrder: source.responseOrder,
       }
       duplicate = node
       break
@@ -735,7 +748,7 @@ export function duplicateNode(
       // `variant` es contenido (categoría del Final), se copia tal cual —
       // mismo criterio que `color` en una `slide`, ver comentario más arriba.
       // Corrección (revisión de código, milestone "+1 fallo con Game Over"):
-      // `alternateCondition`/`alternateBody`/`celebrateDefault` son también
+      // `alternateCondition`/`alternateBody`/`celebrate` son también
       // contenido del Final (la variante "con fallos" y el confeti) —
       // faltaban aquí, así que duplicar un Final con variante alternativa
       // perdía esa variante y el confeti en silencio.
@@ -746,7 +759,7 @@ export function duplicateNode(
         variant: source.variant,
         alternateCondition: source.alternateCondition,
         alternateBody: source.alternateBody,
-        celebrateDefault: source.celebrateDefault,
+        celebrate: source.celebrate,
       }
       duplicate = node
       break

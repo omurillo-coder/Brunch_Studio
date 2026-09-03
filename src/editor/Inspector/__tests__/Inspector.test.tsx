@@ -627,6 +627,94 @@ describe('Inspector — respuestas de una diapositiva', () => {
   })
 })
 
+describe('Inspector — orden de las respuestas (petición de usuario: interruptor "Ordenar"/"Random" + botones Subir/Bajar)', () => {
+  it('con 0 o 1 respuesta no aparece el interruptor', () => {
+    const decisionId = createSlideWithTwoResponses()
+    act(() => {
+      useProjectStore.getState().removeResponse(decisionId, slideNode(decisionId).responses[1]!.id)
+      useProjectStore.getState().selectNode(decisionId)
+    })
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    expect(screen.queryByRole('group', { name: 'Orden de las respuestas' })).not.toBeInTheDocument()
+  })
+
+  it('con más de una respuesta, el interruptor aparece con "Ordenar" activo por defecto', () => {
+    const decisionId = createSlideWithTwoResponses()
+    act(() => {
+      useProjectStore.getState().selectNode(decisionId)
+    })
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    expect(screen.getByRole('group', { name: 'Orden de las respuestas' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Ordenar' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Random' })).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it('pulsar "Random" fija responseOrder; pulsar "Ordenar" lo borra (vuelve al valor por defecto)', () => {
+    const decisionId = createSlideWithTwoResponses()
+    act(() => {
+      useProjectStore.getState().selectNode(decisionId)
+    })
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Random' }))
+    expect(slideNode(decisionId).responseOrder).toBe('random')
+    expect(screen.getByRole('button', { name: 'Random' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Ordenar' })).toHaveAttribute('aria-pressed', 'false')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ordenar' }))
+    expect(slideNode(decisionId).responseOrder).toBeUndefined()
+  })
+
+  it('con "Ordenar" (por defecto), cada respuesta tiene botones Subir/Bajar; el primero no puede subir ni el último bajar', () => {
+    const decisionId = createSlideWithTwoResponses()
+    act(() => {
+      useProjectStore.getState().addResponse(decisionId) // C
+      useProjectStore.getState().selectNode(decisionId)
+    })
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    expect(screen.getByRole('button', { name: 'Subir respuesta 1' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Bajar respuesta 1' })).not.toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Subir respuesta 2' })).not.toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Bajar respuesta 2' })).not.toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Subir respuesta 3' })).not.toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Bajar respuesta 3' })).toBeDisabled()
+  })
+
+  it('pulsar "Bajar" en la primera respuesta la mueve a la posición 2, sin tocar id/letra', () => {
+    const decisionId = createSlideWithTwoResponses()
+    act(() => {
+      useProjectStore.getState().selectNode(decisionId)
+    })
+    const [responseA, responseB] = slideNode(decisionId).responses
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Bajar respuesta 1' }))
+
+    const responses = slideNode(decisionId).responses
+    expect(responses.map((r) => r.id)).toEqual([responseB!.id, responseA!.id])
+    expect(responses.map((r) => r.letter).sort()).toEqual(['A', 'B'])
+    // Las filas del Inspector reflejan el nuevo orden: el texto de la
+    // "respuesta 1" ahora es el de B, no el de A.
+    expect(screen.getByLabelText('Texto de la respuesta 1')).toBeInTheDocument()
+  })
+
+  it('con "Random", NO aparecen los botones Subir/Bajar', () => {
+    const decisionId = createSlideWithTwoResponses()
+    act(() => {
+      useProjectStore.getState().selectNode(decisionId)
+    })
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Random' }))
+
+    expect(screen.queryByRole('button', { name: 'Subir respuesta 1' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Bajar respuesta 1' })).not.toBeInTheDocument()
+  })
+})
+
 describe('Inspector — editor de bloques de contenido de una diapositiva (milestone "Bloques de contenido", fase 2)', () => {
   function setupAssetRepository() {
     const assetRepository = new MemoryAssetRepository()
@@ -1792,14 +1880,15 @@ describe('Inspector — variante alternativa de un Final (milestone "+1 fallo co
       screen.queryByRole('button', { name: '+ Añadir variante alternativa' }),
     ).not.toBeInTheDocument()
     // Petición de usuario ("Final Perfecto... con confeti"): la casilla de
-    // confeti SÍ sigue disponible aunque no haya variables — celebra el
-    // contenido por defecto, no depende de tener una variante alternativa.
+    // confeti SÍ sigue disponible aunque no haya variables — celebra
+    // cualquier contenido de este Final, no depende de tener una variante
+    // alternativa.
     expect(
-      screen.getByRole('checkbox', { name: /Mostrar confeti con el contenido principal/ }),
+      screen.getByRole('checkbox', { name: /Mostrar confeti al llegar a este Final/ }),
     ).toBeInTheDocument()
   })
 
-  it('petición de usuario ("Final Perfecto... con confeti"): la casilla de confeti fija/limpia `celebrateDefault`', () => {
+  it('petición de usuario ("el confeti lo quiero... en los dos"): la casilla de confeti fija/limpia `celebrate`', () => {
     act(() => {
       useProjectStore.getState().createNode('final', { x: 0, y: 0 })
     })
@@ -1811,7 +1900,7 @@ describe('Inspector — variante alternativa de un Final (milestone "+1 fallo co
     render(<Inspector filePath={TEST_FILE_PATH} />)
 
     const checkbox = screen.getByRole('checkbox', {
-      name: /Mostrar confeti con el contenido principal/,
+      name: /Mostrar confeti al llegar a este Final/,
     })
     expect(checkbox).not.toBeChecked()
 
@@ -1820,7 +1909,7 @@ describe('Inspector — variante alternativa de un Final (milestone "+1 fallo co
       useProjectStore
         .getState()
         .project.graph.nodes.find((n) => n.id === finalId && n.type === 'final'),
-    ).toMatchObject({ celebrateDefault: true })
+    ).toMatchObject({ celebrate: true })
     expect(checkbox).toBeChecked()
 
     fireEvent.click(checkbox)
@@ -1828,7 +1917,7 @@ describe('Inspector — variante alternativa de un Final (milestone "+1 fallo co
       useProjectStore
         .getState()
         .project.graph.nodes.find((n) => n.id === finalId && n.type === 'final'),
-    ).toMatchObject({ celebrateDefault: false })
+    ).toMatchObject({ celebrate: false })
   })
 
   it('"+ Añadir variante alternativa" fija una condición por defecto y muestra el editor de contenido alternativo', () => {

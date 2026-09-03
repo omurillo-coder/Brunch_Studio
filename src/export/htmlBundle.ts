@@ -10,7 +10,6 @@ import {
   INTRO_SUBTITLE_ACCENT,
   INTRO_SUBTITLE_PREFIX,
   INTRO_SUBTITLE_SUFFIX,
-  RESPONSE_LETTERS,
 } from '../domain'
 import type { ProjectDocument } from '../domain'
 import { RICH_TEXT_EXTENSIONS, parseRichBody } from '../editor/richText/richTextContent'
@@ -138,9 +137,6 @@ interface ExportBundle {
   bodyHtml: Record<string, string>
   /** `assetId` -> `data:` URI completo, listo para un `src`. */
   assetUris: Record<string, string>
-  /** Orden fijo de letras con el que se ordenan las respuestas (la letra
-   *  nunca se muestra; ver `RESPONSE_LETTERS` en el dominio). */
-  responseLetters: string[]
   texts: ExportedTexts
   /**
    * Nombres legibles de `cicloId`/`asignaturaId` del nodo `intro` (portada),
@@ -382,7 +378,6 @@ export function buildHtmlBundle(
     project: stripEditorOnlyFields(project),
     bodyHtml: renderNodeBodies(project),
     assetUris: buildAssetUris(assets),
-    responseLetters: [...RESPONSE_LETTERS],
     texts: EXPORTED_TEXTS,
     introBrand: introBrandAssets ?? null,
     introCicloName: introNames.cicloName,

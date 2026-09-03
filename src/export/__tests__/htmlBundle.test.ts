@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { buildHtmlBundle } from '../htmlBundle'
 import { BUNDLE_ELEMENT_ID } from '../exportedPlayerScript'
 import type { ExportAssetMap } from '../exportAssets'
@@ -805,6 +805,58 @@ describe('buildHtmlBundle — bloques de contenido de una diapositiva (milestone
   })
 })
 
+describe('buildHtmlBundle — orden de las respuestas (petición de usuario: interruptor "Ordenar"/"Random")', () => {
+  beforeEach(() => {
+    document.body.innerHTML = ''
+  })
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('sin responseOrder ("ordenar" implícito), las respuestas se pintan en el orden del ARRAY, no el de la letra', () => {
+    const project = sampleProject()
+    const decision = project.graph.nodes.find((node) => node.id === DECISION_ID)
+    if (!decision || decision.type !== 'slide') throw new Error('setup inválido')
+    // Invierte el array (B antes que A) sin tocar letras/ids — exactamente
+    // lo que el botón "Bajar"/"Subir" del Inspector deja hacer.
+    decision.responses = [...decision.responses].reverse()
+
+    runExportedBundle(buildHtmlBundle(project, sampleAssets))
+    clickButton('Empezar el caso')
+
+    const optionTexts = [...currentCard().querySelectorAll('.option')].map((el) => el.textContent)
+    expect(optionTexts[0]).toContain('No hacer nada')
+    expect(optionTexts[1]).toContain('Avisar al responsable')
+  })
+
+  it('con responseOrder: "random", cada carga fresca del HTML vuelve a barajar (Math.random controlado)', () => {
+    const project = sampleProject()
+    const decision = project.graph.nodes.find((node) => node.id === DECISION_ID)
+    if (!decision || decision.type !== 'slide') throw new Error('setup inválido')
+    decision.responseOrder = 'random'
+    const html = buildHtmlBundle(project, sampleAssets)
+
+    // Mismo criterio que `runtime.test.ts`: con 2 respuestas, Fisher-Yates
+    // hace un único sorteo — fijar el valor de `Math.random()` hace el
+    // barajado 100% predecible, sin ninguna aserción probabilística/flaky.
+    const randomSpy = vi.spyOn(Math, 'random')
+
+    randomSpy.mockReturnValue(0.9)
+    runExportedBundle(html)
+    clickButton('Empezar el caso')
+    const firstOrder = [...currentCard().querySelectorAll('.option')].map((el) => el.textContent)
+
+    document.body.innerHTML = ''
+    randomSpy.mockReturnValue(0.1)
+    runExportedBundle(html)
+    clickButton('Empezar el caso')
+    const secondOrder = [...currentCard().querySelectorAll('.option')].map((el) => el.textContent)
+
+    expect(firstOrder[0]).toContain('Avisar al responsable')
+    expect(secondOrder[0]).toContain('No hacer nada')
+  })
+})
+
 describe('buildHtmlBundle — imágenes ampliables + tamaño (petición de usuario)', () => {
   beforeEach(() => {
     document.body.innerHTML = ''
@@ -1596,13 +1648,13 @@ describe('buildHtmlBundle — milestone "+1 fallo con Game Over"', () => {
     expect(currentCard().querySelector('img')).toBeNull()
   })
 
-  describe('confeti del Final "Perfecto" (petición de usuario: "con confeti")', () => {
-    it('celebrateDefault + contenido por defecto -> confeti presente en el HTML exportado', () => {
+  describe('confeti del Final "Perfecto" (petición de usuario: "con confeti", ampliada después: "si llegas al final sin fallos y con fallos, en los dos")', () => {
+    it('celebrate + contenido por defecto -> confeti presente en el HTML exportado', () => {
       const project = gameOverFeaturesProject()
       project.graph.startNodeId = VISIT_DECISION_ID
       const final = project.graph.nodes.find((node) => node.id === VISIT_FINAL_ID)
       if (!final || final.type !== 'final') throw new Error('setup inválido')
-      final.celebrateDefault = true
+      final.celebrate = true
       // Sin visitar "Inicio" (que suma +5 a Fallos): la condición del
       // alternativo (>= 5) es falsa, se resuelve al contenido por defecto.
       runExportedBundle(buildHtmlBundle(project, {}))
@@ -1615,11 +1667,11 @@ describe('buildHtmlBundle — milestone "+1 fallo con Game Over"', () => {
       expect(confetti?.querySelectorAll('.confettiPiece').length).toBeGreaterThan(0)
     })
 
-    it('celebrateDefault + contenido ALTERNATIVO -> sin confeti', () => {
+    it('petición de usuario ("en los dos"): celebrate + contenido ALTERNATIVO -> confeti TAMBIÉN presente', () => {
       const project = gameOverFeaturesProject()
       const final = project.graph.nodes.find((node) => node.id === VISIT_FINAL_ID)
       if (!final || final.type !== 'final') throw new Error('setup inválido')
-      final.celebrateDefault = true
+      final.celebrate = true
       // Arranca en "Inicio" (+5 a Fallos): la condición del alternativo
       // (>= 5) se cumple, se resuelve al contenido ALTERNATIVO.
       runExportedBundle(buildHtmlBundle(project, {}))
@@ -1628,10 +1680,12 @@ describe('buildHtmlBundle — milestone "+1 fallo con Game Over"', () => {
       clickButton('Seguir')
 
       expect(currentCard().textContent).toContain('Final alternativo por fallos')
-      expect(currentCard().querySelector('.confetti')).toBeNull()
+      const confetti = currentCard().querySelector('.confetti')
+      expect(confetti).not.toBeNull()
+      expect(confetti?.querySelectorAll('.confettiPiece').length).toBeGreaterThan(0)
     })
 
-    it('sin celebrateDefault, nunca hay confeti aunque se muestre el contenido por defecto', () => {
+    it('sin celebrate, nunca hay confeti, ni con el contenido por defecto ni con el alternativo', () => {
       const project = gameOverFeaturesProject()
       project.graph.startNodeId = VISIT_DECISION_ID
       runExportedBundle(buildHtmlBundle(project, {}))

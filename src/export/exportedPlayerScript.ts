@@ -99,7 +99,6 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
   var project = bundle.project;
   var bodyHtml = bundle.bodyHtml || {};
   var assetUris = bundle.assetUris || {};
-  var letters = bundle.responseLetters || [];
   var texts = bundle.texts || {};
   // Nombres de ciclo/asignatura de la portada (nodo \`intro\`), ya resueltos
   // contra el catálogo EN TIEMPO DE EXPORTACIÓN (ver
@@ -351,6 +350,74 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
     return applyVariableEffects(variables, node.visitEffects);
   }
 
+  /** Traducción literal de \`shuffleIds\` (\`src/player/runtime.ts\`,
+   *  petición de usuario: interruptor "Ordenar"/"Random"): Fisher-Yates
+   *  sobre una copia de \`ids\`, nunca muta el array que recibe. */
+  function shuffleIds(ids) {
+    var shuffled = ids.slice();
+    for (var i = shuffled.length - 1; i > 0; i -= 1) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var swap = shuffled[i];
+      shuffled[i] = shuffled[j];
+      shuffled[j] = swap;
+    }
+    return shuffled;
+  }
+
+  /** Traducción literal de \`computeShuffledResponseIds\` (\`src/player/runtime.ts\`):
+   *  calcula el orden barajado que debe sembrar el estado al ENTRAR en
+   *  \`nodeId\` — mismos tres puntos de llamada que \`applyVisitEffects\`
+   *  (\`getInitialState\`/\`advance\`/\`choose\`, más abajo), por el mismo
+   *  motivo: da igual el camino por el que se llega, el barajado debe
+   *  repetirse en cada visita nueva. \`null\` si \`nodeId\` no es una
+   *  diapositiva, no tiene \`responseOrder: 'random'\`, o tiene 0-1
+   *  respuestas (nada que barajar). */
+  function computeShuffledResponseIds(nodeId) {
+    if (!nodeId) {
+      return null;
+    }
+    var node = findNode(nodeId);
+    if (
+      !node ||
+      node.type !== 'slide' ||
+      node.responseOrder !== 'random' ||
+      !node.responses ||
+      node.responses.length <= 1
+    ) {
+      return null;
+    }
+    var ids = [];
+    for (var i = 0; i < node.responses.length; i += 1) {
+      ids.push(node.responses[i].id);
+    }
+    return shuffleIds(ids);
+  }
+
+  /** Traducción literal de \`orderResponses\` (\`src/player/runtime.ts\`):
+   *  ordena \`responses\` (ya filtradas por \`condition\`) para presentación —
+   *  por su posición en \`shuffledResponseIds\` si está sembrado
+   *  (\`responseOrder: 'random'\`), o tal cual vienen (el propio orden del
+   *  array \`node.responses\`, el que \`moveResponse\`/\`ResponseRow\` de
+   *  \`Inspector.tsx\` deja reordenar a mano) si no — ya NO se ordena por
+   *  \`letter\`, ver el comentario de \`SlideNodeSchema.responseOrder\` en
+   *  \`src/domain/schemas.ts\`. */
+  function orderResponses(responses, shuffledResponseIds) {
+    if (!shuffledResponseIds) {
+      return responses;
+    }
+    var position = {};
+    for (var i = 0; i < shuffledResponseIds.length; i += 1) {
+      position[shuffledResponseIds[i]] = i;
+    }
+    var ordered = responses.slice();
+    ordered.sort(function (a, b) {
+      var posA = position.hasOwnProperty(a.id) ? position[a.id] : 0;
+      var posB = position.hasOwnProperty(b.id) ? position[b.id] : 0;
+      return posA - posB;
+    });
+    return ordered;
+  }
+
   /** Equivalente de \`resolveFinalBody\` (\`src/player/runtime.ts\`, milestone
    *  "+1 fallo con Game Over") adaptado a este runtime: a diferencia de la
    *  app (Tiptap disponible en tiempo de recorrido), aquí el HTML de CADA
@@ -362,11 +429,13 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
    *  cambiar el otro). Esta función decide solo QUÉ CLAVE/texto plano usar,
    *  nunca genera HTML — eso ya está hecho. \`rawBody\` viaja además del id
    *  porque \`appendBody\` lo necesita para decidir "vacío = nada" (mismo
-   *  criterio que con \`node.body\` de siempre). \`usedAlternate\` (milestone
-   *  "+1 fallo con Game Over", petición de usuario: confeti en el Final
-   *  "Perfecto") alimenta el confeti — \`true\` solo cuando se resolvió al
-   *  contenido alternativo, para que quien pinta la vista pueda decidir
-   *  "\`celebrateDefault\` Y no es el alternativo" sin recalcular nada. */
+   *  criterio que con \`node.body\` de siempre). Ya NO distingue si resolvió
+   *  al contenido por defecto o al alternativo en su valor de retorno
+   *  (\`usedAlternate\`, quitado): con la petición de usuario de celebrar en
+   *  los dos casos ("si llegas al final sin fallos y con fallos, en los
+   *  dos"), el confeti es directamente \`node.celebrate\`, sin necesitar
+   *  saber cuál de los dos se está mostrando — ver el punto de llamada más
+   *  abajo, en \`render()\`. */
   function resolveFinalContent(node, variables) {
     if (
       node.alternateCondition &&
@@ -374,9 +443,9 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
       trimmed(node.alternateBody) &&
       evaluateCondition(variables, node.alternateCondition)
     ) {
-      return { bodyId: node.id + ':alternate', rawBody: node.alternateBody, usedAlternate: true };
+      return { bodyId: node.id + ':alternate', rawBody: node.alternateBody };
     }
-    return { bodyId: node.id, rawBody: node.body, usedAlternate: false };
+    return { bodyId: node.id, rawBody: node.body };
   }
 
   /** Traducción literal de \`Confetti\` (\`src/player/PlayerScreen.tsx\`,
@@ -450,6 +519,7 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
       currentNodeId: startId,
       totalPoints: null,
       variables: applyVisitEffects(variables, startId),
+      shuffledResponseIds: computeShuffledResponseIds(startId),
     };
   }
 
@@ -510,7 +580,8 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
 
     var responses = node.responses || [];
     if (responses.length > 0) {
-      var visibleResponses = visibleResponsesOf(responses, state.variables);
+      var filteredResponses = visibleResponsesOf(responses, state.variables);
+      var visibleResponses = orderResponses(filteredResponses, state.shuffledResponseIds);
       return hasAnyTarget(visibleResponses)
         ? { kind: 'decision', node: node, visibleResponses: visibleResponses }
         : { kind: 'dead-end', node: node };
@@ -542,6 +613,7 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
         currentNodeId: node.targetNodeId,
         totalPoints: state.totalPoints,
         variables: applyVisitEffects(state.variables, node.targetNodeId),
+        shuffledResponseIds: computeShuffledResponseIds(node.targetNodeId),
       };
     }
     if (node.type !== 'slide') {
@@ -559,6 +631,7 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
       currentNodeId: target,
       totalPoints: state.totalPoints,
       variables: applyVisitEffects(state.variables, target),
+      shuffledResponseIds: computeShuffledResponseIds(target),
     };
   }
 
@@ -592,20 +665,17 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
         : (state.totalPoints === null ? 0 : state.totalPoints) + response.points;
     var afterResponseEffects = applyVariableEffects(state.variables, response.effects || []);
     var variables = applyVisitEffects(afterResponseEffects, response.targetNodeId);
-    return { currentNodeId: response.targetNodeId, totalPoints: totalPoints, variables: variables };
+    return {
+      currentNodeId: response.targetNodeId,
+      totalPoints: totalPoints,
+      variables: variables,
+      shuffledResponseIds: computeShuffledResponseIds(response.targetNodeId),
+    };
   }
 
   // -------------------------------------------------------------------------
   // Pintado (equivalente a src/player/PlayerScreen.tsx)
   // -------------------------------------------------------------------------
-
-  /** Mismo criterio de orden que el Player: por letra (A→B→C→D) fijo. La
-   *  letra solo ordena, nunca se muestra. */
-  function sortByLetter(responses) {
-    return responses.slice().sort(function (a, b) {
-      return letters.indexOf(a.letter) - letters.indexOf(b.letter);
-    });
-  }
 
   function el(tag, className) {
     var node = document.createElement(tag);
@@ -1053,13 +1123,16 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
 
     if (view.kind === 'decision') {
       // Mismo criterio que en 'continue': el título del nodo no se pinta.
-      // Las opciones vienen de \`view.visibleResponses\` (ya filtradas por
-      // \`condition\` en \`getView\`), nunca de \`view.node.responses\` a pelo.
+      // Las opciones vienen de \`view.visibleResponses\` — ya filtradas por
+      // \`condition\` Y ordenadas para presentación (\`orderResponses\`) en
+      // \`getView\`, nunca de \`view.node.responses\` a pelo ni reordenadas
+      // aquí (petición de usuario "Ordenar"/"Random": ya no se ordena por
+      // letra, ver el comentario de \`orderResponses\` más arriba).
       appendContent(card, view.node, null);
       var options = el('div', 'options');
-      var sorted = sortByLetter(view.visibleResponses || []);
-      for (var i = 0; i < sorted.length; i += 1) {
-        options.appendChild(buildOption(sorted[i], i + 1, card));
+      var visibleResponses = view.visibleResponses || [];
+      for (var i = 0; i < visibleResponses.length; i += 1) {
+        options.appendChild(buildOption(visibleResponses[i], i + 1, card));
       }
       card.appendChild(options);
       return card;
@@ -1068,15 +1141,12 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
     if (view.kind === 'final') {
       scormReportCompletion(state.totalPoints);
       var finalContent = resolveFinalContent(view.node, state.variables);
-      // Confeti (milestone "+1 fallo con Game Over"): traducción literal de
-      // \`view.celebrate\` en \`src/player/runtime.ts\`/\`PlayerScreen.tsx\` —
-      // SOLO cuando \`celebrateDefault\` está fijado Y se está mostrando el
-      // contenido POR DEFECTO (nunca el alternativo). Insertado como
-      // PRIMER hijo de la tarjeta (\`insertBefore\`, mismo criterio que
-      // \`.introIllustration\`/\`.reviewSlideLabel\`) — \`.confetti\` es
-      // \`position: fixed\`, así que su posición en el DOM es irrelevante
-      // visualmente, pero mantiene el resto del contenido en orden.
-      if (view.node.celebrateDefault === true && !finalContent.usedAlternate) {
+      // Confeti (milestone "+1 fallo con Game Over", petición de usuario
+      // ampliada después: "si llegas al final sin fallos y con fallos, en
+      // los dos"): traducción literal de \`view.celebrate\` en
+      // \`src/player/runtime.ts\`/\`PlayerScreen.tsx\` — sobre CUALQUIER
+      // contenido de este Final, el por defecto y el alternativo.
+      if (view.node.celebrate === true) {
         card.appendChild(buildConfetti());
       }
       var heading = el('h1', 'title');

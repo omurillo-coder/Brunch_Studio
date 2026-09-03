@@ -1,10 +1,11 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   addResponse,
   addVariable,
   connect,
   createNode,
   createProject,
+  moveResponse,
   updateNode,
   updateResponse,
   updateVariable,
@@ -218,6 +219,7 @@ describe('runtime del Player', () => {
       currentNodeId: decisionId,
       totalPoints: null,
       variables: {},
+      shuffledResponseIds: null,
     })
   })
 
@@ -902,7 +904,7 @@ describe('runtime del Player: variante alternativa de un Final ("Final Ok"/"Fina
     const { project, finalId } = buildFinalWithAlternate(counter)
     const merged = { ...project, variables: base.variables }
 
-    const state = { currentNodeId: finalId, totalPoints: null, variables: { [counter.id]: 5 } }
+    const state = { currentNodeId: finalId, totalPoints: null, variables: { [counter.id]: 5 }, shuffledResponseIds: null }
     const view = getView(merged, state)
     expect(view.kind).toBe('final')
     if (view.kind === 'final') {
@@ -915,7 +917,7 @@ describe('runtime del Player: variante alternativa de un Final ("Final Ok"/"Fina
     const { project, finalId } = buildFinalWithAlternate(counter)
     const merged = { ...project, variables: base.variables }
 
-    const state = { currentNodeId: finalId, totalPoints: null, variables: { [counter.id]: 0 } }
+    const state = { currentNodeId: finalId, totalPoints: null, variables: { [counter.id]: 0 }, shuffledResponseIds: null }
     const view = getView(merged, state)
     expect(view.kind).toBe('final')
     if (view.kind === 'final') {
@@ -932,7 +934,7 @@ describe('runtime del Player: variante alternativa de un Final ("Final Ok"/"Fina
       // alternateBody NO se fija: queda undefined.
     })
 
-    const state = { currentNodeId: finalId, totalPoints: null, variables: { [counter.id]: 5 } }
+    const state = { currentNodeId: finalId, totalPoints: null, variables: { [counter.id]: 5 }, shuffledResponseIds: null }
     const view = getView(project, state)
     expect(view.kind).toBe('final')
     if (view.kind === 'final') {
@@ -954,14 +956,14 @@ describe('runtime del Player: variante alternativa de un Final ("Final Ok"/"Fina
     }
   })
 
-  describe('celebrate (milestone "+1 fallo con Game Over", petición de usuario: "Final Perfecto con confeti")', () => {
-    it('celebrateDefault true + contenido por defecto (condición falsa) -> celebrate: true', () => {
+  describe('celebrate (milestone "+1 fallo con Game Over", petición de usuario: "Final Perfecto con confeti", ampliada después: "si llegas al final sin fallos y con fallos, en los dos")', () => {
+    it('celebrate true + contenido por defecto (condición falsa) -> celebrate: true', () => {
       const { project: base, counter } = withTwoVariables()
       let { project, finalId } = buildFinalWithAlternate(counter)
-      project = updateNode(project, finalId, { celebrateDefault: true })
+      project = updateNode(project, finalId, { celebrate: true })
       const merged = { ...project, variables: base.variables }
 
-      const state = { currentNodeId: finalId, totalPoints: null, variables: { [counter.id]: 0 } }
+      const state = { currentNodeId: finalId, totalPoints: null, variables: { [counter.id]: 0 }, shuffledResponseIds: null }
       const view = getView(merged, state)
       expect(view.kind).toBe('final')
       if (view.kind === 'final') {
@@ -970,22 +972,22 @@ describe('runtime del Player: variante alternativa de un Final ("Final Ok"/"Fina
       }
     })
 
-    it('celebrateDefault true + contenido ALTERNATIVO (condición verdadera) -> celebrate: false (nunca sobre el alternativo)', () => {
+    it('petición de usuario ("en los dos"): celebrate true + contenido ALTERNATIVO (condición verdadera) -> celebrate: true TAMBIÉN', () => {
       const { project: base, counter } = withTwoVariables()
       let { project, finalId } = buildFinalWithAlternate(counter)
-      project = updateNode(project, finalId, { celebrateDefault: true })
+      project = updateNode(project, finalId, { celebrate: true })
       const merged = { ...project, variables: base.variables }
 
-      const state = { currentNodeId: finalId, totalPoints: null, variables: { [counter.id]: 5 } }
+      const state = { currentNodeId: finalId, totalPoints: null, variables: { [counter.id]: 5 }, shuffledResponseIds: null }
       const view = getView(merged, state)
       expect(view.kind).toBe('final')
       if (view.kind === 'final') {
         expect(view.resolvedBody).toBe('Cuerpo alternativo')
-        expect(view.celebrate).toBe(false)
+        expect(view.celebrate).toBe(true)
       }
     })
 
-    it('sin celebrateDefault (undefined/false), nunca celebra aunque se muestre el contenido por defecto', () => {
+    it('sin celebrate (undefined/false), nunca celebra aunque se muestre el contenido por defecto', () => {
       let project = createProject('P')
       project = createNode(project, 'final', { x: 200, y: 0 }, { body: 'Cuerpo por defecto' })
       const finalId = project.graph.nodes.find((node) => node.type === 'final')!.id
@@ -998,5 +1000,89 @@ describe('runtime del Player: variante alternativa de un Final ("Final Ok"/"Fina
         expect(view.celebrate).toBe(false)
       }
     })
+  })
+})
+
+describe('runtime del Player: orden de las respuestas (petición de usuario: interruptor "Ordenar"/"Random")', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('sin responseOrder ("ordered" implícito), visibleResponses respeta el orden del ARRAY, no el de la letra', () => {
+    const { project: base, decisionId, responseA, responseB } = buildFullGraph()
+    // Invierte el orden del array (B antes que A) sin tocar letras/ids —
+    // exactamente lo que `moveResponse` deja hacer desde el Inspector.
+    const project = moveResponse(base, decisionId, responseB.id, 0)
+
+    const state = advance(project, getInitialState(project))
+    const view = getView(project, state)
+    expect(view.kind).toBe('decision')
+    if (view.kind === 'decision') {
+      expect(view.visibleResponses.map((r) => r.id)).toEqual([responseB.id, responseA.id])
+    }
+  })
+
+  it('con responseOrder: "random", el orden se siembra UNA VEZ al entrar: estable entre llamadas repetidas de getView con el MISMO estado', () => {
+    const { project: base, decisionId } = buildFullGraph()
+    const project = updateNode(base, decisionId, { responseOrder: 'random' })
+
+    const state = advance(project, getInitialState(project))
+    const first = getView(project, state)
+    const second = getView(project, state)
+    expect(first.kind).toBe('decision')
+    expect(second.kind).toBe('decision')
+    if (first.kind === 'decision' && second.kind === 'decision') {
+      expect(second.visibleResponses.map((r) => r.id)).toEqual(
+        first.visibleResponses.map((r) => r.id),
+      )
+    }
+  })
+
+  it('con responseOrder: "random", cada entrada NUEVA en la diapositiva vuelve a barajar', () => {
+    const { project: base, decisionId, responseA, responseB } = buildFullGraph()
+    const project = updateNode(base, decisionId, { responseOrder: 'random' })
+
+    // Con 2 respuestas, Fisher-Yates hace un único sorteo: `Math.random()`
+    // >= 0.5 dentro del rango efectivo deja el orden intacto; < 0.5 lo
+    // invierte. Fijar el valor devuelto hace el barajado 100% predecible,
+    // sin ninguna aserción probabilística/flaky.
+    const randomSpy = vi.spyOn(Math, 'random')
+
+    randomSpy.mockReturnValueOnce(0.9)
+    const firstVisit = getView(project, advance(project, getInitialState(project)))
+
+    randomSpy.mockReturnValueOnce(0.1)
+    const secondVisit = getView(project, advance(project, restart(project)))
+
+    expect(firstVisit.kind).toBe('decision')
+    expect(secondVisit.kind).toBe('decision')
+    if (firstVisit.kind === 'decision' && secondVisit.kind === 'decision') {
+      expect(firstVisit.visibleResponses.map((r) => r.id)).toEqual([responseA.id, responseB.id])
+      expect(secondVisit.visibleResponses.map((r) => r.id)).toEqual([responseB.id, responseA.id])
+    }
+  })
+
+  it('con 1 única respuesta en la diapositiva, "random" no baraja nada (no hay Math.random de por medio)', () => {
+    let project = createProject('P')
+    project = createNode(project, 'slide', { x: 200, y: 0 }, { title: '¿Qué eliges?' })
+    project = createNode(project, 'final', { x: 300, y: 0 }, { title: 'Final', body: 'Fin' })
+    const startId = project.graph.startNodeId
+    const decisionId = project.graph.nodes.find((n) => n.type === 'slide' && n.id !== startId)!.id
+    const finalId = project.graph.nodes.find((n) => n.type === 'final')!.id
+    project = connect(project, startId, decisionId)
+    project = addResponse(project, decisionId)
+    const responseId = responsesOf(project, decisionId)[0]!.id
+    project = connect(project, decisionId, finalId, responseId)
+    project = updateNode(project, decisionId, { responseOrder: 'random' })
+
+    const randomSpy = vi.spyOn(Math, 'random')
+    const state = advance(project, getInitialState(project))
+    const view = getView(project, state)
+
+    expect(view.kind).toBe('decision')
+    if (view.kind === 'decision') {
+      expect(view.visibleResponses.map((r) => r.id)).toEqual([responseId])
+    }
+    expect(randomSpy).not.toHaveBeenCalled()
   })
 })

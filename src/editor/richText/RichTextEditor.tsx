@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { JSONContent } from '@tiptap/core'
 import { EditorContent, useEditor, useEditorState } from '@tiptap/react'
 import {
@@ -48,6 +48,41 @@ interface TableActionConfig {
   ariaLabel: string
   enabled: boolean
   onAction: () => void
+}
+
+type TextAlignValue = 'left' | 'center' | 'right' | 'justify'
+
+/** Las 4 alineaciones del desplegable de justificación, en el orden en que
+ *  se listan — "Izquierda" primero porque es el valor por defecto. */
+const ALIGN_OPTIONS: { align: TextAlignValue; label: string }[] = [
+  { align: 'left', label: 'Izquierda' },
+  { align: 'center', label: 'Centro' },
+  { align: 'right', label: 'Derecha' },
+  { align: 'justify', label: 'Justificado' },
+]
+
+/**
+ * Icono de justificación (petición de usuario: "un desplegable con un
+ * icono de justificación"): 4 líneas horizontales tipo "párrafo de texto",
+ * de ancho variable salvo en `justify` (las 4 a ancho completo, como un
+ * párrafo justificado de verdad) y posicionadas según `align` — mismo
+ * criterio "SVG inline sin depender de ningún set de iconos externo" que el
+ * resto de iconos propios de la app (ver `SidebarToggleIcon` en
+ * `src/editor/Topbar/Topbar.tsx`). Se reutiliza tanto en el botón que abre
+ * el desplegable (refleja la alineación ACTUAL del párrafo/encabezado en el
+ * cursor) como en cada opción del propio menú (con la alineación fija de
+ * esa opción, para que se reconozca de un vistazo sin leer la etiqueta).
+ */
+function TextAlignIcon({ align }: { align: TextAlignValue }) {
+  const widths = align === 'justify' ? [12, 12, 12, 12] : [12, 8, 12, 6]
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+      {widths.map((width, index) => {
+        const x = align === 'right' ? 14 - width : align === 'center' ? (16 - width) / 2 : 2
+        return <rect key={index} x={x} y={2 + index * 4} width={width} height="1.6" rx="0.8" fill="currentColor" />
+      })}
+    </svg>
+  )
 }
 
 /**
@@ -138,6 +173,33 @@ export function RichTextEditor({ body, onCommit, ariaLabelledBy }: RichTextEdito
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Desplegable de justificación (petición de usuario): abierto/cerrado +
+  // cierre al hacer clic fuera o pulsar Escape — mismo patrón ya
+  // establecido en el menú "Exportar" de `Topbar.tsx`/`ConnectionMenu.tsx`,
+  // sin ninguna librería externa.
+  const [alignMenuOpen, setAlignMenuOpen] = useState(false)
+  const alignMenuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!alignMenuOpen) return
+
+    function handlePointerDown(event: MouseEvent) {
+      if (!alignMenuRef.current) return
+      if (event.target instanceof Node && alignMenuRef.current.contains(event.target)) return
+      setAlignMenuOpen(false)
+    }
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') setAlignMenuOpen(false)
+    }
+
+    document.addEventListener('mousedown', handlePointerDown)
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [alignMenuOpen])
+
   const toolbarState = useEditorState({
     editor,
     selector: (ctx) => {
@@ -222,7 +284,7 @@ export function RichTextEditor({ body, onCommit, ariaLabelledBy }: RichTextEdito
    *  dejarla fija; si no, la fija. Mismo criterio "toggle" que
    *  `toggleBold`/`toggleItalic`/etc. de arriba, que Tiptap no ofrece de
    *  fábrica para `setTextAlign` (siempre fija el valor, nunca alterna). */
-  function toggleAlign(align: 'left' | 'center' | 'right' | 'justify') {
+  function toggleAlign(align: TextAlignValue) {
     if (editor.isActive({ textAlign: align })) {
       editor.chain().focus().unsetTextAlign().run()
     } else {
@@ -266,35 +328,23 @@ export function RichTextEditor({ body, onCommit, ariaLabelledBy }: RichTextEdito
       isActive: toolbarState?.highlight ?? false,
       onToggle: () => editor.chain().focus().toggleHighlight().run(),
     },
-    {
-      key: 'alignLeft',
-      label: 'Izq.',
-      ariaLabel: 'Alinear texto a la izquierda',
-      isActive: toolbarState?.alignLeft ?? false,
-      onToggle: () => toggleAlign('left'),
-    },
-    {
-      key: 'alignCenter',
-      label: 'Centro',
-      ariaLabel: 'Centrar texto',
-      isActive: toolbarState?.alignCenter ?? false,
-      onToggle: () => toggleAlign('center'),
-    },
-    {
-      key: 'alignRight',
-      label: 'Der.',
-      ariaLabel: 'Alinear texto a la derecha',
-      isActive: toolbarState?.alignRight ?? false,
-      onToggle: () => toggleAlign('right'),
-    },
-    {
-      key: 'alignJustify',
-      label: 'Just.',
-      ariaLabel: 'Justificar texto',
-      isActive: toolbarState?.alignJustify ?? false,
-      onToggle: () => toggleAlign('justify'),
-    },
   ]
+
+  // Petición de usuario ("un desplegable con un icono de justificación...
+  // que se despliegue y tengas esas 3 opciones" — cuatro en total contando
+  // "Izquierda", el valor por defecto): alineación ACTUAL del párrafo/
+  // encabezado en el cursor, para el icono del botón que abre el menú.
+  // "Izquierda" es el valor por defecto (ningún atributo `textAlign`
+  // guardado, ver comentario de `TextAlign.configure` en
+  // `richTextContent.ts`), así que se usa como último recurso cuando
+  // ninguna de las otras tres está activa.
+  const currentAlign: TextAlignValue = toolbarState?.alignCenter
+    ? 'center'
+    : toolbarState?.alignRight
+      ? 'right'
+      : toolbarState?.alignJustify
+        ? 'justify'
+        : 'left'
 
   const isInTable = toolbarState?.isInTable ?? false
   const isEmpty = toolbarState?.isEmpty ?? true
@@ -380,6 +430,48 @@ export function RichTextEditor({ body, onCommit, ariaLabelledBy }: RichTextEdito
             {button.label}
           </button>
         ))}
+        {/* Justificación de texto (petición de usuario: "un desplegable con
+            un icono de justificación... que se despliegue y tengas esas
+            [cuatro] opciones"): un único botón con el icono de la
+            alineación ACTUAL, que despliega un menú con las 4 opciones —
+            en vez de 4 botones sueltos como el resto de la barra, mismo
+            criterio de menú flotante que "Exportar" en `Topbar.tsx`. */}
+        <div className={styles.alignMenuWrapper} ref={alignMenuRef}>
+          <button
+            type="button"
+            className={styles.toolbarButton}
+            aria-label="Justificación de texto"
+            aria-haspopup="menu"
+            aria-expanded={alignMenuOpen}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => setAlignMenuOpen((open) => !open)}
+          >
+            <TextAlignIcon align={currentAlign} />
+          </button>
+          {alignMenuOpen && (
+            <div className={styles.alignMenu} role="menu" aria-label="Justificación de texto">
+              {ALIGN_OPTIONS.map((option) => (
+                <button
+                  key={option.align}
+                  type="button"
+                  role="menuitem"
+                  className={
+                    currentAlign === option.align ? styles.alignMenuItemActive : styles.alignMenuItem
+                  }
+                  aria-pressed={currentAlign === option.align}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => {
+                    toggleAlign(option.align)
+                    setAlignMenuOpen(false)
+                  }}
+                >
+                  <TextAlignIcon align={option.align} />
+                  <span>{option.label}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
         {/* Insertar tabla (fase 9): inserta una tabla 3×3 por defecto con
             fila de cabecera, en la posición del cursor. Deshabilitado dentro
             de una tabla existente — anidar tablas no aporta nada aquí y
