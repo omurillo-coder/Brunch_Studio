@@ -261,6 +261,15 @@ const baseNodeFields = {
 // cambio de forma aquí las afecta a ambas.
 
 /**
+ * Tamaños de visualización disponibles para una imagen de un bloque de
+ * contenido (petición de usuario) — mismo criterio de "paleta cerrada con
+ * nombre" que `SLIDE_COLORS`. `'normal'` es el valor por defecto
+ * (`ContentBlockSchema.size` ausente = `'normal'`, ver su comentario).
+ */
+export const IMAGE_SIZES = ['small', 'normal', 'large'] as const
+export const ImageSizeSchema = z.enum(IMAGE_SIZES)
+
+/**
  * Un bloque de contenido de diapositiva. Unión discriminada por `type`:
  * - `text`: un cuerpo de texto Tiptap serializado, MISMO formato que tenía
  *   el antiguo `SlideNode.body` (ver `parseRichBody`/`serializeRichBody` en
@@ -311,6 +320,23 @@ export const ContentBlockSchema = z.discriminatedUnion('type', [
      * sí tolera probarlo así.
      */
     assetId: z.string().uuid().optional(),
+    /**
+     * Petición de usuario: si la imagen es ampliable (clic para verla más
+     * grande, tanto en "Probar" como en la salida exportada — `Lightbox`/
+     * `buildLightbox`). `undefined` = ampliable (comportamiento por
+     * defecto, cambio puramente aditivo); `false` = el diseñador la ha
+     * marcado explícitamente como "no ampliable" desde el botón del
+     * Inspector.
+     */
+    expandable: z.boolean().optional(),
+    /**
+     * Petición de usuario: tamaño de visualización de la imagen (paleta
+     * cerrada, ver `IMAGE_SIZES` más arriba). `undefined` = `'normal'`
+     * (comportamiento de siempre, cambio puramente aditivo: cualquier
+     * imagen ya existente en un documento guardado antes de este campo
+     * sigue viéndose exactamente igual).
+     */
+    size: ImageSizeSchema.optional(),
   }),
   z.object({
     id: z.string().uuid(),
@@ -726,6 +752,7 @@ export type DecisionResponse = z.infer<typeof DecisionResponseSchema>
 export type ContentBlock = z.infer<typeof ContentBlockSchema>
 export type SlideColor = z.infer<typeof SlideColorSchema>
 export type CanvasBadge = z.infer<typeof CanvasBadgeSchema>
+export type ImageSize = z.infer<typeof ImageSizeSchema>
 export type FinalVariant = z.infer<typeof FinalVariantSchema>
 
 export type IntroNode = z.infer<typeof IntroNodeSchema>

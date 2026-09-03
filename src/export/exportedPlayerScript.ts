@@ -615,6 +615,75 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
     }
   }
 
+  /** Clase de tamaño de \`.media\` para una imagen (petición de usuario: "un
+   *  desplegable... Pequeño/Normal/Grande") — traducción literal de
+   *  \`imageSizeClassName\` en \`src/player/PlayerScreen.tsx\`. \`undefined\`/
+   *  \`'normal'\` usa el tamaño de siempre (\`mediaNormal\`, sin cambio visual
+   *  para cualquier imagen ya existente sin \`size\` guardado). */
+  function imageSizeClassName(size) {
+    if (size === 'small') return 'mediaSmall';
+    if (size === 'large') return 'mediaLarge';
+    return 'mediaNormal';
+  }
+
+  var lightboxOverlay = null;
+
+  /** Imagen ampliada a pantalla completa (petición de usuario: "las imágenes
+   *  ampliables en la salida") — traducción literal de \`Lightbox\` en
+   *  \`src/player/PlayerScreen.tsx\`. Vive fuera de \`root\` (igual que
+   *  \`ensureCompletionOverlay\`/\`ensureReviewIndicator\` más abajo): se
+   *  construye una única vez y solo se muestra/oculta, para no perder el
+   *  listener de clic ni reconstruirla en cada \`render\`. */
+  function ensureLightbox() {
+    if (lightboxOverlay) {
+      return lightboxOverlay;
+    }
+    var backdrop = el('div', 'lightboxBackdrop');
+    backdrop.setAttribute('role', 'dialog');
+    backdrop.setAttribute('aria-modal', 'true');
+    backdrop.style.display = 'none';
+    // Cierra al pulsar el fondo; \`stopPropagation\` en la imagen (más abajo)
+    // evita que pulsarla A ELLA cierre el lightbox.
+    backdrop.addEventListener('click', closeLightbox);
+
+    var image = el('img', 'lightboxImage');
+    image.addEventListener('click', function (event) {
+      event.stopPropagation();
+    });
+    backdrop.appendChild(image);
+
+    var closeButton = el('button', 'lightboxClose');
+    closeButton.type = 'button';
+    closeButton.setAttribute('aria-label', 'Cerrar imagen ampliada');
+    closeButton.textContent = '×';
+    closeButton.addEventListener('click', closeLightbox);
+    backdrop.appendChild(closeButton);
+
+    document.body.appendChild(backdrop);
+    lightboxOverlay = { backdrop: backdrop, image: image };
+    return lightboxOverlay;
+  }
+
+  function openLightbox(dataUri, alt) {
+    var lightbox = ensureLightbox();
+    lightbox.image.src = dataUri;
+    lightbox.image.alt = alt;
+    lightbox.backdrop.setAttribute('aria-label', alt);
+    lightbox.backdrop.style.display = 'flex';
+  }
+
+  function closeLightbox() {
+    if (lightboxOverlay) {
+      lightboxOverlay.backdrop.style.display = 'none';
+    }
+  }
+
+  document.addEventListener('keydown', function (event) {
+    if (event.key === 'Escape') {
+      closeLightbox();
+    }
+  });
+
   /** Pinta un único bloque de \`SlideNode.content\` (milestone "Bloques de
    *  contenido"), según su \`type\` — traducción literal de
    *  \`ContentBlockView\` en \`src/player/PlayerScreen.tsx\`: texto (HTML ya
@@ -642,10 +711,26 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
       if (!imageUri) {
         return;
       }
-      var image = el('img', 'media');
+      var image = el('img', 'media ' + imageSizeClassName(block.size));
       image.src = imageUri;
       image.alt = texts.nodeImageAlt;
-      card.appendChild(image);
+      // Petición de usuario ("un botón... para hacer no ampliable la
+      // imagen"): \`block.expandable === false\` (marcado explícito desde el
+      // Inspector) es la ÚNICA forma de desactivarla; \`undefined\` (nunca
+      // tocado) es ampliable por defecto — mismo criterio que
+      // \`ContentBlockView\` en \`src/player/PlayerScreen.tsx\`.
+      if (block.expandable === false) {
+        card.appendChild(image);
+        return;
+      }
+      var expandButton = el('button', 'expandableImage');
+      expandButton.type = 'button';
+      expandButton.setAttribute('aria-label', 'Ampliar imagen: ' + texts.nodeImageAlt);
+      expandButton.addEventListener('click', function () {
+        openLightbox(imageUri, texts.nodeImageAlt);
+      });
+      expandButton.appendChild(image);
+      card.appendChild(expandButton);
       return;
     }
     if (block.type === 'audio') {
@@ -741,45 +826,6 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
    *  en tiempo de exportación. Solo la usa \`buildOption\` (imagen de una
    *  respuesta, modelo sin cambios en este milestone): los bloques de imagen
    *  de \`node.content\` se resuelven directamente en \`appendContentBlock\`. */
-  function resolveImageUris(imageAssetIds) {
-    var ids = imageAssetIds || [];
-    var uris = [];
-    for (var i = 0; i < ids.length; i += 1) {
-      var uri = assetUris[ids[i]];
-      if (uri) {
-        uris.push(uri);
-      }
-    }
-    return uris;
-  }
-
-  /** Pinta, si hay algo que pintar, un bloque con TODAS las imágenes
-   *  (apiladas en columna, en el orden de \`imageUris\`, a ancho completo —
-   *  ver \`.mediaSection\`/\`.media\` en exportedStyles.ts) seguido del audio,
-   *  si lo hay. \`imageUris\` ya viene resuelto (ver \`resolveImageUris\`). Solo
-   *  la usa \`buildOption\` (la única imagen, 0 o 1 elemento, y el único audio
-   *  de una respuesta) — los bloques de \`node.content\` se pintan con
-   *  \`appendContentBlock\`, uno a uno, no agrupados. */
-  function appendMedia(container, imageUris, audioUri, sectionClass, imageAlt) {
-    if (imageUris.length === 0 && !audioUri) {
-      return;
-    }
-    var section = el('div', sectionClass);
-    for (var i = 0; i < imageUris.length; i += 1) {
-      var image = el('img', 'media');
-      image.src = imageUris[i];
-      image.alt = imageAlt;
-      section.appendChild(image);
-    }
-    if (audioUri) {
-      var audio = el('audio', 'audio');
-      audio.controls = true;
-      audio.src = audioUri;
-      section.appendChild(audio);
-    }
-    container.appendChild(section);
-  }
-
   /** \`data:\` URI del audio adjunto de \`owner\` (una respuesta: mismo modelo
    *  de siempre, \`audioAssetId\` único — ver cabecera del archivo, los
    *  bloques de \`content\` solo aplican al NODO), o \`null\` si no tiene o no
@@ -788,6 +834,14 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
     return owner.audioAssetId ? assetUris[owner.audioAssetId] || null : null;
   }
 
+  /** Traducción literal de \`ResponseOption\` (\`src/player/PlayerScreen.tsx\`)
+   *  — ver su comentario para la semántica completa de las tres peticiones
+   *  de usuario que cubre: sin punto a la izquierda (flecha "→" fija al
+   *  canto derecho, centrada respecto a TODA la tarjeta vía \`.optionArrow\`
+   *  en exportedStyles.ts), imagen DENTRO del \`<button>\` (audio fuera, única
+   *  excepción — no es contenido interactivo válido anidado en otro), y el
+   *  texto de repuesto \`texts.emptyResponse\` SOLO cuando no hay texto NI
+   *  imagen NI audio. */
   function buildOption(response, index, card) {
     var wrapper = el('div', 'option');
 
@@ -800,12 +854,29 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
     if (!response.targetNodeId && !response.actsAsExit) {
       button.disabled = true;
     }
-    var bullet = el('span', 'optionBullet');
-    bullet.setAttribute('aria-hidden', 'true');
-    button.appendChild(bullet);
-    var label = el('span', null);
-    label.textContent = trimmed(response.text) || texts.emptyResponse;
-    button.appendChild(label);
+
+    var content = el('span', 'optionContent');
+    var trimmedText = trimmed(response.text);
+    var hasMedia = Boolean(response.imageAssetId || response.audioAssetId);
+    if (trimmedText || !hasMedia) {
+      var label = el('span', null);
+      label.textContent = trimmedText || texts.emptyResponse;
+      content.appendChild(label);
+    }
+    var imageUri = response.imageAssetId ? assetUris[response.imageAssetId] : null;
+    if (imageUri) {
+      var image = el('img', 'media');
+      image.src = imageUri;
+      image.alt = texts.responseImageAlt + index;
+      content.appendChild(image);
+    }
+    button.appendChild(content);
+
+    var arrow = el('span', 'optionArrow');
+    arrow.setAttribute('aria-hidden', 'true');
+    arrow.textContent = '→';
+    button.appendChild(arrow);
+
     button.addEventListener('click', function () {
       if (response.actsAsExit) {
         // Igual que el botón "Salir" de la vista 'final' (ver más abajo):
@@ -817,16 +888,15 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
     });
     wrapper.appendChild(button);
 
-    var responseImageUris = response.imageAssetId
-      ? resolveImageUris([response.imageAssetId])
-      : [];
-    appendMedia(
-      wrapper,
-      responseImageUris,
-      resolveAudioUri(response),
-      'optionMedia',
-      texts.responseImageAlt + index,
-    );
+    var audioUri = resolveAudioUri(response);
+    if (audioUri) {
+      var mediaSection = el('div', 'optionMedia');
+      var audio = el('audio', 'audio');
+      audio.controls = true;
+      audio.src = audioUri;
+      mediaSection.appendChild(audio);
+      wrapper.appendChild(mediaSection);
+    }
 
     return wrapper;
   }

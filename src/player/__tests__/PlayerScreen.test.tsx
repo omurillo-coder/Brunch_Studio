@@ -698,6 +698,147 @@ describe('PlayerScreen: bloques de contenido de una diapositiva (milestone "Bloq
   })
 })
 
+describe('PlayerScreen: imágenes ampliables + tamaño (petición de usuario)', () => {
+  /** Diapositiva de inicio con un único bloque de imagen (assetId ya
+   *  adjunto) conectada a un Final, lista para jugar — mismo patrón que el
+   *  describe de "bloques de contenido" de arriba. */
+  async function slideWithImageBlock() {
+    const assetRepository = new MemoryAssetRepository()
+    const imageId = await importFakeAsset(assetRepository, '/tmp/g.png', [9], 'image/png')
+
+    const startId = startNodeId()
+    act(() => {
+      useProjectStore.getState().addImageBlock(startId, imageId)
+      useProjectStore.getState().createNode('final', { x: 200, y: 0 })
+    })
+    const finalId = otherNodeIdOf('final')
+    act(() => {
+      useProjectStore.getState().connect(startId, finalId)
+    })
+    const blockId = contentBlockIdAt(startId, 1)
+
+    return { assetRepository, startId, blockId }
+  }
+
+  it('por defecto (sin tocar `expandable`), la imagen es ampliable: un clic abre el lightbox a pantalla completa', async () => {
+    const { assetRepository } = await slideWithImageBlock()
+    const { container } = renderPlayer({ assetRepository })
+
+    const image = await screen.findByAltText('Imagen de esta pantalla')
+    expect(image.closest('button')?.classList.contains(styles.expandableImage ?? '')).toBe(true)
+    expect(container.querySelector(`.${styles.lightboxBackdrop}`)).not.toBeInTheDocument()
+
+    fireEvent.click(image)
+
+    const lightbox = container.querySelector(`.${styles.lightboxBackdrop}`)
+    expect(lightbox).toBeInTheDocument()
+    const lightboxImage = lightbox?.querySelector(`.${styles.lightboxImage}`)
+    expect(lightboxImage?.getAttribute('src')).toBe(image.getAttribute('src'))
+  })
+
+  it('el lightbox se cierra al pulsar el fondo, el botón "×", o la tecla Escape', async () => {
+    const { assetRepository } = await slideWithImageBlock()
+    const { container } = renderPlayer({ assetRepository })
+
+    const image = await screen.findByAltText('Imagen de esta pantalla')
+
+    fireEvent.click(image)
+    expect(container.querySelector(`.${styles.lightboxBackdrop}`)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Cerrar imagen ampliada' }))
+    expect(container.querySelector(`.${styles.lightboxBackdrop}`)).not.toBeInTheDocument()
+
+    fireEvent.click(image)
+    expect(container.querySelector(`.${styles.lightboxBackdrop}`)).toBeInTheDocument()
+    fireEvent.click(container.querySelector(`.${styles.lightboxBackdrop}`) as HTMLElement)
+    expect(container.querySelector(`.${styles.lightboxBackdrop}`)).not.toBeInTheDocument()
+
+    fireEvent.click(image)
+    expect(container.querySelector(`.${styles.lightboxBackdrop}`)).toBeInTheDocument()
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(container.querySelector(`.${styles.lightboxBackdrop}`)).not.toBeInTheDocument()
+  })
+
+  it('pulsar la propia imagen dentro del lightbox no lo cierra (solo pulsar el fondo)', async () => {
+    const { assetRepository } = await slideWithImageBlock()
+    const { container } = renderPlayer({ assetRepository })
+
+    fireEvent.click(await screen.findByAltText('Imagen de esta pantalla'))
+    const lightboxImage = container.querySelector(`.${styles.lightboxImage}`) as HTMLElement
+    fireEvent.click(lightboxImage)
+
+    expect(container.querySelector(`.${styles.lightboxBackdrop}`)).toBeInTheDocument()
+  })
+
+  it('petición de usuario ("un botón... para hacer no ampliable la imagen"): `expandable: false` la deja como una imagen normal, sin botón ni lightbox', async () => {
+    const { assetRepository, startId, blockId } = await slideWithImageBlock()
+    act(() => {
+      useProjectStore.getState().updateImageBlockOptions(startId, blockId, { expandable: false })
+    })
+    const { container } = renderPlayer({ assetRepository })
+
+    const image = await screen.findByAltText('Imagen de esta pantalla')
+    expect(image.closest('button')).toBeNull()
+
+    fireEvent.click(image)
+    expect(container.querySelector(`.${styles.lightboxBackdrop}`)).not.toBeInTheDocument()
+  })
+
+  it('petición de usuario ("un desplegable... Pequeño/Normal/Grande"): `size` fija la clase de tamaño de la imagen; sin `size` usa el tamaño normal de siempre', async () => {
+    const { assetRepository, startId, blockId } = await slideWithImageBlock()
+    act(() => {
+      useProjectStore.getState().updateImageBlockOptions(startId, blockId, { size: 'large' })
+    })
+    const { container, rerender } = renderPlayer({ assetRepository })
+
+    const large = await screen.findByAltText('Imagen de esta pantalla')
+    expect(large.classList.contains(styles.mediaLarge ?? '')).toBe(true)
+    expect(large.classList.contains(styles.mediaNormal ?? '')).toBe(false)
+
+    act(() => {
+      useProjectStore.getState().updateImageBlockOptions(startId, blockId, { size: null })
+    })
+    rerender(
+      <AppServicesProvider services={{ assetRepository }}>
+        <PlayerScreen filePath={TEST_FILE_PATH} />
+      </AppServicesProvider>,
+    )
+    await waitFor(() => {
+      expect(
+        container
+          .querySelector('img[alt="Imagen de esta pantalla"]')
+          ?.classList.contains(styles.mediaNormal ?? ''),
+      ).toBe(true)
+    })
+  })
+
+  it('la imagen de una respuesta nunca es ampliable (no hay lightbox al pulsarla, solo elige la respuesta)', async () => {
+    const assetRepository = new MemoryAssetRepository()
+    const imageId = await importFakeAsset(assetRepository, '/tmp/h.png', [11], 'image/png')
+
+    const startId = startNodeId()
+    const responseId = addResponseTo(startId)
+    act(() => {
+      useProjectStore.getState().createNode('final', { x: 200, y: 0 })
+    })
+    const finalId = otherNodeIdOf('final')
+    act(() => {
+      useProjectStore.getState().connect(startId, finalId, responseId)
+      useProjectStore.getState().updateResponse(startId, responseId, { imageAssetId: imageId })
+    })
+
+    const { container } = renderPlayer({ assetRepository })
+
+    const image = await screen.findByAltText('Imagen de la respuesta 1')
+    // La imagen vive DENTRO del botón de la propia opción (petición de
+    // usuario: "responder... cuando haces clic en cualquier parte del
+    // cuadro"), pero sin el wrapper `.expandableImage` propio del lightbox.
+    expect(image.closest(`.${styles.expandableImage}`)).toBeNull()
+
+    fireEvent.click(image)
+    expect(container.querySelector(`.${styles.lightboxBackdrop}`)).not.toBeInTheDocument()
+  })
+})
+
 describe('PlayerScreen: puntuación acumulada', () => {
   function buildGraphWithPoints() {
     const startId = startNodeId()
@@ -819,6 +960,35 @@ describe('PlayerScreen: milestone "+1 fallo con Game Over"', () => {
     // visible, no navegó al Final.
     expect(screen.getByText('Camino A')).toBeInTheDocument()
     expect(screen.queryByText('Fin de la experiencia')).not.toBeInTheDocument()
+  })
+
+  it('corrección de revisión de código: "↺ Reiniciar experiencia" limpia el aviso de "Salir" — no debe reaparecer en la primera decisión del recorrido reiniciado', () => {
+    const closeSpy = vi.spyOn(window, 'close').mockImplementation(() => {})
+    const { decisionId } = buildGraphInStore()
+    const responseExitId = addResponseTo(decisionId)
+    act(() => {
+      useProjectStore.getState().updateResponse(decisionId, responseExitId, {
+        text: 'No, me rindo.',
+        actsAsExit: true,
+      })
+    })
+
+    renderPlayer()
+    fireEvent.click(screen.getByText('Continuar'))
+    fireEvent.click(screen.getByText('No, me rindo.'))
+    expect(screen.getByText('Ya puedes cerrar esta pestaña.')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByText('↺ Reiniciar experiencia'))
+    // De vuelta al inicio: el aviso de "Salir" no debe seguir presente.
+    expect(screen.queryByText('Ya puedes cerrar esta pestaña.')).not.toBeInTheDocument()
+
+    // Ni siquiera al volver a alcanzar la misma diapositiva de decisión sin
+    // haber pulsado ningún botón de salir esta vez.
+    fireEvent.click(screen.getByText('Continuar'))
+    expect(screen.queryByText('Ya puedes cerrar esta pestaña.')).not.toBeInTheDocument()
+    expect(screen.getByText('No, me rindo.')).toBeInTheDocument()
+
+    closeSpy.mockRestore()
   })
 
   it('el Final muestra su contenido alternativo cuando la condición se cumple (tras visitar la diapositiva con visitEffects)', () => {

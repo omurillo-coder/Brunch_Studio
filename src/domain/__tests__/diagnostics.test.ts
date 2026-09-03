@@ -82,7 +82,7 @@ describe('detectCycles', () => {
     expect(cycles[0]?.nodeIds).toEqual([startId])
   })
 
-  it('petición de usuario (milestone "+1 fallo con Game Over"): un ciclo que pasa por un nodo con `canvasBadge` NO cuenta — es el bucle de reintento intencional del pack', () => {
+  it('petición de usuario (milestone "+1 fallo con Game Over"): un ciclo FORMADO ÍNTEGRAMENTE por nodos con `canvasBadge` NO cuenta — es el bucle de reintento intencional del pack', () => {
     let project = createProject('P')
     project = createNode(project, 'slide', { x: 100, y: 0 })
     const startId = project.graph.startNodeId
@@ -93,8 +93,34 @@ describe('detectCycles', () => {
     // Sin marcar todavía: el mismo bucle SÍ cuenta como aviso normal.
     expect(detectCycles(project)).toHaveLength(1)
 
+    project = updateNode(project, startId, { canvasBadge: 'plus-one-fallo' })
     project = updateNode(project, badgeSlideId, { canvasBadge: 'game-over' })
     expect(detectCycles(project)).toEqual([])
+  })
+
+  it('corrección de revisión de código: un bucle que solo PASA por un nodo con `canvasBadge` (junto con otros nodos ajenos al pack) SÍ cuenta — no es el bucle de reintento del pack, es un bucle real', () => {
+    let project = createProject('P')
+    project = createNode(project, 'slide', { x: 100, y: 0 })
+    project = createNode(project, 'slide', { x: 200, y: 0 })
+    const startId = project.graph.startNodeId
+    const badgeSlideId = otherNodeIdOf(project, 'slide')
+    const otherSlides = project.graph.nodes.filter(
+      (node) => node.type === 'slide' && node.id !== startId,
+    )
+    const thirdSlideId = otherSlides.find((node) => node.id !== badgeSlideId)?.id
+    if (!thirdSlideId) throw new Error('setup inválido')
+
+    // Bucle de 3 nodos: startId -> badgeSlideId -> thirdSlideId -> startId.
+    // Solo badgeSlideId lleva canvasBadge — el resto del ciclo es narrativa
+    // ajena al pack.
+    project = connect(project, startId, badgeSlideId)
+    project = connect(project, badgeSlideId, thirdSlideId)
+    project = connect(project, thirdSlideId, startId)
+    project = updateNode(project, badgeSlideId, { canvasBadge: 'game-over' })
+
+    const cycles = detectCycles(project)
+    expect(cycles).toHaveLength(1)
+    expect(new Set(cycles[0]?.nodeIds)).toEqual(new Set([startId, badgeSlideId, thirdSlideId]))
   })
 })
 

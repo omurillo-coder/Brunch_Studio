@@ -12,6 +12,7 @@ import {
   CICLOS,
   COMPARISON_OPERATORS,
   DEFAULT_CONTINUE_LABEL,
+  IMAGE_SIZES,
   MAX_RESPONSES,
   RESPONSE_LETTERS,
   SLIDE_COLORS,
@@ -22,6 +23,7 @@ import type {
   ContentBlock,
   DecisionResponse,
   FinalNode,
+  ImageSize,
   IntroNode,
   Node,
   NodeType,
@@ -560,6 +562,9 @@ function ContentBlockRow({
           suffix={` ${position}`}
         />
       )}
+      {block.type === 'image' && block.assetId && (
+        <ImageBlockOptions slideNodeId={slideNodeId} block={block} />
+      )}
     </div>
   )
 }
@@ -623,6 +628,75 @@ function PendingImageBlock({
           {pickError}
         </p>
       )}
+    </div>
+  )
+}
+
+/**
+ * Controles de "ampliable"/"tamaño" de un bloque de imagen YA resuelto (con
+ * `assetId`) — petición de usuario: "un botón debajo de cada imagen para
+ * poder hacer no ampliable la imagen" + "un desplegable que ponga Tamaño
+ * normal y te deje escoger entre pequeño normal y grande". Se pintan justo
+ * debajo de la vista previa (`AssetPreview`, en `ContentBlockRow`); no tiene
+ * sentido mostrarlos para un bloque "pendiente de subir"
+ * (`PendingImageBlock`, sin imagen que previsualizar todavía).
+ *
+ * `expandable`/`size` son puramente visuales para el Player/export
+ * (`PlayerImage`, `Lightbox` — ver `src/player/runtime.ts`/
+ * `src/export/exportedPlayerScript.ts`): ninguno de los dos cambia nada en
+ * el propio editor, solo en cómo se ve la imagen para quien juega la
+ * experiencia.
+ */
+function ImageBlockOptions({
+  slideNodeId,
+  block,
+}: {
+  slideNodeId: string
+  block: Extract<ContentBlock, { type: 'image' }>
+}) {
+  const updateImageBlockOptions = useProjectStore((state) => state.updateImageBlockOptions)
+  // `undefined` = ampliable (valor por defecto, ver comentario de
+  // `ContentBlockSchema.expandable`).
+  const expandable = block.expandable !== false
+  const sizeFieldId = `inspector-image-size-${block.id}`
+
+  return (
+    <div className={styles.imageOptions}>
+      <button
+        type="button"
+        className={styles.replaceButton}
+        onClick={() =>
+          updateImageBlockOptions(slideNodeId, block.id, {
+            // Se borra el campo (`null`) al volver a "ampliable" — ese es
+            // el valor por defecto, no hace falta guardar `true` explícito.
+            expandable: expandable ? false : null,
+          })
+        }
+      >
+        {expandable ? 'Hacer no ampliable' : 'Hacer ampliable'}
+      </button>
+      <div className={styles.imageSizeField}>
+        <label htmlFor={sizeFieldId}>Tamaño</label>
+        <select
+          id={sizeFieldId}
+          className={styles.select}
+          value={block.size ?? 'normal'}
+          onChange={(event) => {
+            const nextSize = event.target.value as ImageSize
+            updateImageBlockOptions(slideNodeId, block.id, {
+              // "normal" es el valor por defecto: se borra el campo en vez
+              // de guardarlo explícito, mismo criterio que `expandable`.
+              size: nextSize === 'normal' ? null : nextSize,
+            })
+          }}
+        >
+          {IMAGE_SIZES.map((size) => (
+            <option key={size} value={size}>
+              {size === 'small' ? 'Pequeño' : size === 'normal' ? 'Normal' : 'Grande'}
+            </option>
+          ))}
+        </select>
+      </div>
     </div>
   )
 }

@@ -25,12 +25,14 @@ import {
   removeResponse as domainRemoveResponse,
   updateNode as domainUpdateNode,
   updateResponse as domainUpdateResponse,
+  updateImageBlockOptions as domainUpdateImageBlockOptions,
   updateTextBlockBody as domainUpdateTextBlockBody,
   updateVariable as domainUpdateVariable,
 } from '../domain'
 import type {
   AddVariableInput,
   CreateNodeExtra,
+  ImageSize,
   NodeMove,
   NodeType,
   UpdateNodePatch,
@@ -223,6 +225,13 @@ export interface ProjectStoreActions {
    *  de imagen ya creado pero "pendiente de subir" — ver `attachImageAsset`
    *  en `src/domain/content.ts`. */
   attachImageAsset: (slideNodeId: string, blockId: string, assetId: string) => void
+  /** Petición de usuario: ampliable/tamaño de un bloque de imagen — ver
+   *  `updateImageBlockOptions` en `src/domain/content.ts`. */
+  updateImageBlockOptions: (
+    slideNodeId: string,
+    blockId: string,
+    patch: { expandable?: boolean | null; size?: ImageSize | null },
+  ) => void
   addAudioBlock: (slideNodeId: string, assetId: string, index?: number) => void
   addVideoBlock: (slideNodeId: string, assetId: string, index?: number) => void
   updateTextBlockBody: (slideNodeId: string, blockId: string, body: string) => void
@@ -476,6 +485,15 @@ export const useProjectStore = create<ProjectStoreState>()(
 
     attachImageAsset: (slideNodeId, blockId, assetId) => {
       const next = domainAttachImageAsset(get().project, slideNodeId, blockId, assetId)
+      set((state) => {
+        state.history.past.push(state.project as ProjectDocument)
+        state.history.future = []
+        state.project = next
+      })
+    },
+
+    updateImageBlockOptions: (slideNodeId, blockId, patch) => {
+      const next = domainUpdateImageBlockOptions(get().project, slideNodeId, blockId, patch)
       set((state) => {
         state.history.past.push(state.project as ProjectDocument)
         state.history.future = []

@@ -167,6 +167,81 @@
   border: 1px solid var(--bs-color-border);
 }
 
+/* Tamaños de imagen (petición de usuario: "un desplegable... Pequeño/Normal/
+   Grande"). `.mediaNormal` reproduce exactamente el `.media` de siempre, así
+   que ninguna imagen ya existente (sin `size` guardado) cambia de aspecto.
+   Traducción literal en `exportedStyles.ts`. */
+.mediaSmall {
+  max-width: 180px;
+  max-height: 180px;
+}
+
+.mediaNormal {
+  max-width: 100%;
+  max-height: 320px;
+}
+
+.mediaLarge {
+  max-width: 100%;
+  max-height: 480px;
+}
+
+/* Envoltorio `<button>` de una imagen ampliable (ver `PlayerImage` en
+   `PlayerScreen.tsx`): sin bordes/fondo/relleno propios para no alterar el
+   aspecto de la imagen que contiene, solo añade el cursor de "ampliar". */
+.expandableImage {
+  display: inline-block;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: zoom-in;
+  line-height: 0;
+}
+
+/* Lightbox de imagen ampliada (ver `Lightbox` en `PlayerScreen.tsx`).
+   Traducción literal en `exportedStyles.ts`. */
+.lightboxBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--bs-space-4);
+  background: rgba(0, 0, 0, 0.85);
+  cursor: zoom-out;
+}
+
+.lightboxImage {
+  display: block;
+  max-width: 92vw;
+  max-height: 92vh;
+  border-radius: var(--bs-radius-md);
+  cursor: default;
+}
+
+.lightboxClose {
+  position: fixed;
+  top: var(--bs-space-4);
+  right: var(--bs-space-4);
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.lightboxClose:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
 .audio {
   width: 100%;
 }
@@ -198,60 +273,59 @@
 }
 
 /*
- * Una opción de una decisión (punto + texto + su imagen/audio adjuntos, si
- * los tiene): el borde/fondo/redondeo de "tarjeta" vive en ESTE contenedor
- * (antes vivía en `.optionButton`, ver abajo), precisamente para que la
- * imagen/audio de `.optionMedia` -- que por accesibilidad no puede ir
- * anidada DENTRO del `<button>`, ver comentario de `ResponseOption` en
- * PlayerScreen.tsx -- quede visualmente DENTRO del límite de esa tarjeta en
- * vez de aparecer como un elemento suelto justo debajo/después de ella. Bug
- * reportado: con el borde en `.optionButton`, la imagen de una respuesta
- * quedaba fuera de ese borde, percibida como "a continuación" de la opción
- * en vez de "parte de" ella, aunque en el DOM ya fuera descendiente de este
- * mismo `<div>`. Traducción literal en `exportedStyles.ts`.
+ * Una opción de una decisión (texto + imagen dentro del propio `<button>`,
+ * más su audio adjunto si lo tiene, ver comentario de `ResponseOption` en
+ * PlayerScreen.tsx): el borde/fondo/redondeo de "tarjeta" vive en ESTE
+ * contenedor (no en `.optionButton`), para que el audio de `.optionMedia`
+ * -- que por accesibilidad no puede ir anidado DENTRO del `<button>` --
+ * quede visualmente DENTRO del límite de esa tarjeta en vez de aparecer
+ * como un elemento suelto justo debajo/después de ella. Traducción literal
+ * en `exportedStyles.ts`.
  */
 .option {
   display: flex;
   flex-direction: column;
-  gap: var(--bs-space-2);
   border: 1px solid var(--bs-color-border);
   border-radius: var(--bs-radius-md);
   background: var(--bs-color-bg);
-  padding: var(--bs-space-3);
 }
 
 /* Hover: el borde ahora vive en `.option` (ver arriba), así que el cambio de
    color al pasar el ratón por el botón se aplica al contenedor entero vía
    `:has()` -- ya usado en el resto del proyecto, ver `.templateOption` en
    `HomeScreen.module.css` -- para que TODA la tarjeta (texto + imagen/audio)
-   reaccione junta, no solo la fila de texto. */
+   reaccione junta, no solo el botón. */
 .option:has(.optionButton:hover:not(:disabled)) {
   border-color: var(--bs-color-accent);
 }
 
+/* Audio de la opción (única pieza que queda FUERA de `.optionButton`, ver
+   su comentario): mismo padding horizontal que `.optionButton` para que
+   quede alineado con el texto/imagen de arriba, sin duplicar el borde de
+   `.option`. */
 .optionMedia {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: var(--bs-space-2);
+  padding: 0 var(--bs-space-3) var(--bs-space-3);
 }
 
-.optionMedia .media {
-  max-height: 180px;
-}
-
-/* Fila de punto + texto de la opción: ya NO lleva borde/fondo/redondeo
-   propios (ver `.option` arriba, que ahora hace de tarjeta visual) -- sin
-   `background`/`border` para que se perciba como una única superficie
-   continua con `.optionMedia`, sin costura entre ambas. Mismo padding
-   horizontal de siempre para que el texto quede alineado con el padding de
-   `.option`; sin padding propio adicional (lo pone `.option`) más que el
-   necesario para separar la fila del `gap` compartido. */
+/* Fila de texto + imagen + flecha de la opción: ocupa TODA la tarjeta (ya
+   no un punto + una sola línea de texto) para que "pulsar en cualquier
+   parte del cuadro" (petición de usuario) elija la respuesta -- la imagen
+   vive DENTRO de este `<button>` porque, a diferencia de `<audio
+   controls>`, no es contenido interactivo y puede anidarse sin problema.
+   `position: relative` + `padding-right` reservan el hueco de `.optionArrow`
+   (posicionada en absoluto, ver más abajo) sin que el texto/imagen se
+   solape con ella. */
 .optionButton {
   display: flex;
   align-items: center;
   gap: var(--bs-space-3);
-  padding: 0;
+  position: relative;
+  padding: var(--bs-space-3);
+  padding-right: calc(var(--bs-space-3) + 20px);
   border: none;
   background: none;
   color: var(--bs-color-text);
@@ -265,19 +339,43 @@
   cursor: default;
 }
 
-/* Punto de la opción. Sustituye al antiguo círculo con la letra
-   (A/B/C/D): las letras ya no se muestran nunca al usuario. */
-.optionBullet {
-  display: inline-block;
-  flex: 0 0 auto;
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: var(--bs-color-accent);
+/* Envuelve texto + imagen (si la hay) en columna, ocupando el espacio
+   sobrante entre el borde izquierdo y la flecha. */
+.optionContent {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--bs-space-2);
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
-.optionButton:disabled .optionBullet {
-  background: var(--bs-color-border-strong);
+.optionContent .media {
+  max-height: 180px;
+}
+
+/* Petición de usuario: "a la derecha quiero que aparezca siempre una
+   flecha sutil que va hacia la derecha... para hacer de modo que llame a
+   hacer clic" -- sustituye al antiguo punto a la izquierda. Fija al canto
+   derecho y centrada verticalmente RESPECTO A TODA LA TARJETA (no solo la
+   línea de texto): `position: absolute` + `top: 50%` + `translateY(-50%)`
+   sobre `.optionButton` (su ancestro `position: relative`), así que se
+   mantiene en el mismo sitio tenga la opción una línea de texto corta, un
+   texto largo que envuelva, o una imagen debajo -- nunca se desplaza con el
+   contenido. */
+.optionArrow {
+  position: absolute;
+  right: var(--bs-space-3);
+  top: 50%;
+  transform: translateY(-50%);
+  flex: 0 0 auto;
+  font-size: 18px;
+  line-height: 1;
+  color: var(--bs-color-text-faint);
+}
+
+.optionButton:disabled .optionArrow {
+  color: var(--bs-color-border-strong);
 }
 
 /* Fila de acciones de la vista Final: "Volver a jugar" (`.primaryButton`,

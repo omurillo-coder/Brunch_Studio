@@ -36,6 +36,13 @@
   --bs-color-accent: #00aec7;
   --bs-color-accent-hover: #33c6da;
   --bs-color-accent-contrast: #002b32;
+  /* Fondo translúcido del acento (petición de usuario: bloque de
+     "Respuestas" del Inspector, `.responsesSection` en
+     Inspector.module.css, que debe distinguirse "bastante" del resto de
+     secciones) — mismo criterio de opacidad baja que
+     `--bs-color-danger-bg`/`--bs-color-warning-bg`, aplicado al turquesa de
+     acento en vez de a un color semántico de aviso/peligro. */
+  --bs-color-accent-bg: rgba(0, 174, 199, 0.08);
   --bs-color-danger: #c22b3a;
   --bs-color-danger-hover: #a32230;
   --bs-color-danger-bg: rgba(194, 43, 58, 0.08);
@@ -176,6 +183,7 @@
     --bs-color-accent: #2cc7de;
     --bs-color-accent-hover: #5ad6e8;
     --bs-color-accent-contrast: #06222a;
+    --bs-color-accent-bg: rgba(44, 199, 222, 0.12);
     --bs-color-danger: #f0677a;
     --bs-color-danger-hover: #f78b99;
     --bs-color-danger-bg: rgba(240, 103, 122, 0.12);

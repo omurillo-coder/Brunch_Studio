@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useProject, useProjectStore, usePreviewStartNodeId } from '../store'
 import {
   CICLOS,
@@ -13,7 +13,15 @@ import {
   INTRO_SUBTITLE_SUFFIX,
   RESPONSE_LETTERS,
 } from '../domain'
-import type { ContentBlock, DecisionResponse, IntroNode, ProjectDocument, SlideNode, VariableState } from '../domain'
+import type {
+  ContentBlock,
+  DecisionResponse,
+  ImageSize,
+  IntroNode,
+  ProjectDocument,
+  SlideNode,
+  VariableState,
+} from '../domain'
 import { advance, choose, getInitialState, getView } from './runtime'
 import type { PlayerState } from './runtime'
 import { useAppServices } from '../app/AppServicesContext'
@@ -32,31 +40,115 @@ function sortByLetter(responses: DecisionResponse[]): DecisionResponse[] {
   )
 }
 
+/** Clase de tamaño de `.media` para una imagen (petición de usuario: "un
+ *  desplegable... Pequeño/Normal/Grande") — `undefined`/`'normal'` usa el
+ *  tamaño de siempre (`.mediaNormal`, sin cambio visual para cualquier
+ *  imagen ya existente). */
+function imageSizeClassName(size: ImageSize | undefined): string | undefined {
+  if (size === 'small') return styles.mediaSmall
+  if (size === 'large') return styles.mediaLarge
+  return styles.mediaNormal
+}
+
 /**
  * Imagen adjunta (de nodo o de respuesta) mostrada como contenido real para
  * quien juega — no una miniatura de edición como en el Inspector, así que
- * usa su propia clase de tamaño (`styles.media`). Se monta con `key={assetId}`
- * desde el llamador para que un cambio de asset (nodo distinto, o mismo nodo
- * con el asset reemplazado) arranque la carga desde cero.
+ * usa su propia clase de tamaño (`styles.media` + `imageSizeClassName`). Se
+ * monta con `key={assetId}` desde el llamador para que un cambio de asset
+ * (nodo distinto, o mismo nodo con el asset reemplazado) arranque la carga
+ * desde cero.
  *
  * Si la carga falla, no muestra nada (ni imagen ni mensaje de error): el
  * resto de la pantalla — texto, opciones, controles de navegación — debe
  * seguir funcionando con normalidad.
+ *
+ * Petición de usuario ("las imágenes... ampliables en la salida o en
+ * probar"): si `onExpand` viene definido, la imagen se envuelve en un
+ * `<button>` que la abre en `Lightbox` (más abajo) al pulsarla — quien
+ * llama decide si pasarlo o no: `ContentBlockView` solo lo pasa cuando
+ * `block.expandable !== false` (petición de usuario: "un botón... para
+ * hacer no ampliable la imagen"); `ResponseOption` nunca lo pasa (la
+ * imagen de una respuesta vive dentro de un `<button>` que ya elige esa
+ * respuesta al pulsarla — un segundo botón anidado no es HTML válido, y
+ * además "pulsar en cualquier parte del cuadro" ya cubre la imagen).
  */
 function PlayerImage({
   assetId,
   filePath,
   assetRepository,
   alt,
+  size,
+  onExpand,
 }: {
   assetId: string
   filePath: string
   assetRepository: AssetRepository
   alt: string
+  size?: ImageSize
+  onExpand?: (image: { dataUri: string; alt: string }) => void
 }) {
   const { dataUri } = useAssetDataUri(filePath, assetId, assetRepository)
   if (!dataUri) return null
-  return <img className={styles.media} src={dataUri} alt={alt} />
+  const image = <img className={`${styles.media} ${imageSizeClassName(size)}`} src={dataUri} alt={alt} />
+  if (!onExpand) return image
+  return (
+    <button
+      type="button"
+      className={styles.expandableImage}
+      onClick={() => onExpand({ dataUri, alt })}
+      aria-label={`Ampliar imagen: ${alt}`}
+    >
+      {image}
+    </button>
+  )
+}
+
+/**
+ * Imagen ampliada a pantalla completa (petición de usuario) — se cierra al
+ * pulsar el fondo, el botón "×", o la tecla Escape. `stopPropagation` en la
+ * propia imagen: pulsarla a ella no debe cerrar el lightbox (solo pulsar
+ * fuera de ella, sobre el fondo). Traducción literal en `buildLightbox` de
+ * `src/export/exportedPlayerScript.ts`.
+ */
+function Lightbox({
+  image,
+  onClose,
+}: {
+  image: { dataUri: string; alt: string }
+  onClose: () => void
+}) {
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [onClose])
+
+  return (
+    <div
+      className={styles.lightboxBackdrop}
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label={image.alt}
+    >
+      <img
+        className={styles.lightboxImage}
+        src={image.dataUri}
+        alt={image.alt}
+        onClick={(event) => event.stopPropagation()}
+      />
+      <button
+        type="button"
+        className={styles.lightboxClose}
+        onClick={onClose}
+        aria-label="Cerrar imagen ampliada"
+      >
+        ×
+      </button>
+    </div>
+  )
 }
 
 /** Audio adjunto (de nodo o de respuesta), con los mismos controles nativos
@@ -117,10 +209,12 @@ function ContentBlockView({
   block,
   filePath,
   assetRepository,
+  onExpandImage,
 }: {
   block: ContentBlock
   filePath: string
   assetRepository: AssetRepository
+  onExpandImage: (image: { dataUri: string; alt: string }) => void
 }) {
   switch (block.type) {
     case 'text':
@@ -140,6 +234,12 @@ function ContentBlockView({
           filePath={filePath}
           assetRepository={assetRepository}
           alt="Imagen de esta pantalla"
+          size={block.size}
+          // Petición de usuario: "un botón... para hacer no ampliable la
+          // imagen" — `block.expandable === false` (marcado explícito
+          // desde el Inspector) es la ÚNICA forma de desactivarla;
+          // `undefined` (nunca tocado) es ampliable por defecto.
+          onExpand={block.expandable === false ? undefined : onExpandImage}
         />
       )
     case 'audio':
@@ -180,11 +280,13 @@ function SlideContent({
   filePath,
   assetRepository,
   emptyFallback,
+  onExpandImage,
 }: {
   node: SlideNode
   filePath: string
   assetRepository: AssetRepository
   emptyFallback: string | null
+  onExpandImage: (image: { dataUri: string; alt: string }) => void
 }) {
   if (node.content.length === 0) {
     if (emptyFallback === null) return null
@@ -198,6 +300,7 @@ function SlideContent({
           block={block}
           filePath={filePath}
           assetRepository={assetRepository}
+          onExpandImage={onExpandImage}
         />
       ))}
     </>
@@ -205,12 +308,31 @@ function SlideContent({
 }
 
 /**
- * Una opción de una diapositiva con respuestas: el botón de elegirla (un
- * punto + su texto, nunca una letra) más su imagen/audio adjuntos, si tiene.
- * La imagen/audio se colocan FUERA del `<button>` (contenido interactivo,
- * como los controles de `<audio>`, no puede anidarse dentro de un elemento
- * interactivo) para que reproducir el audio de una opción no cuente como
- * elegirla.
+ * Una opción de una diapositiva con respuestas: el botón de elegirla (texto
+ * + su imagen adjunta, si tiene, con una flecha sutil siempre pegada al
+ * canto derecho y centrada verticalmente) más su audio adjunto, si tiene.
+ *
+ * Petición de usuario: "que funcione para responder la respuesta cuando
+ * haces clic en cualquier parte del cuadro de respuesta" — el `<button>`
+ * ahora envuelve TEXTO + IMAGEN (la imagen no es interactiva, así que puede
+ * anidarse sin problema dentro de un elemento interactivo). El AUDIO sigue
+ * FUERA del `<button>`, en `.optionMedia` — única excepción deliberada:
+ * `<audio controls>` SÍ es contenido interactivo, no puede anidarse dentro
+ * de otro elemento interactivo (accesibilidad), así que reproducirlo nunca
+ * podría "contar como elegir la respuesta" de todos modos.
+ *
+ * Petición de usuario: sin el punto de siempre a la izquierda — en su
+ * lugar, una flecha "→" sutil, SIEMPRE presente (con o sin imagen), fija al
+ * canto derecho y centrada verticalmente respecto a TODA la tarjeta (no
+ * solo la línea de texto), para invitar visualmente a "pulsa aquí para
+ * continuar" en cualquier respuesta.
+ *
+ * Petición de usuario: el texto de repuesto "Opción sin texto configurado"
+ * (para una respuesta sin texto) YA NO se muestra si la respuesta tiene
+ * imagen o audio — antes aparecía SIEMPRE que el texto estuviera vacío,
+ * aunque hubiera una imagen que ya "hablara por sí sola"; ahora solo se
+ * muestra cuando la respuesta no tiene NINGÚN contenido (ni texto ni
+ * imagen ni audio), para que el botón nunca quede completamente vacío.
  *
  * `index` es la posición 1-based de la opción, usada solo para el texto
  * alternativo de su imagen (donde antes se usaba la letra).
@@ -230,6 +352,10 @@ function ResponseOption({
   assetRepository: AssetRepository
   onChoose: () => void
 }) {
+  const trimmedText = response.text.trim()
+  const hasMedia = Boolean(response.imageAssetId || response.audioAssetId)
+  const showText = trimmedText !== '' || !hasMedia
+
   return (
     <div className={styles.option}>
       <button
@@ -238,11 +364,8 @@ function ResponseOption({
         disabled={disabled}
         onClick={onChoose}
       >
-        <span className={styles.optionBullet} aria-hidden="true" />
-        <span>{response.text.trim() || 'Opción sin texto configurado'}</span>
-      </button>
-      {(response.imageAssetId || response.audioAssetId) && (
-        <div className={styles.optionMedia}>
+        <span className={styles.optionContent}>
+          {showText && <span>{trimmedText || 'Opción sin texto configurado'}</span>}
           {response.imageAssetId && (
             <PlayerImage
               key={response.imageAssetId}
@@ -252,14 +375,19 @@ function ResponseOption({
               alt={`Imagen de la respuesta ${index}`}
             />
           )}
-          {response.audioAssetId && (
-            <PlayerAudio
-              key={response.audioAssetId}
-              assetId={response.audioAssetId}
-              filePath={filePath}
-              assetRepository={assetRepository}
-            />
-          )}
+        </span>
+        <span className={styles.optionArrow} aria-hidden="true">
+          →
+        </span>
+      </button>
+      {response.audioAssetId && (
+        <div className={styles.optionMedia}>
+          <PlayerAudio
+            key={response.audioAssetId}
+            assetId={response.audioAssetId}
+            filePath={filePath}
+            assetRepository={assetRepository}
+          />
         </div>
       )}
     </div>
@@ -525,6 +653,11 @@ export function PlayerScreen({ filePath }: PlayerScreenProps) {
     getInitialState(project, previewStartNodeId ?? undefined),
   )
   const [exitMessageVisible, setExitMessageVisible] = useState(false)
+  // Petición de usuario ("imágenes ampliables"): la imagen actualmente
+  // abierta en el `Lightbox` de pantalla completa, o `null` si ninguna —
+  // un único estado a nivel de pantalla (no uno por imagen): solo puede
+  // haber un lightbox abierto a la vez.
+  const [lightboxImage, setLightboxImage] = useState<{ dataUri: string; alt: string } | null>(null)
 
   function handleExit() {
     setPreviewMode(false)
@@ -532,6 +665,12 @@ export function PlayerScreen({ filePath }: PlayerScreenProps) {
 
   function handleRestart() {
     setPlayerState(getInitialState(project, previewStartNodeId ?? undefined))
+    // Corrección (revisión de código, milestone "+1 fallo con Game Over"):
+    // sin este reset, un aviso de "Salir" mostrado antes de reiniciar
+    // (`handleExitAttempt`, más abajo) quedaba pegado y volvía a aparecer
+    // en la primera vista de decisión del recorrido reiniciado, aunque no
+    // se hubiera vuelto a pulsar ningún botón de salir.
+    setExitMessageVisible(false)
   }
 
   /**
@@ -594,6 +733,7 @@ export function PlayerScreen({ filePath }: PlayerScreenProps) {
               filePath={filePath}
               assetRepository={assetRepository}
               emptyFallback="Esta diapositiva todavía no tiene contenido."
+              onExpandImage={setLightboxImage}
             />
             {/* Texto personalizable del botón de continuar; "Continuar" si la
                 diapositiva no define uno propio (ver `continueLabel`). */}
@@ -618,6 +758,7 @@ export function PlayerScreen({ filePath }: PlayerScreenProps) {
               filePath={filePath}
               assetRepository={assetRepository}
               emptyFallback={null}
+              onExpandImage={setLightboxImage}
             />
             <div className={styles.options}>
               {sortByLetter(view.visibleResponses).map((response, index) => (
@@ -710,6 +851,11 @@ export function PlayerScreen({ filePath }: PlayerScreenProps) {
           </div>
         )}
       </main>
+      {/* Lightbox de imagen ampliada: `position: fixed` a pantalla completa
+          (ver `Lightbox` más arriba), así que su posición en el árbol es
+          irrelevante — se renderiza aquí, como hermano de `<main>`, en vez de
+          anidado dentro de cada vista. */}
+      {lightboxImage && <Lightbox image={lightboxImage} onClose={() => setLightboxImage(null)} />}
     </div>
   )
 }

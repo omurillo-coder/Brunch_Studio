@@ -720,6 +720,13 @@ export function duplicateNode(
         // original, ya que normalmente se duplica precisamente para crear
         // otra variante dentro de la MISMA rama.
         color: source.color,
+        // Corrección (revisión de código, milestone "+1 fallo con Game
+        // Over"): `visitEffects`/`canvasBadge` son CONTENIDO/comportamiento
+        // de la diapositiva, mismo criterio que `color` justo arriba — sin
+        // esto, duplicar la diapositiva "+1 Fallo" perdía en silencio tanto
+        // su insignia como el propio efecto de sumar Fallos al visitarla.
+        visitEffects: source.visitEffects,
+        canvasBadge: source.canvasBadge,
       }
       duplicate = node
       break
@@ -727,7 +734,20 @@ export function duplicateNode(
     case 'final': {
       // `variant` es contenido (categoría del Final), se copia tal cual —
       // mismo criterio que `color` en una `slide`, ver comentario más arriba.
-      const node: FinalNode = { ...common, type: 'final', body: source.body, variant: source.variant }
+      // Corrección (revisión de código, milestone "+1 fallo con Game Over"):
+      // `alternateCondition`/`alternateBody`/`celebrateDefault` son también
+      // contenido del Final (la variante "con fallos" y el confeti) —
+      // faltaban aquí, así que duplicar un Final con variante alternativa
+      // perdía esa variante y el confeti en silencio.
+      const node: FinalNode = {
+        ...common,
+        type: 'final',
+        body: source.body,
+        variant: source.variant,
+        alternateCondition: source.alternateCondition,
+        alternateBody: source.alternateBody,
+        celebrateDefault: source.celebrateDefault,
+      }
       duplicate = node
       break
     }
@@ -906,6 +926,21 @@ export function updateVariable(
  *   referenciaban esta variable (los demás se conservan); si la lista queda
  *   vacía, el campo se deja en `undefined` en vez de `[]`, igual criterio
  *   que "ausente = sin efectos" del schema.
+ * - `visitEffects` de una diapositiva (milestone "+1 fallo con Game Over"):
+ *   mismo criterio de limpieza selectiva que `effects` de una respuesta,
+ *   justo arriba — corrección de revisión de código: faltaba, dejaba un
+ *   `visitEffects` apuntando a un `variableId` inexistente que
+ *   `applyVariableEffects` simplemente no-opea en silencio (nunca lanza),
+ *   así que el efecto de sumar Fallos dejaba de funcionar sin ningún aviso.
+ * - `alternateCondition`/`alternateBody` de un Final (milestone "+1 fallo
+ *   con Game Over"): si `alternateCondition` referenciaba esta variable, se
+ *   borran los DOS a la vez — mismo criterio "todo o nada" que
+ *   `FinalAlternateSection.handleRemove` en el Inspector (nunca tiene
+ *   sentido un `alternateBody` sin su condición). Corrección de revisión de
+ *   código: faltaba, dejaba la variante "con fallos" del Final apuntando a
+ *   una variable borrada — `evaluateCondition` la trata como falsa para
+ *   siempre, así que el Final se quedaba fijo en su contenido por defecto
+ *   sin ningún aviso.
  *
  * Decisión de diseño: limpiar en vez de dejar la referencia colgante. Un
  * `variableId` que ya no existe en `project.variables` no tiene ningún
@@ -926,10 +961,24 @@ export function deleteVariable(project: ProjectDocument, variableId: string): Pr
     draft.variables = draft.variables.filter((variable) => variable.id !== variableId)
 
     for (const node of draft.graph.nodes) {
+      if (node.type === 'final') {
+        if (node.alternateCondition?.variableId === variableId) {
+          node.alternateCondition = undefined
+          node.alternateBody = undefined
+        }
+        continue
+      }
+
       if (node.type !== 'slide') continue
 
       if (node.condition?.variableId === variableId) {
         node.condition = undefined
+      }
+      if (node.visitEffects) {
+        const remainingVisitEffects = node.visitEffects.filter(
+          (effect) => effect.variableId !== variableId,
+        )
+        node.visitEffects = remainingVisitEffects.length > 0 ? remainingVisitEffects : undefined
       }
 
       for (const response of node.responses) {

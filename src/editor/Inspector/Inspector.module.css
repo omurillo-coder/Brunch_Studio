@@ -281,12 +281,20 @@
   background: var(--bs-color-slide-red-bg);
 }
 
+/* Petición de usuario: que el bloque de Respuestas "se vea bastante la
+   diferencia entre los demás" — a diferencia de `.metaGroup` (fondo neutro
+   `--bs-color-bg`, para Color/Ref. oculta/Contenido/Nota interna), este
+   bloque usa el tinte translúcido del propio color de acento
+   (`--bs-color-accent-bg`/`--bs-color-accent`) para leerse como una sección
+   claramente distinta, no solo "otro grupo más" del panel. */
 .responsesSection {
   display: flex;
   flex-direction: column;
   gap: var(--bs-space-3);
-  padding-top: var(--bs-space-3);
-  border-top: 1px solid var(--bs-color-border);
+  padding: var(--bs-space-3);
+  border: 1px solid var(--bs-color-accent);
+  border-radius: var(--bs-radius-md);
+  background: var(--bs-color-accent-bg);
 }
 
 .responsesTitle {
@@ -474,6 +482,27 @@
 
 .pendingImageNotice {
   margin: 0;
+  font-size: var(--bs-font-size-xs);
+  color: var(--bs-color-text-muted);
+}
+
+/* Controles de "ampliable"/"tamaño" de una imagen ya resuelta (petición de
+   usuario, ver `ImageBlockOptions` en Inspector.tsx) — fila compacta justo
+   debajo de la vista previa, botón + desplegable uno junto al otro. */
+.imageOptions {
+  display: flex;
+  align-items: center;
+  gap: var(--bs-space-3);
+  flex-wrap: wrap;
+}
+
+.imageSizeField {
+  display: flex;
+  align-items: center;
+  gap: var(--bs-space-2);
+}
+
+.imageSizeField label {
   font-size: var(--bs-font-size-xs);
   color: var(--bs-color-text-muted);
 }

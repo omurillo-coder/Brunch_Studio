@@ -451,35 +451,39 @@ button:focus-visible {
 
 /* Traducción literal de \`.option\` en \`src/player/PlayerScreen.module.css\`:
    el borde/fondo/redondeo de "tarjeta" vive aquí (no en \`.optionButton\`) para
-   que la imagen/audio de \`.optionMedia\` — que por accesibilidad no puede ir
-   anidada dentro del \`<button>\` — quede visualmente DENTRO del límite de esa
-   tarjeta en vez de aparecer como un elemento suelto después de ella. Ver el
-   comentario completo (con el porqué del bug) en ese archivo. */
+   que el audio de \`.optionMedia\` — única pieza que, por accesibilidad, no
+   puede ir anidada dentro del \`<button>\` — quede visualmente DENTRO del
+   límite de esa tarjeta en vez de aparecer como un elemento suelto después
+   de ella. Ver el comentario completo en ese archivo. */
 .option {
   display: flex;
   flex-direction: column;
-  gap: var(--bs-space-2);
   border: 1px solid var(--bs-color-border);
   border-radius: var(--bs-radius-md);
   background: var(--bs-color-bg);
-  padding: var(--bs-space-3);
 }
 
 /* Hover: el borde vive en \`.option\` (ver arriba), así que el cambio de color
    se aplica al contenedor entero vía \`:has()\` para que toda la tarjeta
-   (texto + imagen/audio) reaccione junta. */
+   (texto + imagen + audio) reaccione junta. */
 .option:has(.optionButton:hover:not(:disabled)) {
   border-color: var(--bs-color-accent);
 }
 
-/* Opción de una decisión: punto + texto. Nunca una letra A/B/C/D. Ya NO
-   lleva borde/fondo/redondeo propios (ver \`.option\` arriba). */
+/* Traducción literal de \`.optionButton\`/\`.optionContent\`/\`.optionArrow\` en
+   \`src/player/PlayerScreen.module.css\` — ver su comentario para el porqué
+   completo: texto + imagen DENTRO del \`<button>\` (ocupa toda la tarjeta,
+   "pulsa en cualquier parte" del pedido de usuario), flecha "→" fija al
+   canto derecho y centrada verticalmente respecto a TODA la tarjeta (nunca
+   se desplaza con el contenido), en vez del antiguo punto a la izquierda. */
 .optionButton {
   display: flex;
   align-items: center;
   gap: var(--bs-space-3);
+  position: relative;
   width: 100%;
-  padding: 0;
+  padding: var(--bs-space-3);
+  padding-right: calc(var(--bs-space-3) + 20px);
   border: none;
   background: none;
   color: var(--bs-color-text);
@@ -492,28 +496,43 @@ button:focus-visible {
   cursor: default;
 }
 
-.optionBullet {
-  display: inline-block;
+.optionContent {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--bs-space-2);
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.optionContent .media {
+  max-height: 180px;
+}
+
+.optionArrow {
+  position: absolute;
+  right: var(--bs-space-3);
+  top: 50%;
+  transform: translateY(-50%);
   flex: 0 0 auto;
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: var(--bs-color-accent);
+  font-size: 18px;
+  line-height: 1;
+  color: var(--bs-color-text-faint);
 }
 
-.optionButton:disabled .optionBullet {
-  background: var(--bs-color-border-strong);
+.optionButton:disabled .optionArrow {
+  color: var(--bs-color-border-strong);
 }
 
+/* Audio de la opción (única pieza fuera de \`.optionButton\`, ver su
+   comentario): mismo padding horizontal que \`.optionButton\` para quedar
+   alineado con el texto/imagen de arriba. */
 .optionMedia {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: var(--bs-space-2);
-}
-
-.optionMedia .media {
-  max-height: 180px;
+  padding: 0 var(--bs-space-3) var(--bs-space-3);
 }
 
 .mediaSection {
@@ -528,6 +547,79 @@ button:focus-visible {
   max-height: 320px;
   border: 1px solid var(--bs-color-border);
   border-radius: var(--bs-radius-md);
+}
+
+/* Tamaños de imagen (petición de usuario: "un desplegable...
+   Pequeño/Normal/Grande") — mismas reglas que PlayerScreen.module.css.
+   \`.mediaNormal\` reproduce exactamente el \`.media\` de siempre, así que
+   ninguna imagen ya existente (sin \`size\` guardado) cambia de aspecto. */
+.mediaSmall {
+  max-width: 180px;
+  max-height: 180px;
+}
+
+.mediaNormal {
+  max-width: 100%;
+  max-height: 320px;
+}
+
+.mediaLarge {
+  max-width: 100%;
+  max-height: 480px;
+}
+
+/* Envoltorio <button> de una imagen ampliable — mismas reglas que
+   PlayerScreen.module.css. */
+.expandableImage {
+  display: inline-block;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: zoom-in;
+  line-height: 0;
+}
+
+/* Lightbox de imagen ampliada — mismas reglas que PlayerScreen.module.css. */
+.lightboxBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--bs-space-4);
+  background: rgba(0, 0, 0, 0.85);
+  cursor: zoom-out;
+}
+
+.lightboxImage {
+  display: block;
+  max-width: 92vw;
+  max-height: 92vh;
+  border-radius: var(--bs-radius-md);
+  cursor: default;
+}
+
+.lightboxClose {
+  position: fixed;
+  top: var(--bs-space-4);
+  right: var(--bs-space-4);
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.lightboxClose:hover {
+  background: rgba(255, 255, 255, 0.3);
 }
 
 .audio {

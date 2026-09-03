@@ -8,6 +8,7 @@ import {
   attachImageAsset,
   moveContentBlock,
   removeContentBlock,
+  updateImageBlockOptions,
   updateTextBlockBody,
 } from '../content'
 import type { SlideNode } from '../schemas'
@@ -126,6 +127,66 @@ describe('attachImageAsset (milestone "+1 fallo con Game Over")', () => {
 
     expect(() => attachImageAsset(project, slideId, 'no-existe', IMAGE_ID)).toThrow()
     expect(() => attachImageAsset(project, slideId, textBlockId, IMAGE_ID)).toThrow()
+  })
+})
+
+describe('updateImageBlockOptions (petición de usuario: "botón para hacer no ampliable" + "desplegable de tamaño")', () => {
+  function withImageBlock() {
+    const { project, slideId } = blankSlide()
+    const withImage = addImageBlock(project, slideId, IMAGE_ID)
+    const blockId = slideOf(withImage, slideId).content[1]?.id
+    if (!blockId) throw new Error('setup inválido')
+    return { project: withImage, slideId, blockId }
+  }
+
+  it('un patch con `expandable`/`size` los fija, sin tocar el otro campo', () => {
+    const { project, slideId, blockId } = withImageBlock()
+
+    const updated = updateImageBlockOptions(project, slideId, blockId, {
+      expandable: false,
+      size: 'large',
+    })
+
+    expect(slideOf(updated, slideId).content[1]).toMatchObject({
+      expandable: false,
+      size: 'large',
+    })
+    // Inmutabilidad: el bloque original no se toca.
+    const originalBlock = slideOf(project, slideId).content[1]
+    expect(originalBlock?.type === 'image' ? originalBlock.expandable : 'missing').toBeUndefined()
+    expect(originalBlock?.type === 'image' ? originalBlock.size : 'missing').toBeUndefined()
+  })
+
+  it('`undefined` no toca el campo; `null` lo borra (vuelve al valor por defecto)', () => {
+    const { project, slideId, blockId } = withImageBlock()
+    const withOptions = updateImageBlockOptions(project, slideId, blockId, {
+      expandable: false,
+      size: 'small',
+    })
+
+    const onlySize = updateImageBlockOptions(withOptions, slideId, blockId, { size: 'normal' })
+    expect(slideOf(onlySize, slideId).content[1]).toMatchObject({ expandable: false, size: 'normal' })
+
+    const cleared = updateImageBlockOptions(onlySize, slideId, blockId, {
+      expandable: null,
+      size: null,
+    })
+    const clearedBlock = slideOf(cleared, slideId).content[1]
+    expect(clearedBlock?.type === 'image' ? clearedBlock.expandable : 'missing').toBeUndefined()
+    expect(clearedBlock?.type === 'image' ? clearedBlock.size : 'missing').toBeUndefined()
+  })
+
+  it('lanza si el bloque no existe, o si no es de tipo image', () => {
+    const { project, slideId } = blankSlide()
+    const textBlockId = slideOf(project, slideId).content[0]?.id
+    if (!textBlockId) throw new Error('setup inválido')
+
+    expect(() =>
+      updateImageBlockOptions(project, slideId, 'no-existe', { expandable: false }),
+    ).toThrow()
+    expect(() =>
+      updateImageBlockOptions(project, slideId, textBlockId, { expandable: false }),
+    ).toThrow()
   })
 })
 

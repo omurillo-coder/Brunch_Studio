@@ -112,9 +112,17 @@ function runExportedBundle(html: string): void {
   new Function(script.textContent ?? '')()
 }
 
+/** Petición de usuario ("flecha sutil a la derecha"): el `<button>` de una
+ *  opción ahora incluye la flecha "→" (`.optionArrow`) como parte de su
+ *  `textContent` (p.ej. "Avanzar→"), así que la comparación ignora una
+ *  flecha final — el resto de botones (sin flecha) no se ven afectados. */
+function stripTrailingArrow(text: string | null): string {
+  return (text ?? '').replace(/→\s*$/, '').trim()
+}
+
 function clickButton(text: string): void {
   const button = [...document.querySelectorAll<HTMLButtonElement>('#brunch-root button')].find(
-    (candidate) => candidate.textContent === text,
+    (candidate) => stripTrailingArrow(candidate.textContent) === text,
   )
   if (!button) {
     throw new Error(`No existe ningún botón con el texto "${text}".`)

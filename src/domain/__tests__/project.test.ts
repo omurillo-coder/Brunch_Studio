@@ -588,6 +588,40 @@ describe('duplicateNode', () => {
     const project = createProject('P')
     expect(() => duplicateNode(project, 'no-existe', { x: 0, y: 0 })).toThrow()
   })
+
+  it('corrección de revisión de código (milestone "+1 fallo con Game Over"): la copia SÍ conserva visitEffects/canvasBadge de la diapositiva original', () => {
+    let project = createProject('P')
+    const startId = project.graph.startNodeId
+    project = updateNode(project, startId, {
+      visitEffects: [{ variableId: 'v1', operation: 'increment', value: 1 }],
+      canvasBadge: 'plus-one-fallo',
+    })
+
+    const { project: updated, nodeId } = duplicateNode(project, startId, { x: 40, y: 40 })
+    const copy = updated.graph.nodes.find((n) => n.id === nodeId) as SlideNode
+
+    expect(copy.visitEffects).toEqual([{ variableId: 'v1', operation: 'increment', value: 1 }])
+    expect(copy.canvasBadge).toBe('plus-one-fallo')
+  })
+
+  it('corrección de revisión de código (milestone "+1 fallo con Game Over"): la copia de un Final SÍ conserva alternateCondition/alternateBody/celebrateDefault', () => {
+    let project = createNode(createProject('P'), 'final', { x: 0, y: 0 }, { body: 'Perfecto' })
+    const finalId = otherNodeIdOf(project, 'final')
+    project = updateNode(project, finalId, {
+      alternateCondition: { variableId: 'v1', operator: '>', value: 0 },
+      alternateBody: 'Con fallos',
+      celebrateDefault: true,
+    })
+
+    const { project: updated, nodeId } = duplicateNode(project, finalId, { x: 50, y: 50 })
+    const copy = updated.graph.nodes.find((n) => n.id === nodeId)
+
+    expect(copy?.type).toBe('final')
+    if (copy?.type !== 'final') throw new Error('esperaba un nodo final')
+    expect(copy.alternateCondition).toEqual({ variableId: 'v1', operator: '>', value: 0 })
+    expect(copy.alternateBody).toBe('Con fallos')
+    expect(copy.celebrateDefault).toBe(true)
+  })
 })
 
 describe('updateNode — condition/elseTargetNodeId', () => {
@@ -1004,5 +1038,84 @@ describe('deleteVariable', () => {
 
     const slide = project.graph.nodes.find((n) => n.id === startId) as SlideNode
     expect(slide.responses[0]?.effects).toBeUndefined()
+  })
+
+  it('corrección de revisión de código (milestone "+1 fallo con Game Over"): quita solo los visitEffects de una diapositiva que referenciaban la variable borrada, conservando el resto', () => {
+    let project = addVariable(createProject('P'), { name: 'a', type: 'number', initialValue: 0 })
+    project = addVariable(project, { name: 'b', type: 'number', initialValue: 0 })
+    const [varA, varB] = project.variables
+    if (!varA || !varB) throw new Error('setup inválido')
+
+    const startId = project.graph.startNodeId
+    project = updateNode(project, startId, {
+      visitEffects: [
+        { variableId: varA.id, operation: 'increment', value: 1 },
+        { variableId: varB.id, operation: 'set', value: 2 },
+      ],
+    })
+
+    project = deleteVariable(project, varA.id)
+
+    const slide = project.graph.nodes.find((n) => n.id === startId) as SlideNode
+    expect(slide.visitEffects).toEqual([{ variableId: varB.id, operation: 'set', value: 2 }])
+  })
+
+  it('corrección de revisión de código: si borrar la variable deja visitEffects vacío, el campo queda undefined (no [])', () => {
+    let project = addVariable(createProject('P'), { name: 'a', type: 'number', initialValue: 0 })
+    const varId = project.variables[0]?.id
+    if (!varId) throw new Error('setup inválido')
+    const startId = project.graph.startNodeId
+    project = updateNode(project, startId, {
+      visitEffects: [{ variableId: varId, operation: 'increment', value: 1 }],
+    })
+
+    project = deleteVariable(project, varId)
+
+    const slide = project.graph.nodes.find((n) => n.id === startId) as SlideNode
+    expect(slide.visitEffects).toBeUndefined()
+  })
+
+  it('corrección de revisión de código: si alternateCondition de un Final referenciaba la variable borrada, limpia alternateCondition Y alternateBody a la vez', () => {
+    let project = addVariable(createProject('P'), { name: 'Fallos', type: 'number', initialValue: 0 })
+    const varId = project.variables[0]?.id
+    if (!varId) throw new Error('setup inválido')
+    project = createNode(project, 'final', { x: 0, y: 0 }, { body: 'Perfecto' })
+    const finalId = otherNodeIdOf(project, 'final')
+    project = updateNode(project, finalId, {
+      alternateCondition: { variableId: varId, operator: '>', value: 0 },
+      alternateBody: 'Con fallos',
+    })
+
+    project = deleteVariable(project, varId)
+
+    const final = project.graph.nodes.find((n) => n.id === finalId)
+    expect(final?.type === 'final' ? final.alternateCondition : 'missing').toBeUndefined()
+    expect(final?.type === 'final' ? final.alternateBody : 'missing').toBeUndefined()
+    // El contenido por defecto del Final no se toca.
+    expect(final?.type === 'final' ? final.body : undefined).toBe('Perfecto')
+  })
+
+  it('corrección de revisión de código: un alternateCondition que NO referenciaba la variable borrada no se toca', () => {
+    let project = addVariable(createProject('P'), { name: 'Fallos', type: 'number', initialValue: 0 })
+    project = addVariable(project, { name: 'Otra', type: 'number', initialValue: 0 })
+    const [fallosVar, otraVar] = project.variables
+    if (!fallosVar || !otraVar) throw new Error('setup inválido')
+    project = createNode(project, 'final', { x: 0, y: 0 }, { body: 'Perfecto' })
+    const finalId = otherNodeIdOf(project, 'final')
+    project = updateNode(project, finalId, {
+      alternateCondition: { variableId: fallosVar.id, operator: '>', value: 0 },
+      alternateBody: 'Con fallos',
+    })
+
+    // Se borra una variable DISTINTA de la referenciada por alternateCondition.
+    project = deleteVariable(project, otraVar.id)
+
+    const final = project.graph.nodes.find((n) => n.id === finalId)
+    expect(final?.type === 'final' ? final.alternateCondition : undefined).toEqual({
+      variableId: fallosVar.id,
+      operator: '>',
+      value: 0,
+    })
+    expect(final?.type === 'final' ? final.alternateBody : undefined).toBe('Con fallos')
   })
 })

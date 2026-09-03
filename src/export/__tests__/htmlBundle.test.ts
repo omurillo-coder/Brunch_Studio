@@ -63,9 +63,12 @@ function textBlock(body: string): ContentBlock {
   blockCounter += 1
   return { id: `block-text-${blockCounter}`, type: 'text', body }
 }
-function imageBlock(assetId: string): ContentBlock {
+function imageBlock(
+  assetId: string,
+  overrides?: { expandable?: boolean; size?: 'small' | 'normal' | 'large' },
+): ContentBlock {
   blockCounter += 1
-  return { id: `block-image-${blockCounter}`, type: 'image', assetId }
+  return { id: `block-image-${blockCounter}`, type: 'image', assetId, ...overrides }
 }
 function audioBlock(assetId: string): ContentBlock {
   blockCounter += 1
@@ -242,9 +245,17 @@ function currentCard(): HTMLElement {
   return card
 }
 
+/** Petición de usuario ("flecha sutil a la derecha"): el `<button>` de una
+ *  opción ahora incluye la flecha "→" (`.optionArrow`) como parte de su
+ *  `textContent` (p.ej. "Activar→"), así que la comparación ignora una
+ *  flecha final — el resto de botones (sin flecha) no se ven afectados. */
+function stripTrailingArrow(text: string | null): string {
+  return (text ?? '').replace(/→\s*$/, '').trim()
+}
+
 function clickButton(text: string): void {
   const button = [...document.querySelectorAll<HTMLButtonElement>('#brunch-root button')].find(
-    (candidate) => candidate.textContent === text,
+    (candidate) => stripTrailingArrow(candidate.textContent) === text,
   )
   if (!button) {
     throw new Error(`No existe ningún botón con el texto "${text}".`)
@@ -512,28 +523,33 @@ describe('buildHtmlBundle — comportamiento del HTML generado (jsdom)', () => {
     expect(card.textContent).not.toContain('¿Qué haces?')
 
     const options = [...card.querySelectorAll<HTMLButtonElement>('.optionButton')]
-    expect(options.map((option) => option.textContent)).toEqual([
+    expect(options.map((option) => stripTrailingArrow(option.textContent))).toEqual([
       'Avisar al responsable',
       'No hacer nada',
     ])
-    // Cada opción lleva un punto/viñeta, nunca una letra.
-    expect(card.querySelectorAll('.optionBullet')).toHaveLength(2)
+    // Petición de usuario: cada opción lleva una flecha sutil a la derecha
+    // (nunca un punto/viñeta a la izquierda, ni una letra).
+    expect(card.querySelectorAll('.optionArrow')).toHaveLength(2)
+    expect(card.querySelectorAll('.optionBullet')).toHaveLength(0)
     for (const option of options) {
-      expect(option.textContent).not.toMatch(/^[ABCD][).\s]/)
+      expect(stripTrailingArrow(option.textContent)).not.toMatch(/^[ABCD][).\s]/)
     }
-    // La imagen de la respuesta va fuera del <button> (contenido interactivo).
-    expect(card.querySelector('.optionMedia img')).not.toBeNull()
-    expect(card.querySelector('.optionButton img')).toBeNull()
+    // Petición de usuario ("clic en cualquier parte del cuadro de
+    // respuesta"): la imagen de la respuesta ahora va DENTRO del <button>
+    // (no es contenido interactivo, a diferencia del audio, que sigue
+    // fuera de él, ver .optionMedia).
+    expect(card.querySelector('.optionButton img')).not.toBeNull()
+    expect(card.querySelector('.optionMedia img')).toBeNull()
   })
 
   it('la imagen de una respuesta es descendiente del .option de ESA respuesta, no un hermano suelto después de él', () => {
     // Traducción del mismo contrato de estructura que fija
-    // `PlayerScreen.test.tsx` para la app: aunque la imagen no puede ir
-    // DENTRO del <button> (ver test de arriba), sí debe quedar dentro del
-    // mismo `.option` que agrupa visualmente esa respuesta (ver
-    // `exportedStyles.ts`, que traslada el borde de "tarjeta" de
-    // `.optionButton` a `.option` para que se perciba como una única
-    // unidad) — nunca como hijo directo de `.options` (la lista completa).
+    // `PlayerScreen.test.tsx` para la app: la imagen vive DENTRO del
+    // <button> de la propia respuesta (ver test de arriba), así que por
+    // construcción ya es descendiente del mismo `.option` que agrupa
+    // visualmente esa respuesta — este test fija ese contrato de estructura
+    // explícitamente, nunca como hijo directo de `.options` (la lista
+    // completa).
     runExportedBundle(buildHtmlBundle(sampleProject(), sampleAssets))
     clickButton('Empezar el caso')
 
@@ -667,7 +683,7 @@ describe('buildHtmlBundle — comportamiento del HTML generado (jsdom)', () => {
     clickButton('Empezar el caso')
 
     const disabled = [...document.querySelectorAll<HTMLButtonElement>('.optionButton')].find(
-      (button) => button.textContent === 'No hacer nada',
+      (button) => stripTrailingArrow(button.textContent) === 'No hacer nada',
     )
     expect(disabled?.disabled).toBe(true)
 
@@ -786,6 +802,105 @@ describe('buildHtmlBundle — bloques de contenido de una diapositiva (milestone
     expect(currentCard().querySelector('.body')?.textContent).toBe(
       'Esta diapositiva todavía no tiene contenido.',
     )
+  })
+})
+
+describe('buildHtmlBundle — imágenes ampliables + tamaño (petición de usuario)', () => {
+  beforeEach(() => {
+    document.body.innerHTML = ''
+  })
+
+  it('por defecto (sin `expandable` guardado), la imagen va envuelta en un botón "ampliar" que abre un lightbox a pantalla completa', () => {
+    runExportedBundle(buildHtmlBundle(blocksProject([imageBlock(IMAGE_ASSET_ID)]), sampleAssets))
+
+    const image = currentCard().querySelector<HTMLImageElement>('img')
+    expect(image).not.toBeNull()
+    expect(image?.closest('button')?.classList.contains('expandableImage')).toBe(true)
+    expect(document.querySelector('.lightboxBackdrop')).toBeNull()
+
+    image?.closest('button')?.click()
+
+    const lightbox = document.querySelector<HTMLElement>('.lightboxBackdrop')
+    expect(lightbox).not.toBeNull()
+    expect(lightbox?.querySelector('img')?.getAttribute('src')).toBe(image?.getAttribute('src'))
+  })
+
+  it('el lightbox se cierra al pulsar el fondo, el botón "×", o la tecla Escape', () => {
+    runExportedBundle(buildHtmlBundle(blocksProject([imageBlock(IMAGE_ASSET_ID)]), sampleAssets))
+    const openLightbox = () => currentCard().querySelector<HTMLImageElement>('img')?.closest('button')?.click()
+
+    openLightbox()
+    expect(document.querySelector('.lightboxBackdrop')).not.toBeNull()
+    document.querySelector<HTMLButtonElement>('.lightboxClose')?.click()
+    expect(
+      document.querySelector<HTMLElement>('.lightboxBackdrop')?.style.display,
+    ).toBe('none')
+
+    openLightbox()
+    expect(
+      document.querySelector<HTMLElement>('.lightboxBackdrop')?.style.display,
+    ).toBe('flex')
+    document.querySelector<HTMLElement>('.lightboxBackdrop')?.click()
+    expect(
+      document.querySelector<HTMLElement>('.lightboxBackdrop')?.style.display,
+    ).toBe('none')
+
+    openLightbox()
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    expect(
+      document.querySelector<HTMLElement>('.lightboxBackdrop')?.style.display,
+    ).toBe('none')
+  })
+
+  it('pulsar la propia imagen dentro del lightbox no lo cierra (solo pulsar el fondo)', () => {
+    runExportedBundle(buildHtmlBundle(blocksProject([imageBlock(IMAGE_ASSET_ID)]), sampleAssets))
+    currentCard().querySelector<HTMLImageElement>('img')?.closest('button')?.click()
+
+    document.querySelector<HTMLElement>('.lightboxBackdrop')?.querySelector('img')?.click()
+
+    expect(
+      document.querySelector<HTMLElement>('.lightboxBackdrop')?.style.display,
+    ).toBe('flex')
+  })
+
+  it('petición de usuario ("un botón... para hacer no ampliable la imagen"): `expandable: false` la deja como una imagen normal, sin botón ni lightbox', () => {
+    runExportedBundle(
+      buildHtmlBundle(
+        blocksProject([imageBlock(IMAGE_ASSET_ID, { expandable: false })]),
+        sampleAssets,
+      ),
+    )
+
+    const image = currentCard().querySelector<HTMLImageElement>('img')
+    expect(image?.closest('button')).toBeNull()
+    image?.click()
+    expect(document.querySelector('.lightboxBackdrop')).toBeNull()
+  })
+
+  it('petición de usuario ("un desplegable... Pequeño/Normal/Grande"): `size` fija la clase de tamaño de la imagen; sin `size` usa el tamaño normal de siempre', () => {
+    const content = [
+      imageBlock(IMAGE_ASSET_ID, { size: 'small' }),
+      imageBlock(SECOND_IMAGE_ASSET_ID, { size: 'large' }),
+      imageBlock(IMAGE_ASSET_ID),
+    ]
+    runExportedBundle(buildHtmlBundle(blocksProject(content), multiImageAssets))
+
+    const images = [...currentCard().querySelectorAll<HTMLImageElement>('img')]
+    expect(images.map((img) => img.classList.contains('mediaSmall'))).toEqual([true, false, false])
+    expect(images.map((img) => img.classList.contains('mediaLarge'))).toEqual([false, true, false])
+    expect(images.map((img) => img.classList.contains('mediaNormal'))).toEqual([false, false, true])
+  })
+
+  it('la imagen de una respuesta nunca es ampliable (no hay botón "ampliar" ni lightbox)', () => {
+    runExportedBundle(buildHtmlBundle(sampleProject(), sampleAssets))
+    clickButton('Empezar el caso')
+
+    const responseImage = currentCard().querySelector<HTMLImageElement>('.optionButton img')
+    expect(responseImage).not.toBeNull()
+    expect(responseImage?.closest('.expandableImage')).toBeNull()
+
+    responseImage?.click()
+    expect(document.querySelector('.lightboxBackdrop')).toBeNull()
   })
 })
 
@@ -933,7 +1048,7 @@ describe('buildHtmlBundle — comportamiento del HTML generado: variables/condic
 
     const optionTexts = [
       ...document.querySelectorAll<HTMLButtonElement>('#brunch-root .optionButton'),
-    ].map((button) => button.textContent)
+    ].map((button) => stripTrailingArrow(button.textContent))
     expect(optionTexts).toEqual(['Activar', 'Omitir'])
     expect(optionTexts).not.toContain('Solo si ya está activo')
   })
@@ -969,7 +1084,7 @@ describe('buildHtmlBundle — comportamiento del HTML generado: variables/condic
 
     const optionTexts = [
       ...document.querySelectorAll<HTMLButtonElement>('#brunch-root .optionButton'),
-    ].map((button) => button.textContent)
+    ].map((button) => stripTrailingArrow(button.textContent))
     expect(optionTexts).toEqual(['Activar', 'Omitir'])
   })
 })

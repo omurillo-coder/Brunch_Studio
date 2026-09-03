@@ -26,10 +26,16 @@ import type { ProjectDocument } from './schemas'
  * Milestone "+1 fallo con Game Over", petición de usuario: dos exclusiones
  * deliberadas, ambas porque el patrón que detectarían es INTENCIONAL en
  * este pack, no un error a revisar —
- * - `detectCycles` descarta cualquier bucle que pase por un nodo marcado con
- *   `SlideNode.canvasBadge` ("+1 Fallo"/"Game Over"): es casi siempre el
- *   bucle de reintento a propósito ("Vale, voy a intentarlo" vuelve a la
- *   diapositiva de decisión).
+ * - `detectCycles` descarta un bucle SOLO si TODOS sus nodos están marcados
+ *   con `SlideNode.canvasBadge` ("+1 Fallo"/"Game Over") — es decir, el
+ *   bucle de reintento de 2 nodos a propósito ("Vale, voy a intentarlo"
+ *   vuelve a la diapositiva de decisión), no cualquier bucle que
+ *   simplemente PASE por uno de esos nodos. Corrección de revisión de
+ *   código: la primera versión descartaba el bucle si CUALQUIERA de sus
+ *   nodos llevaba la insignia, así que un bucle real y no relacionado
+ *   (p.ej. una diapositiva reutilizada por error en otra rama que también
+ *   pasara por "+1 Fallo") quedaba oculto del panel de avisos junto con el
+ *   bucle intencional.
  * - `detectUnlinkedResponses` descarta cualquier respuesta con
  *   `actsAsExit: true` ("No, me rindo."): no tiene destino a propósito,
  *   actúa como el botón Salir — no es una respuesta "sin terminar de
@@ -136,11 +142,13 @@ export function detectCycles(project: ProjectDocument): CycleIssue[] {
     }
   }
 
-  // Petición de usuario: un bucle que pasa por la diapositiva "+1 Fallo" o
-  // "Game Over" del pack (`gameOverPackNodeIds`) es casi siempre el bucle de
-  // reintento intencional de ese pack — no cuenta como aviso.
+  // Petición de usuario, corregida en revisión de código: solo el bucle
+  // FORMADO ÍNTEGRAMENTE por diapositivas del pack "+1 Fallo"/"Game Over"
+  // (`gameOverPackNodeIds`) es el bucle de reintento intencional — `every`,
+  // no `some`: un bucle real que solo PASE por una de esas diapositivas
+  // (junto con otras ajenas al pack) sigue contando como aviso normal.
   const badgeIds = gameOverPackNodeIds(project)
-  return cycles.filter((cycle) => !cycle.nodeIds.some((id) => badgeIds.has(id)))
+  return cycles.filter((cycle) => !cycle.nodeIds.every((id) => badgeIds.has(id)))
 }
 
 // ---------------------------------------------------------------------------

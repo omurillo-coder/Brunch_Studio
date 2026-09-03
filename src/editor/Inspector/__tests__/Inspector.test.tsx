@@ -950,6 +950,69 @@ describe('Inspector — editor de bloques de contenido de una diapositiva (miles
     // El control de quitar sigue disponible a pesar del fallo de vista previa.
     expect(screen.getByRole('button', { name: 'Quitar bloque 1' })).toBeInTheDocument()
   })
+
+  /** Mismo criterio que el test de "fallo de getAsset" de arriba: la vista
+   *  previa (`AssetPreview`) no importa para estos controles, así que se usa
+   *  un `assetRepository` que la hace fallar a propósito — simplifica el
+   *  setup sin afectar lo que se está probando (`ImageBlockOptions`). */
+  function renderSlideWithAttachedImage() {
+    const id = createEmptySlide()
+    act(() => {
+      useProjectStore.getState().addImageBlock(id, 'asset-ya-adjunto')
+      useProjectStore.getState().selectNode(id)
+    })
+    const assetRepository = {
+      importAsset: vi.fn(),
+      getAsset: vi.fn().mockRejectedValue(new Error('boom')),
+      gcOrphanAssets: vi.fn(),
+    }
+    renderInspectorWithServices({ assetRepository })
+    return id
+  }
+
+  it('petición de usuario ("botón... hacer no ampliable" + "desplegable... Tamaño"): un bloque de imagen YA adjunta muestra ambos controles, con "Normal" seleccionado por defecto', async () => {
+    renderSlideWithAttachedImage()
+
+    expect(await screen.findByRole('button', { name: 'Hacer no ampliable' })).toBeInTheDocument()
+    const sizeSelect = screen.getByLabelText('Tamaño') as HTMLSelectElement
+    expect(sizeSelect.value).toBe('normal')
+  })
+
+  it('un bloque de imagen pendiente de subir (sin assetId) no muestra estos controles', () => {
+    const id = createEmptySlide()
+    act(() => {
+      useProjectStore.getState().addImageBlock(id) // sin assetId: "pendiente de subir"
+      useProjectStore.getState().selectNode(id)
+    })
+    renderInspectorWithServices({})
+
+    expect(screen.queryByRole('button', { name: /ampliable/ })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Tamaño')).not.toBeInTheDocument()
+  })
+
+  it('pulsar el botón alterna "Hacer no ampliable"/"Hacer ampliable" y fija `expandable` en el bloque (`null` = vuelve a ampliable por defecto)', async () => {
+    const id = renderSlideWithAttachedImage()
+    const blockId = firstBlockId(id)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Hacer no ampliable' }))
+    expect(slideNode(id).content[0]).toMatchObject({ id: blockId, expandable: false })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Hacer ampliable' }))
+    const restored = slideNode(id).content[0]
+    expect(restored?.type === 'image' ? restored.expandable : 'missing').toBeUndefined()
+  })
+
+  it('el desplegable de tamaño fija `size` en el bloque; "Normal" lo borra (`null`, vuelve al valor por defecto)', async () => {
+    const id = renderSlideWithAttachedImage()
+
+    const sizeSelect = await screen.findByLabelText('Tamaño')
+    fireEvent.change(sizeSelect, { target: { value: 'large' } })
+    expect(slideNode(id).content[0]).toMatchObject({ size: 'large' })
+
+    fireEvent.change(sizeSelect, { target: { value: 'normal' } })
+    const restored = slideNode(id).content[0]
+    expect(restored?.type === 'image' ? restored.size : 'missing').toBeUndefined()
+  })
 })
 
 describe('Inspector — puntuación por respuesta (fase 3, Milestone 2)', () => {

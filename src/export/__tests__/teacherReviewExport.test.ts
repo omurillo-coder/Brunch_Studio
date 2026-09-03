@@ -156,9 +156,17 @@ function currentCard(): HTMLElement {
   return card
 }
 
+/** Petición de usuario ("flecha sutil a la derecha"): el `<button>` de una
+ *  opción ahora incluye la flecha "→" (`.optionArrow`) como parte de su
+ *  `textContent` (p.ej. "Ir al final A→"), así que la comparación ignora
+ *  una flecha final — el resto de botones (sin flecha) no se ven afectados. */
+function stripTrailingArrow(text: string | null): string {
+  return (text ?? '').replace(/→\s*$/, '').trim()
+}
+
 function clickButtonWithText(text: string, root: ParentNode = document): void {
   const button = [...root.querySelectorAll<HTMLButtonElement>('button')].find(
-    (candidate) => candidate.textContent === text,
+    (candidate) => stripTrailingArrow(candidate.textContent) === text,
   )
   if (!button) {
     throw new Error(`No existe ningún botón con el texto "${text}".`)

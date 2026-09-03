@@ -1,6 +1,6 @@
 import { produce } from 'immer'
 import { createId } from './id'
-import type { ContentBlock, ProjectDocument, SlideNode } from './schemas'
+import type { ContentBlock, ImageSize, ProjectDocument, SlideNode } from './schemas'
 
 /**
  * ---------------------------------------------------------------------------
@@ -158,6 +158,48 @@ export function attachImageAsset(
     const draftBlock = draftNode.content[index]
     if (draftBlock && draftBlock.type === 'image') {
       draftBlock.assetId = assetId
+    }
+    draft.metadata.updatedAt = new Date().toISOString()
+  })
+}
+
+/**
+ * Petición de usuario ("botón para hacer no ampliable la imagen" + "un
+ * desplegable... Pequeño/Normal/Grande"): parche de las dos opciones
+ * puramente visuales de un bloque de imagen — `expandable`/`size`, ver sus
+ * comentarios en `ContentBlockSchema` (`schemas.ts`). Mismo criterio de
+ * patch que el resto del dominio: `undefined` no toca ese campo, `null` lo
+ * borra (vuelve al valor por defecto: ampliable/tamaño normal) — nunca hace
+ * falta pasar los dos a la vez. Lanza `Error` si el nodo no existe/no es
+ * diapositiva, si el bloque no existe, o si no es de tipo `image` — mismo
+ * criterio que `attachImageAsset`.
+ */
+export function updateImageBlockOptions(
+  project: ProjectDocument,
+  slideNodeId: string,
+  blockId: string,
+  patch: { expandable?: boolean | null; size?: ImageSize | null },
+): ProjectDocument {
+  const node = findSlideNode(project, slideNodeId)
+  const index = findBlockIndex(node, blockId)
+  if (index === -1) {
+    throw new Error(`La diapositiva "${slideNodeId}" no tiene un bloque con id "${blockId}".`)
+  }
+  const block = node.content[index]
+  if (!block || block.type !== 'image') {
+    throw new Error(`El bloque "${blockId}" de la diapositiva "${slideNodeId}" no es de tipo "image".`)
+  }
+
+  return produce(project, (draft) => {
+    const draftNode = draft.graph.nodes.find((candidate) => candidate.id === slideNodeId)
+    if (!draftNode || draftNode.type !== 'slide') return
+    const draftBlock = draftNode.content[index]
+    if (!draftBlock || draftBlock.type !== 'image') return
+    if (patch.expandable !== undefined) {
+      draftBlock.expandable = patch.expandable === null ? undefined : patch.expandable
+    }
+    if (patch.size !== undefined) {
+      draftBlock.size = patch.size === null ? undefined : patch.size
     }
     draft.metadata.updatedAt = new Date().toISOString()
   })
