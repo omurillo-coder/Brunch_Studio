@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { PlayerScreen } from '../PlayerScreen'
 import { useProjectStore } from '../../store'
 import { resetProjectStore } from '../../store/testHelpers'
@@ -886,10 +886,6 @@ describe('PlayerScreen: puntuación acumulada', () => {
 })
 
 describe('PlayerScreen: botón "Salir" (vista Final)', () => {
-  afterEach(() => {
-    vi.restoreAllMocks()
-  })
-
   /** Lleva el Player hasta la tarjeta de Final del recorrido de prueba. */
   function reachFinal() {
     buildGraphInStore()
@@ -916,26 +912,18 @@ describe('PlayerScreen: botón "Salir" (vista Final)', () => {
     expect(exitButton.className).not.toBe(styles.primaryButton)
   })
 
-  it('al pulsarlo llama a window.close() y muestra el aviso de que ya se puede cerrar la pestaña', () => {
-    const closeSpy = vi.spyOn(window, 'close').mockImplementation(() => {})
+  it('corrección de bug reportado: al pulsarlo sale del modo "Probar" (mismo destino que "← Volver al editor"), sin quedarse con un aviso de "cerrar la pestaña" que no tiene sentido dentro de la app', () => {
     reachFinal()
-
-    expect(screen.queryByText('Ya puedes cerrar esta pestaña.')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByText('Salir'))
 
-    expect(closeSpy).toHaveBeenCalledTimes(1)
-    expect(screen.getByText('Ya puedes cerrar esta pestaña.')).toBeInTheDocument()
+    expect(useProjectStore.getState().ui.previewMode).toBe(false)
+    expect(screen.queryByText('Ya puedes cerrar esta pestaña.')).not.toBeInTheDocument()
   })
 })
 
 describe('PlayerScreen: milestone "+1 fallo con Game Over"', () => {
-  afterEach(() => {
-    vi.restoreAllMocks()
-  })
-
-  it('una respuesta actsAsExit es pulsable sin destino, y al elegirla se queda en la misma diapositiva mostrando el aviso de "Salir"', () => {
-    const closeSpy = vi.spyOn(window, 'close').mockImplementation(() => {})
+  it('una respuesta actsAsExit es pulsable sin destino, y al elegirla sale del modo "Probar" (corrección de bug reportado: mismo destino que el botón "Salir" de la vista Final, ya no un aviso de "cerrar la pestaña")', () => {
     const { decisionId } = buildGraphInStore()
     const responseExitId = addResponseTo(decisionId)
     act(() => {
@@ -954,41 +942,7 @@ describe('PlayerScreen: milestone "+1 fallo con Game Over"', () => {
 
     fireEvent.click(screen.getByText('No, me rindo.'))
 
-    expect(closeSpy).toHaveBeenCalledTimes(1)
-    expect(screen.getByText('Ya puedes cerrar esta pestaña.')).toBeInTheDocument()
-    // Sigue en la MISMA diapositiva: la otra respuesta ("Camino A") sigue
-    // visible, no navegó al Final.
-    expect(screen.getByText('Camino A')).toBeInTheDocument()
-    expect(screen.queryByText('Fin de la experiencia')).not.toBeInTheDocument()
-  })
-
-  it('corrección de revisión de código: "↺ Reiniciar experiencia" limpia el aviso de "Salir" — no debe reaparecer en la primera decisión del recorrido reiniciado', () => {
-    const closeSpy = vi.spyOn(window, 'close').mockImplementation(() => {})
-    const { decisionId } = buildGraphInStore()
-    const responseExitId = addResponseTo(decisionId)
-    act(() => {
-      useProjectStore.getState().updateResponse(decisionId, responseExitId, {
-        text: 'No, me rindo.',
-        actsAsExit: true,
-      })
-    })
-
-    renderPlayer()
-    fireEvent.click(screen.getByText('Continuar'))
-    fireEvent.click(screen.getByText('No, me rindo.'))
-    expect(screen.getByText('Ya puedes cerrar esta pestaña.')).toBeInTheDocument()
-
-    fireEvent.click(screen.getByText('↺ Reiniciar experiencia'))
-    // De vuelta al inicio: el aviso de "Salir" no debe seguir presente.
-    expect(screen.queryByText('Ya puedes cerrar esta pestaña.')).not.toBeInTheDocument()
-
-    // Ni siquiera al volver a alcanzar la misma diapositiva de decisión sin
-    // haber pulsado ningún botón de salir esta vez.
-    fireEvent.click(screen.getByText('Continuar'))
-    expect(screen.queryByText('Ya puedes cerrar esta pestaña.')).not.toBeInTheDocument()
-    expect(screen.getByText('No, me rindo.')).toBeInTheDocument()
-
-    closeSpy.mockRestore()
+    expect(useProjectStore.getState().ui.previewMode).toBe(false)
   })
 
   it('el Final muestra su contenido alternativo cuando la condición se cumple (tras visitar la diapositiva con visitEffects)', () => {

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import type { CSSProperties } from 'react'
 import { useProject, useProjectStore, usePreviewStartNodeId } from '../store'
 import {
   CICLOS,
@@ -497,35 +498,71 @@ function IntroCard({ node, onContinue }: { node: IntroNode; onContinue: () => vo
 }
 
 /** Paleta fija de piezas de confeti (milestone "+1 fallo con Game Over",
- *  petición de usuario: "Final Perfecto... con confeti") — colores vivos
- *  DELIBERADAMENTE fijos, no tokens `--bs-color-*`: es una decoración
- *  festiva puntual, no una superficie de la interfaz que deba respetar el
- *  tema claro/oscuro (igual criterio que la portada de marca iLERNA,
- *  `.introCard`, con sus propios colores fijos). Traducción literal en
- *  `buildConfetti` de `src/export/exportedPlayerScript.ts`. */
-const CONFETTI_COLORS = ['#f0677a', '#22a5a0', '#f5b342', '#7c6bf0', '#4fb0e8', '#f2836b']
-const CONFETTI_PIECE_COUNT = 60
+ *  petición de usuario: "Final Perfecto... con confeti", ampliada después a
+ *  petición de usuario: "muy ESPECTACULAR") — colores vivos DELIBERADAMENTE
+ *  fijos, no tokens `--bs-color-*`: es una decoración festiva puntual, no
+ *  una superficie de la interfaz que deba respetar el tema claro/oscuro
+ *  (igual criterio que la portada de marca iLERNA, `.introCard`, con sus
+ *  propios colores fijos). Traducción literal en `buildConfetti` de
+ *  `src/export/exportedPlayerScript.ts`. */
+const CONFETTI_COLORS = [
+  '#f0677a',
+  '#22a5a0',
+  '#f5b342',
+  '#7c6bf0',
+  '#4fb0e8',
+  '#f2836b',
+  '#ffd23f',
+  '#ff5da2',
+]
+/** Petición de usuario ("muy ESPECTACULAR"): más del doble de piezas que
+ *  la versión original (60). */
+const CONFETTI_PIECE_COUNT = 150
 
 interface ConfettiPiece {
   id: number
   leftPercent: number
   color: string
+  shape: 'rect' | 'circle'
+  sizePx: number
   durationSeconds: number
   delaySeconds: number
-  rotateDegrees: number
+  rotateStartDegrees: number
+  /** Vueltas totales durante toda la caída (1-3, ver comentario de
+   *  `confettiFall` en `PlayerScreen.module.css`) — antes siempre 720°
+   *  (2 vueltas) fijas para todas las piezas; ahora varía pieza a pieza
+   *  para que el volteo se vea más caótico/real. */
+  spinDegrees: number
+  /** Desplazamiento horizontal (en px) en 4 puntos de control de la caída,
+   *  para un vaivén lateral tipo "hoja al viento" en vez de una línea recta
+   *  — la parte central de la petición "muy ESPECTACULAR". */
+  driftPx: [number, number, number, number]
 }
 
-/** Genera `CONFETTI_PIECE_COUNT` piezas con posición/color/temporización
- *  aleatorios — extraído de `Confetti` para poder memoizarlo (una sola
- *  tanda por montaje, ver su comentario). */
+/** Genera `CONFETTI_PIECE_COUNT` piezas con posición/color/forma/tamaño/
+ *  temporización/vaivén aleatorios — extraído de `Confetti` para poder
+ *  memoizarlo (una sola tanda por montaje, ver su comentario). */
 function randomConfettiPieces(): ConfettiPiece[] {
   return Array.from({ length: CONFETTI_PIECE_COUNT }, (_, index) => ({
     id: index,
     leftPercent: Math.random() * 100,
     color: CONFETTI_COLORS[index % CONFETTI_COLORS.length] as string,
-    durationSeconds: 2.2 + Math.random() * 1.6,
-    delaySeconds: Math.random() * 0.4,
-    rotateDegrees: Math.random() * 360,
+    shape: Math.random() < 0.5 ? 'rect' : 'circle',
+    sizePx: 6 + Math.random() * 8,
+    // Petición de usuario ("no que se frene en el final"): duraciones más
+    // largas que antes (2.2s-3.8s) porque ahora el recorrido vertical
+    // también es mayor (ver `confettiFall`) — mantiene una velocidad de
+    // caída similar, no más lenta.
+    durationSeconds: 2.8 + Math.random() * 2,
+    delaySeconds: Math.random() * 0.6,
+    rotateStartDegrees: Math.random() * 360,
+    spinDegrees: 360 + Math.random() * 720,
+    driftPx: [
+      (Math.random() - 0.5) * 90,
+      (Math.random() - 0.5) * 90,
+      (Math.random() - 0.5) * 90,
+      (Math.random() - 0.5) * 90,
+    ],
   }))
 }
 
@@ -547,19 +584,36 @@ function Confetti() {
   const pieces = useMemo(() => randomConfettiPieces(), [])
   return (
     <div className={styles.confetti} aria-hidden="true">
-      {pieces.map((piece) => (
-        <span
-          key={piece.id}
-          className={styles.confettiPiece}
-          style={{
-            left: `${piece.leftPercent}%`,
-            backgroundColor: piece.color,
-            animationDuration: `${piece.durationSeconds}s`,
-            animationDelay: `${piece.delaySeconds}s`,
-            transform: `rotate(${piece.rotateDegrees}deg)`,
-          }}
-        />
-      ))}
+      {pieces.map((piece) => {
+        // Variables CSS personalizadas (ver `confettiFall` en
+        // `PlayerScreen.module.css`): `CSSProperties` no las declara (no
+        // hay forma de tipar una propiedad `--*` arbitraria sin ampliar el
+        // propio tipo), así que se anotan aquí, en la variable, en vez de
+        // recurrir a un `as` sin comprobar nada.
+        const style: CSSProperties & {
+          '--confetti-rotate-start': string
+          '--confetti-spin': string
+          '--confetti-drift-1': string
+          '--confetti-drift-2': string
+          '--confetti-drift-3': string
+          '--confetti-drift-4': string
+        } = {
+          left: `${piece.leftPercent}%`,
+          width: `${piece.sizePx}px`,
+          height: `${piece.shape === 'circle' ? piece.sizePx : piece.sizePx * 1.8}px`,
+          borderRadius: piece.shape === 'circle' ? '50%' : '2px',
+          backgroundColor: piece.color,
+          animationDuration: `${piece.durationSeconds}s`,
+          animationDelay: `${piece.delaySeconds}s`,
+          '--confetti-rotate-start': `${piece.rotateStartDegrees}deg`,
+          '--confetti-spin': `${piece.spinDegrees}deg`,
+          '--confetti-drift-1': `${piece.driftPx[0]}px`,
+          '--confetti-drift-2': `${piece.driftPx[1]}px`,
+          '--confetti-drift-3': `${piece.driftPx[2]}px`,
+          '--confetti-drift-4': `${piece.driftPx[3]}px`,
+        }
+        return <span key={piece.id} className={styles.confettiPiece} style={style} />
+      })}
     </div>
   )
 }
@@ -652,43 +706,37 @@ export function PlayerScreen({ filePath }: PlayerScreenProps) {
   const [playerState, setPlayerState] = useState<PlayerState>(() =>
     getInitialState(project, previewStartNodeId ?? undefined),
   )
-  const [exitMessageVisible, setExitMessageVisible] = useState(false)
   // Petición de usuario ("imágenes ampliables"): la imagen actualmente
   // abierta en el `Lightbox` de pantalla completa, o `null` si ninguna —
   // un único estado a nivel de pantalla (no uno por imagen): solo puede
   // haber un lightbox abierto a la vez.
   const [lightboxImage, setLightboxImage] = useState<{ dataUri: string; alt: string } | null>(null)
 
+  /**
+   * Sale del modo "Probar" y vuelve al editor — mismo destino que "←
+   * Volver al editor" de la cabecera (de ahí que reutilice el nombre
+   * `handleExit`), ahora también para el botón "Salir" de la vista Final Y
+   * para una respuesta `actsAsExit` (milestone "+1 fallo con Game Over"):
+   * ambas representan la misma intención del diseñador instruccional
+   * ("aquí se acaba la experiencia para quien juega"), así que dentro del
+   * propio "Probar" deben comportarse igual que la cabecera.
+   *
+   * Corrección de bug reportado: antes llamaban a `window.close()` (que solo
+   * cierra pestañas/ventanas abiertas por script) y se quedaban con un
+   * aviso de "ya puedes cerrar la pestaña" pegado en pantalla — sin
+   * sentido en el propio editor, donde no hay ninguna pestaña de navegador
+   * que cerrar, y sin forma de seguir jugando ni de volver atrás. Ese
+   * `window.close()` SÍ tiene sentido en el HTML/SCORM exportado, un
+   * documento real de navegador — ahí se mantiene tal cual (ver
+   * `exportedPlayerScript.ts`); esta función es exclusiva del "Probar"
+   * dentro de la app.
+   */
   function handleExit() {
     setPreviewMode(false)
   }
 
   function handleRestart() {
     setPlayerState(getInitialState(project, previewStartNodeId ?? undefined))
-    // Corrección (revisión de código, milestone "+1 fallo con Game Over"):
-    // sin este reset, un aviso de "Salir" mostrado antes de reiniciar
-    // (`handleExitAttempt`, más abajo) quedaba pegado y volvía a aparecer
-    // en la primera vista de decisión del recorrido reiniciado, aunque no
-    // se hubiera vuelto a pulsar ningún botón de salir.
-    setExitMessageVisible(false)
-  }
-
-  /**
-   * Botón "Salir" de la vista Final (no confundir con `handleExit`, que es
-   * "Volver al editor" de la cabecera). `window.close()` solo cierra
-   * pestañas/ventanas abiertas por script — la mayoría de navegadores lo
-   * bloquean si no fue así (limitación conocida del navegador, no un bug de
-   * aquí). Como no hay forma fiable de detectar el éxito en todos los
-   * navegadores, siempre se muestra después el aviso de que ya se puede
-   * cerrar la pestaña a mano, para cubrir el caso — muy probable — de que el
-   * cierre automático no haya funcionado. Traducción literal en
-   * `exportedPlayerScript.ts`, salvo por la llamada a `scormFinish()` previa:
-   * aquí, dentro de la app, no hay ninguna integración SCORM de la que
-   * depender.
-   */
-  function handleExitAttempt() {
-    window.close()
-    setExitMessageVisible(true)
   }
 
   const view = getView(project, playerState)
@@ -773,24 +821,14 @@ export function PlayerScreen({ filePath }: PlayerScreenProps) {
                     // Milestone "+1 fallo con Game Over": una respuesta
                     // `actsAsExit` no navega a ningún nodo — se comporta
                     // igual que el botón "Salir" de la vista Final
-                    // (`handleExitAttempt`), quedándose en esta misma
-                    // diapositiva.
+                    // (`handleExit`): sale del modo "Probar".
                     response.actsAsExit
-                      ? handleExitAttempt()
+                      ? handleExit()
                       : setPlayerState((current) => choose(project, current, response.id))
                   }
                 />
               ))}
             </div>
-            {/* Mismo aviso que la vista Final tras "Salir" (ver
-                `handleExitAttempt`): una respuesta `actsAsExit` deja al
-                jugador en esta misma diapositiva, así que el aviso se pinta
-                aquí en vez de en una vista Final a la que nunca llega. */}
-            {exitMessageVisible && (
-              <p className={styles.exitMessage} role="status">
-                Ya puedes cerrar esta pestaña.
-              </p>
-            )}
           </div>
         )}
 
@@ -829,16 +867,11 @@ export function PlayerScreen({ filePath }: PlayerScreenProps) {
                 Reintentar
               </button>
               {/* Salir: estilo neutro (no es la acción principal de esta
-                  fila). Ver `handleExitAttempt`. */}
-              <button type="button" className={styles.neutralButton} onClick={handleExitAttempt}>
+                  fila). Ver `handleExit`. */}
+              <button type="button" className={styles.neutralButton} onClick={handleExit}>
                 Salir
               </button>
             </div>
-            {exitMessageVisible && (
-              <p className={styles.exitMessage} role="status">
-                Ya puedes cerrar esta pestaña.
-              </p>
-            )}
           </div>
         )}
 

@@ -478,8 +478,8 @@ describe('RichTextEditor: tablas editables (fase 9)', () => {
   })
 })
 
-describe('RichTextEditor: corrector ortotipográfico nativo (fase 8)', () => {
-  it('el elemento editable tiene spellcheck="true" y lang="es" al montar (activado por defecto)', async () => {
+describe('RichTextEditor: corrector ortotipográfico nativo (fase 8; petición de usuario: siempre activo, sin botón)', () => {
+  it('el elemento editable tiene spellcheck="true" y lang="es" al montar', async () => {
     render(<RichTextEditor body="Hola" onCommit={vi.fn()} />)
 
     await waitFor(() => {
@@ -491,68 +491,101 @@ describe('RichTextEditor: corrector ortotipográfico nativo (fase 8)', () => {
     expect(editable.getAttribute('lang')).toBe('es')
   })
 
-  it('el botón del corrector arranca activado y su aria-pressed lo refleja', async () => {
-    render(<RichTextEditor body="Hola" onCommit={vi.fn()} />)
-
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Corrector ortográfico' })).toBeInTheDocument()
-    })
-    expect(screen.getByRole('button', { name: 'Corrector ortográfico' })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    )
-  })
-
-  it('pulsar el botón desactiva el corrector: cambia spellcheck a "false" en caliente, sin desmontar el editor', async () => {
+  it('no hay ningún botón para desactivarlo', async () => {
     render(<RichTextEditor body="Hola" onCommit={vi.fn()} />)
 
     await waitFor(() => {
       expect(screen.getByText('Hola')).toBeInTheDocument()
     })
 
-    const toggle = screen.getByRole('button', { name: 'Corrector ortográfico' })
-    const editableBefore = document.querySelector('[contenteditable="true"]') as HTMLElement
-
-    fireEvent.mouseDown(toggle)
-    fireEvent.click(toggle)
-
-    await waitFor(() => {
-      expect(toggle).toHaveAttribute('aria-pressed', 'false')
-    })
-
-    const editableAfter = document.querySelector('[contenteditable="true"]') as HTMLElement
-    // Mismo elemento del DOM: el editor no se ha recreado, solo se le ha
-    // actualizado el atributo (`editor.setOptions` -> `view.setProps`, ver
-    // `RichTextEditor.tsx`).
-    expect(editableAfter).toBe(editableBefore)
-    expect(editableAfter.getAttribute('spellcheck')).toBe('false')
-
-    // Y se puede reactivar.
-    fireEvent.mouseDown(toggle)
-    fireEvent.click(toggle)
-    await waitFor(() => {
-      expect(editableAfter.getAttribute('spellcheck')).toBe('true')
-    })
+    expect(screen.queryByRole('button', { name: 'Corrector ortográfico' })).not.toBeInTheDocument()
+    expect(screen.queryByText('ABC')).not.toBeInTheDocument()
   })
+})
 
-  it('desactivar el corrector conserva el aria-labelledby del editor', async () => {
-    render(<RichTextEditor body="Hola" onCommit={vi.fn()} ariaLabelledBy="etiqueta-externa" />)
+describe('RichTextEditor: justificación de texto (petición de usuario)', () => {
+  const ALIGN_BUTTONS = [
+    { name: 'Alinear texto a la izquierda', align: 'left' },
+    { name: 'Centrar texto', align: 'center' },
+    { name: 'Alinear texto a la derecha', align: 'right' },
+    { name: 'Justificar texto', align: 'justify' },
+  ] as const
+
+  it('las 4 alineaciones existen en la barra, ninguna activa por defecto (párrafo sin alineación explícita)', async () => {
+    render(<RichTextEditor body="Hola" onCommit={vi.fn()} />)
 
     await waitFor(() => {
       expect(screen.getByText('Hola')).toBeInTheDocument()
     })
 
-    const editable = document.querySelector('[contenteditable="true"]') as HTMLElement
-    expect(editable.getAttribute('aria-labelledby')).toBe('etiqueta-externa')
+    for (const { name } of ALIGN_BUTTONS) {
+      expect(screen.getByRole('button', { name })).toHaveAttribute('aria-pressed', 'false')
+    }
+  })
 
-    const toggle = screen.getByRole('button', { name: 'Corrector ortográfico' })
-    fireEvent.mouseDown(toggle)
-    fireEvent.click(toggle)
+  it.each(ALIGN_BUTTONS)(
+    'pulsar "$name" aplica esa alineación al párrafo y marca el botón como activo',
+    async ({ name, align }) => {
+      render(<RichTextEditor body="Hola" onCommit={vi.fn()} />)
+      await waitFor(() => {
+        expect(screen.getByText('Hola')).toBeInTheDocument()
+      })
 
+      const button = screen.getByRole('button', { name })
+      fireEvent.mouseDown(button)
+      fireEvent.click(button)
+
+      await waitFor(() => {
+        expect(button).toHaveAttribute('aria-pressed', 'true')
+      })
+      const paragraph = document.querySelector('[contenteditable="true"] p') as HTMLElement
+      expect(paragraph.style.textAlign).toBe(align)
+    },
+  )
+
+  it('pulsar dos veces la misma alineación la quita (vuelve al valor por defecto, sin guardar nada)', async () => {
+    render(<RichTextEditor body="Hola" onCommit={vi.fn()} />)
     await waitFor(() => {
-      expect(editable.getAttribute('spellcheck')).toBe('false')
+      expect(screen.getByText('Hola')).toBeInTheDocument()
     })
-    expect(editable.getAttribute('aria-labelledby')).toBe('etiqueta-externa')
+
+    const centerButton = screen.getByRole('button', { name: 'Centrar texto' })
+    fireEvent.mouseDown(centerButton)
+    fireEvent.click(centerButton)
+    await waitFor(() => {
+      expect(centerButton).toHaveAttribute('aria-pressed', 'true')
+    })
+
+    fireEvent.mouseDown(centerButton)
+    fireEvent.click(centerButton)
+    await waitFor(() => {
+      expect(centerButton).toHaveAttribute('aria-pressed', 'false')
+    })
+    const paragraph = document.querySelector('[contenteditable="true"] p') as HTMLElement
+    expect(paragraph.style.textAlign).toBe('')
+  })
+
+  it('cambiar de alineación desactiva la anterior (son mutuamente excluyentes)', async () => {
+    render(<RichTextEditor body="Hola" onCommit={vi.fn()} />)
+    await waitFor(() => {
+      expect(screen.getByText('Hola')).toBeInTheDocument()
+    })
+
+    const leftButton = screen.getByRole('button', { name: 'Alinear texto a la izquierda' })
+    const rightButton = screen.getByRole('button', { name: 'Alinear texto a la derecha' })
+
+    fireEvent.mouseDown(leftButton)
+    fireEvent.click(leftButton)
+    await waitFor(() => {
+      expect(leftButton).toHaveAttribute('aria-pressed', 'true')
+    })
+
+    fireEvent.mouseDown(rightButton)
+    fireEvent.click(rightButton)
+    await waitFor(() => {
+      expect(rightButton).toHaveAttribute('aria-pressed', 'true')
+    })
+    expect(leftButton).toHaveAttribute('aria-pressed', 'false')
   })
 })
 

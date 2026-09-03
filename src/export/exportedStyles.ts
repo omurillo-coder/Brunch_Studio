@@ -634,10 +634,12 @@ button:focus-visible {
 }
 
 /* Confeti (milestone "+1 fallo con Game Over", petición de usuario: "Final
-   Perfecto... con confeti") — traducción literal de \`.confetti\`/
-   \`.confettiPiece\`/\`@keyframes confettiFall\` en
-   \`src/player/PlayerScreen.module.css\` (mismos nombres de clase, mismos
-   valores), pintadas por \`buildConfetti\` en \`exportedPlayerScript.ts\`. */
+   Perfecto... con confeti", ampliada después a petición de usuario: "muy
+   ESPECTACULAR") — traducción literal de \`.confetti\`/\`.confettiPiece\`/
+   \`@keyframes confettiFall\` en \`src/player/PlayerScreen.module.css\`
+   (mismos nombres de clase, mismos valores), pintadas por \`buildConfetti\`
+   en \`exportedPlayerScript.ts\` (tamaño/forma van inline por pieza, igual
+   que en el Player). */
 .confetti {
   position: fixed;
   inset: 0;
@@ -648,19 +650,41 @@ button:focus-visible {
 
 .confettiPiece {
   position: absolute;
-  top: -14px;
-  width: 8px;
-  height: 14px;
-  opacity: 0.9;
+  top: -24px;
+  opacity: 0.95;
   animation-name: confettiFall;
-  animation-timing-function: cubic-bezier(0.15, 0.65, 0.35, 1);
+  /* Petición de usuario ("no que se frene en el final"): \`linear\`, no una
+     curva que decelere — ver el mismo comentario en
+     \`src/player/PlayerScreen.module.css\` para el porqué. */
+  animation-timing-function: linear;
   animation-fill-mode: forwards;
 }
 
+/* Ver el comentario completo de \`confettiFall\` en
+   \`src/player/PlayerScreen.module.css\`: recorrido hasta 135vh (de sobra
+   para atravesar toda la pantalla y salir por abajo), repartido en
+   proporción exacta entre los 4 tramos (25/50/75/100%) para que la
+   velocidad de caída sea constante, con vaivén lateral (\`--confetti-drift-*\`)
+   y giro (\`--confetti-spin\`) aleatorios por pieza. */
 @keyframes confettiFall {
-  to {
-    transform: translateY(115vh) rotate(720deg);
-    opacity: 0.4;
+  0% {
+    transform: translate(0, 0) rotate(var(--confetti-rotate-start));
+  }
+  25% {
+    transform: translate(var(--confetti-drift-1), 33.75vh)
+      rotate(calc(var(--confetti-rotate-start) + var(--confetti-spin) * 0.25));
+  }
+  50% {
+    transform: translate(var(--confetti-drift-2), 67.5vh)
+      rotate(calc(var(--confetti-rotate-start) + var(--confetti-spin) * 0.5));
+  }
+  75% {
+    transform: translate(var(--confetti-drift-3), 101.25vh)
+      rotate(calc(var(--confetti-rotate-start) + var(--confetti-spin) * 0.75));
+  }
+  100% {
+    transform: translate(var(--confetti-drift-4), 135vh)
+      rotate(calc(var(--confetti-rotate-start) + var(--confetti-spin)));
   }
 }
 

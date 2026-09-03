@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import type { JSONContent } from '@tiptap/core'
 import { EditorContent, useEditor, useEditorState } from '@tiptap/react'
 import {
@@ -53,8 +53,8 @@ interface TableActionConfig {
 /**
  * Editor de texto enriquecido para el campo `body` de un nodo (fase 4,
  * Milestone 2). Barra de herramientas minimalista: negrita, cursiva, lista
- * con viñetas, lista numerada, destacado (fase 8) — nada más (sin color,
- * fuente, tamaño...).
+ * con viñetas, lista numerada, destacado (fase 8), justificación de texto
+ * (petición de usuario) — nada más (sin color, fuente, tamaño...).
  *
  * Inicialización única al montar: `useEditor` recibe `parseRichBody(body)`
  * como `content` inicial y nunca se resincroniza con la prop `body` en
@@ -108,27 +108,20 @@ export function RichTextEditor({ body, onCommit, ariaLabelledBy }: RichTextEdito
   // Corrector ortotipográfico nativo del sistema/navegador (fase 8): sin
   // ninguna librería propia de diccionario, apoyado enteramente en los
   // atributos HTML `spellcheck`/`lang` del elemento editable raíz, que el
-  // propio navegador/SO interpreta. Activado por defecto; estado puramente
-  // local del componente (no se persiste en el documento ni en preferencias
-  // globales de la app — no hace falta más para esta fase).
-  const [spellcheckEnabled, setSpellcheckEnabled] = useState(true)
-
-  /** Atributos del `<div contenteditable>` raíz según el estado actual del
-   *  corrector. `spellcheck` es un atributo HTML, por eso viaja como string
-   *  `'true'`/`'false'`, no como booleano. */
-  function editorAttributes(enabled: boolean): Record<string, string> {
-    return {
-      ...(ariaLabelledBy ? { 'aria-labelledby': ariaLabelledBy } : {}),
-      spellcheck: enabled ? 'true' : 'false',
-      lang: 'es',
-    }
+  // propio navegador/SO interpreta. Petición de usuario: siempre activado,
+  // sin botón para desactivarlo (antes alternable vía un botón "ABC" en la
+  // barra — quitado).
+  const editorAttributes: Record<string, string> = {
+    ...(ariaLabelledBy ? { 'aria-labelledby': ariaLabelledBy } : {}),
+    spellcheck: 'true',
+    lang: 'es',
   }
 
   const editor = useEditor({
     extensions: RICH_TEXT_EXTENSIONS,
     content: initialDoc,
     editorProps: {
-      attributes: editorAttributes(spellcheckEnabled),
+      attributes: editorAttributes,
     },
     onUpdate: ({ editor: updatedEditor }) => {
       latestDocRef.current = updatedEditor.getJSON()
@@ -137,17 +130,6 @@ export function RichTextEditor({ body, onCommit, ariaLabelledBy }: RichTextEdito
       commitIfChanged(blurredEditor.getJSON())
     },
   })
-
-  // Alternar el corrector en caliente sin recrear el editor: `setOptions`
-  // hace merge superficial de `EditorOptions`, así que `editorProps` viaja
-  // completo (no solo `spellcheck`) o perdería `aria-labelledby`.
-  // Internamente llama a `view.setProps(...)` (ProseMirror), que actualiza
-  // de verdad los atributos del `<div contenteditable>` ya montado en el
-  // DOM — no hace falta desmontar/montar el editor.
-  useEffect(() => {
-    editor?.setOptions({ editorProps: { attributes: editorAttributes(spellcheckEnabled) } })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editor, spellcheckEnabled, ariaLabelledBy])
 
   useEffect(() => {
     return () => {
@@ -166,6 +148,10 @@ export function RichTextEditor({ body, onCommit, ariaLabelledBy }: RichTextEdito
           bulletList: false,
           orderedList: false,
           highlight: false,
+          alignLeft: false,
+          alignCenter: false,
+          alignRight: false,
+          alignJustify: false,
           isInTable: false,
           canAddRow: false,
           canDeleteRow: false,
@@ -183,6 +169,18 @@ export function RichTextEditor({ body, onCommit, ariaLabelledBy }: RichTextEdito
         bulletList: ctx.editor.isActive('bulletList'),
         orderedList: ctx.editor.isActive('orderedList'),
         highlight: ctx.editor.isActive('highlight'),
+        // Petición de usuario ("poder escoger la justificación del texto"):
+        // un booleano por alineación (mismo patrón que bold/italic/etc. de
+        // arriba) en vez de un único campo `textAlign: string` — un párrafo
+        // sin alineación explícita (el caso por defecto, ver comentario de
+        // `TextAlign.configure` en `richTextContent.ts`) no está "activo" en
+        // ninguna de las cuatro, así que ningún botón queda pulsado, que es
+        // justo lo que se quiere para "izquierda" cuando es el valor
+        // implícito, no uno guardado.
+        alignLeft: ctx.editor.isActive({ textAlign: 'left' }),
+        alignCenter: ctx.editor.isActive({ textAlign: 'center' }),
+        alignRight: ctx.editor.isActive({ textAlign: 'right' }),
+        alignJustify: ctx.editor.isActive({ textAlign: 'justify' }),
         // "Vacío" = sin ningún carácter de texto real, aunque haya un
         // párrafo vacío por defecto (el documento inicial que siembra
         // `createNode`/`duplicateNode`) — mismo criterio que ya usa el
@@ -215,6 +213,21 @@ export function RichTextEditor({ body, onCommit, ariaLabelledBy }: RichTextEdito
 
   if (!editor) {
     return null
+  }
+
+  /** Alterna una alineación (petición de usuario: "poder escoger la
+   *  justificación del texto"): si el párrafo/encabezado actual YA tiene
+   *  esa alineación, la quita (`unsetTextAlign`, vuelve al valor por
+   *  defecto — normalmente "izquierda" sin guardar nada) en vez de
+   *  dejarla fija; si no, la fija. Mismo criterio "toggle" que
+   *  `toggleBold`/`toggleItalic`/etc. de arriba, que Tiptap no ofrece de
+   *  fábrica para `setTextAlign` (siempre fija el valor, nunca alterna). */
+  function toggleAlign(align: 'left' | 'center' | 'right' | 'justify') {
+    if (editor.isActive({ textAlign: align })) {
+      editor.chain().focus().unsetTextAlign().run()
+    } else {
+      editor.chain().focus().setTextAlign(align).run()
+    }
   }
 
   const buttons: ToolbarButtonConfig[] = [
@@ -252,6 +265,34 @@ export function RichTextEditor({ body, onCommit, ariaLabelledBy }: RichTextEdito
       ariaLabel: 'Destacado',
       isActive: toolbarState?.highlight ?? false,
       onToggle: () => editor.chain().focus().toggleHighlight().run(),
+    },
+    {
+      key: 'alignLeft',
+      label: 'Izq.',
+      ariaLabel: 'Alinear texto a la izquierda',
+      isActive: toolbarState?.alignLeft ?? false,
+      onToggle: () => toggleAlign('left'),
+    },
+    {
+      key: 'alignCenter',
+      label: 'Centro',
+      ariaLabel: 'Centrar texto',
+      isActive: toolbarState?.alignCenter ?? false,
+      onToggle: () => toggleAlign('center'),
+    },
+    {
+      key: 'alignRight',
+      label: 'Der.',
+      ariaLabel: 'Alinear texto a la derecha',
+      isActive: toolbarState?.alignRight ?? false,
+      onToggle: () => toggleAlign('right'),
+    },
+    {
+      key: 'alignJustify',
+      label: 'Just.',
+      ariaLabel: 'Justificar texto',
+      isActive: toolbarState?.alignJustify ?? false,
+      onToggle: () => toggleAlign('justify'),
     },
   ]
 
@@ -355,22 +396,6 @@ export function RichTextEditor({ body, onCommit, ariaLabelledBy }: RichTextEdito
           }
         >
           ⊞ Tabla
-        </button>
-        {/* Corrector ortotipográfico nativo (fase 8): activa/desactiva el
-            atributo `spellcheck` del editor en caliente, sin ninguna
-            librería propia de diccionario — ver `editorAttributes` arriba. */}
-        <button
-          type="button"
-          className={spellcheckEnabled ? styles.toolbarButtonActive : styles.toolbarButton}
-          aria-label="Corrector ortográfico"
-          aria-pressed={spellcheckEnabled}
-          title={
-            spellcheckEnabled ? 'Corrector ortográfico activado' : 'Corrector ortográfico desactivado'
-          }
-          onMouseDown={(event) => event.preventDefault()}
-          onClick={() => setSpellcheckEnabled((current) => !current)}
-        >
-          ABC
         </button>
       </div>
       {/* Barra contextual de tabla (fase 9): solo se monta cuando el cursor

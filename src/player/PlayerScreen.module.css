@@ -36,10 +36,10 @@
 }
 
 /* Indicador de fallos (petición de usuario, milestone "+1 fallo con Game
-   Over"): sobrio a propósito, mismo tono de aviso que `.exitMessage`/
-   `--bs-color-warning` — es información de apoyo para quien prueba el
-   caso, no una alerta urgente. Solo dentro de la app (`FailureIndicator`
-   en `PlayerScreen.tsx`, SIN equivalente en `exportedPlayerScript.ts`). */
+   Over"): sobrio a propósito, mismo tono de aviso que `--bs-color-warning`
+   — es información de apoyo para quien prueba el caso, no una alerta
+   urgente. Solo dentro de la app (`FailureIndicator` en `PlayerScreen.tsx`,
+   SIN equivalente en `exportedPlayerScript.ts`). */
 .failureIndicator {
   font-size: var(--bs-font-size-sm);
   font-weight: 600;
@@ -405,14 +405,6 @@
   border-color: var(--bs-color-border-strong);
 }
 
-/* Aviso tras pulsar "Salir": sobrio, debajo de los botones, mismo tono
-   apagado que el resto de metadatos secundarios de la pantalla. */
-.exitMessage {
-  margin: 0;
-  font-size: var(--bs-font-size-sm);
-  color: var(--bs-color-text-muted);
-}
-
 .muted {
   color: var(--bs-color-text-muted);
 }
@@ -434,21 +426,67 @@
   z-index: 50;
 }
 
+/* Petición de usuario ("muy ESPECTACULAR"): tamaño/forma ahora vienen del
+   propio elemento (ver `Confetti` en `PlayerScreen.tsx`, width/height/
+   border-radius inline por pieza) en vez de fijos aquí. */
 .confettiPiece {
   position: absolute;
-  top: -14px;
-  width: 8px;
-  height: 14px;
-  opacity: 0.9;
+  top: -24px;
+  opacity: 0.95;
   animation-name: confettiFall;
-  animation-timing-function: cubic-bezier(0.15, 0.65, 0.35, 1);
+  /* Petición de usuario ("no que se frene en el final"): `linear`, no una
+     curva que decelere — antes (`cubic-bezier(0.15, 0.65, 0.35, 1)`) la
+     pieza iba frenando visiblemente según se acercaba al final de su
+     recorrido, dando la sensación de quedarse parada en vez de seguir
+     cayendo. Con velocidad constante, cada pieza mantiene el mismo ritmo
+     de caída hasta salir de la pantalla por abajo. */
+  animation-timing-function: linear;
   animation-fill-mode: forwards;
 }
 
+/**
+ * Caída de una pieza de confeti — traducción literal en `buildConfetti` de
+ * `src/export/exportedPlayerScript.ts`.
+ *
+ * Petición de usuario ("caiga hasta abajo, no que se frene" + "muy
+ * ESPECTACULAR"):
+ * - Recorrido vertical hasta 135vh (antes 115vh): de sobra para atravesar
+ *   TODA la pantalla y salir por abajo (el contenedor `.confetti` mide
+ *   exactamente 100vh y recorta lo que quede fuera, ver su comentario), sea
+ *   cual sea el tamaño de la ventana.
+ * - Los cuatro tramos (25/50/75/100%) reparten ese recorrido EN PROPORCIÓN
+ *   EXACTA al tiempo transcurrido (33.75vh/67.5vh/101.25vh/135vh = 135vh ×
+ *   25/50/75/100%): junto con `animation-timing-function: linear` de
+ *   `.confettiPiece`, la velocidad de caída es constante de principio a
+ *   fin — sin eso, unos tramos más cortos que otros crearían de nuevo el
+ *   efecto de "frenazo" que se acaba de corregir.
+ * - `--confetti-drift-*` (4 valores en px, aleatorios por pieza, ver
+ *   `Confetti`) dan el vaivén lateral tipo "hoja al viento" en vez de una
+ *   línea recta.
+ * - `--confetti-spin` (grados totales de giro, 1-3 vueltas completas por
+ *   pieza, aleatorio) sustituye a las 720° fijas (2 vueltas) de siempre:
+ *   con `calc()` se reparte en las mismas proporciones 25/50/75/100% que el
+ *   recorrido vertical, así que el giro tampoco se acelera ni frena.
+ */
 @keyframes confettiFall {
-  to {
-    transform: translateY(115vh) rotate(720deg);
-    opacity: 0.4;
+  0% {
+    transform: translate(0, 0) rotate(var(--confetti-rotate-start));
+  }
+  25% {
+    transform: translate(var(--confetti-drift-1), 33.75vh)
+      rotate(calc(var(--confetti-rotate-start) + var(--confetti-spin) * 0.25));
+  }
+  50% {
+    transform: translate(var(--confetti-drift-2), 67.5vh)
+      rotate(calc(var(--confetti-rotate-start) + var(--confetti-spin) * 0.5));
+  }
+  75% {
+    transform: translate(var(--confetti-drift-3), 101.25vh)
+      rotate(calc(var(--confetti-rotate-start) + var(--confetti-spin) * 0.75));
+  }
+  100% {
+    transform: translate(var(--confetti-drift-4), 135vh)
+      rotate(calc(var(--confetti-rotate-start) + var(--confetti-spin)));
   }
 }
 

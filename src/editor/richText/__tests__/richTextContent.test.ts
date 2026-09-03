@@ -134,7 +134,41 @@ describe('parseRichBody / serializeRichBody', () => {
     const raw = serializeRichBody(doc)
     const parsed = parseRichBody(raw)
 
-    expect(parsed).toEqual(doc)
+    // `colwidth: null` no viaja (ver `stripNullAttrs` en
+    // `richTextContent.ts`: quita cualquier atributo `null`, no solo
+    // `textAlign`) — no se pierde información real, porque `null` YA
+    // significaba "sin ancho propio", el mismo valor por defecto que un
+    // atributo ausente.
+    expect(parsed).toEqual({
+      type: 'doc',
+      content: [
+        {
+          type: 'table',
+          content: [
+            {
+              type: 'tableRow',
+              content: [
+                {
+                  type: 'tableHeader',
+                  attrs: { colspan: 1, rowspan: 1 },
+                  content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Encabezado' }] }],
+                },
+              ],
+            },
+            {
+              type: 'tableRow',
+              content: [
+                {
+                  type: 'tableCell',
+                  attrs: { colspan: 1, rowspan: 1 },
+                  content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Celda' }] }],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    })
   })
 
   it('serializeRichBody produce JSON.stringify del documento', () => {

@@ -380,14 +380,19 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
   }
 
   /** Traducción literal de \`Confetti\` (\`src/player/PlayerScreen.tsx\`,
-   *  milestone "+1 fallo con Game Over") a DOM vanilla: mismo número de
-   *  piezas, misma paleta, mismo criterio de posición/color/temporización
-   *  aleatorios, fijados aquí vía \`style.cssText\` en vez de una prop de
-   *  estilo declarativa. Se llama una única vez por vista Final que celebra
-   *  (ver su único punto de llamada en \`render()\`, más abajo) — nunca se
-   *  actualiza in-place. */
-  var CONFETTI_COLORS = ['#f0677a', '#22a5a0', '#f5b342', '#7c6bf0', '#4fb0e8', '#f2836b'];
-  var CONFETTI_PIECE_COUNT = 60;
+   *  milestone "+1 fallo con Game Over", ampliada después a petición de
+   *  usuario: "muy ESPECTACULAR") a DOM vanilla: mismo número de piezas,
+   *  misma paleta, misma mezcla de formas/tamaños, mismo criterio de
+   *  posición/color/temporización/vaivén/giro aleatorios — fijados aquí vía
+   *  \`style.cssText\` (incluidas las variables CSS \`--confetti-*\` que lee
+   *  \`confettiFall\` en \`exportedStyles.ts\`) en vez de una prop de estilo
+   *  declarativa. Se llama una única vez por vista Final que celebra (ver su
+   *  único punto de llamada en \`render()\`, más abajo) — nunca se actualiza
+   *  in-place. */
+  var CONFETTI_COLORS = [
+    '#f0677a', '#22a5a0', '#f5b342', '#7c6bf0', '#4fb0e8', '#f2836b', '#ffd23f', '#ff5da2'
+  ];
+  var CONFETTI_PIECE_COUNT = 150;
 
   function buildConfetti() {
     var wrapper = el('div', 'confetti');
@@ -396,15 +401,38 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
       var piece = el('span', 'confettiPiece');
       var left = Math.random() * 100;
       var color = CONFETTI_COLORS[i % CONFETTI_COLORS.length];
-      var duration = 2.2 + Math.random() * 1.6;
-      var delay = Math.random() * 0.4;
-      var rotate = Math.random() * 360;
+      var isCircle = Math.random() < 0.5;
+      var size = 6 + Math.random() * 8;
+      var width = size;
+      var height = isCircle ? size : size * 1.8;
+      var borderRadius = isCircle ? '50%' : '2px';
+      // Petición de usuario ("no que se frene en el final"): duraciones más
+      // largas que la versión original (2.2s-3.8s) porque el recorrido
+      // vertical también es mayor ahora (ver \`confettiFall\` en
+      // exportedStyles.ts) — mantiene una velocidad de caída similar, no
+      // más lenta.
+      var duration = 2.8 + Math.random() * 2;
+      var delay = Math.random() * 0.6;
+      var rotateStart = Math.random() * 360;
+      var spin = 360 + Math.random() * 720;
+      var drift1 = (Math.random() - 0.5) * 90;
+      var drift2 = (Math.random() - 0.5) * 90;
+      var drift3 = (Math.random() - 0.5) * 90;
+      var drift4 = (Math.random() - 0.5) * 90;
       piece.style.cssText =
         'left:' + left + '%;' +
+        'width:' + width + 'px;' +
+        'height:' + height + 'px;' +
+        'border-radius:' + borderRadius + ';' +
         'background-color:' + color + ';' +
         'animation-duration:' + duration + 's;' +
         'animation-delay:' + delay + 's;' +
-        'transform:rotate(' + rotate + 'deg);';
+        '--confetti-rotate-start:' + rotateStart + 'deg;' +
+        '--confetti-spin:' + spin + 'deg;' +
+        '--confetti-drift-1:' + drift1 + 'px;' +
+        '--confetti-drift-2:' + drift2 + 'px;' +
+        '--confetti-drift-3:' + drift3 + 'px;' +
+        '--confetti-drift-4:' + drift4 + 'px;';
       wrapper.appendChild(piece);
     }
     return wrapper;
