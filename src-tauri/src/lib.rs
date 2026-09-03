@@ -81,6 +81,7 @@ pub fn run() {
       commands::get_asset,
       commands::gc_orphan_assets,
       commands::export_html_bundle,
+      commands::export_text_document,
       commands::export_scorm_package,
       commands::read_text_file,
       open_file::take_pending_open_path,

@@ -7,7 +7,12 @@ import {
   useSelectedNodeIds,
 } from '../../store'
 import type { SaveStatus } from '../../store'
-import { useHtmlExport, useScormExport, useTeacherReviewExport } from '../../export'
+import {
+  useAiReviewExport,
+  useHtmlExport,
+  useScormExport,
+  useTeacherReviewExport,
+} from '../../export'
 import styles from './Topbar.module.css'
 
 /**
@@ -136,6 +141,7 @@ export function Topbar({
   const htmlExport = useHtmlExport(filePath)
   const scormExport = useScormExport(filePath)
   const teacherReviewExport = useTeacherReviewExport(filePath)
+  const aiReviewExport = useAiReviewExport()
   const [exportMenuOpen, setExportMenuOpen] = useState(false)
   const exportMenuRef = useRef<HTMLDivElement>(null)
 
@@ -248,7 +254,7 @@ export function Topbar({
         </button>
         {/* Menú "Exportar" (sustituye a los antiguos botones sueltos
             "Exportar HTML"/"Exportar SCORM"): un único botón que despliega
-            un `<div>` posicionado en CSS con las tres opciones. */}
+            un `<div>` posicionado en CSS con las cuatro opciones. */}
         <div className={styles.exportMenuWrapper} ref={exportMenuRef}>
           <button
             type="button"
@@ -304,6 +310,28 @@ export function Topbar({
               >
                 {scormExport.status === 'exporting' ? 'Exportando…' : 'Exportar SCORM'}
               </button>
+              {/* "Exportar para revisión con IA" (petición de usuario: "que
+                  este archivo lo pudiese ver ChatGPT o alguna otra IA"):
+                  documento de texto/Markdown con TODA la estructura
+                  narrativa, pensado para subirlo a cualquier IA de chat
+                  externa y pedirle opinión — no un HTML/SCORM jugable, ver
+                  comentario de `aiReviewExport.ts`. Mismo cableado que el
+                  resto de opciones de este menú, vía
+                  `useAiReviewExport()`. */}
+              <button
+                type="button"
+                role="menuitem"
+                className={styles.exportMenuItem}
+                onClick={() => {
+                  setExportMenuOpen(false)
+                  void aiReviewExport.exportAiReview()
+                }}
+                disabled={aiReviewExport.status === 'exporting'}
+              >
+                {aiReviewExport.status === 'exporting'
+                  ? 'Exportando…'
+                  : 'Exportar para revisión con IA'}
+              </button>
             </div>
           )}
           {/* Resultado de la última exportación, flotando bajo el botón
@@ -322,6 +350,9 @@ export function Topbar({
             )}
             {teacherReviewExport.message && (
               <ExportToast status={teacherReviewExport.status} message={teacherReviewExport.message} />
+            )}
+            {aiReviewExport.message && (
+              <ExportToast status={aiReviewExport.status} message={aiReviewExport.message} />
             )}
           </div>
         </div>

@@ -15,3 +15,6 @@ export {
 } from './teacherReviewExport'
 export { useTeacherReviewExport } from './useTeacherReviewExport'
 export type { TeacherReviewExportState, TeacherReviewExportStatus } from './useTeacherReviewExport'
+export { buildAiReviewDocument } from './aiReviewExport'
+export { useAiReviewExport } from './useAiReviewExport'
+export type { AiReviewExportState, AiReviewExportStatus } from './useAiReviewExport'

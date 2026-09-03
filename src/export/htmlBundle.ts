@@ -280,6 +280,10 @@ function renderNodeBodies(project: ProjectDocument): Record<string, string> {
  * y están elegidos) a sus nombres legibles, vía el catálogo `CICLOS`
  * (`src/domain/catalog.ts`).
  *
+ * Exportada (no solo de uso interno de este archivo): `aiReviewExport.ts` la
+ * reutiliza tal cual para la portada del "documento para revisión con IA",
+ * en vez de duplicar esta misma resolución tolerante de catálogo.
+ *
  * Se resuelve AQUÍ, en tiempo de exportación (dentro de la app, con acceso
  * normal a un módulo TS), y no dentro de `exportedPlayerScript.ts`: ese
  * runtime es JS vanilla embebido en un único `<script>` clásico sin módulos
@@ -305,7 +309,7 @@ function renderNodeBodies(project: ProjectDocument): Record<string, string> {
  * devuelve tal cual, sin su código de módulo — ese sí es exclusivo del
  * espacio de trabajo.
  */
-function resolveIntroCatalogNames(project: ProjectDocument): {
+export function resolveIntroCatalogNames(project: ProjectDocument): {
   cicloName: string | null
   asignaturaName: string | null
 } {

@@ -3,6 +3,7 @@ import type {
   HtmlBundleWriter,
   ProjectRepository,
   ScormPackageWriter,
+  TextDocumentWriter,
   TextFileReader,
 } from '../persistence'
 
@@ -62,12 +63,24 @@ export interface AppServices {
    * sí por accidente.
    */
   pickExportTeacherReviewPath: (suggestedName?: string) => Promise<string | null>
+  /**
+   * Abre el diálogo nativo de "Guardar como…" para elegir dónde escribir el
+   * "documento para revisión con IA" (petición de usuario: "que este
+   * archivo lo pudiese ver ChatGPT o alguna otra IA", ver
+   * `src/export/aiReviewExport.ts`); `null` si el usuario cancela.
+   * `suggestedName` preselecciona el nombre de archivo propuesto, con
+   * extensión `.md`. Mismo patrón que `pickExportTeacherReviewPath`.
+   */
+  pickExportAiReviewPath: (suggestedName?: string) => Promise<string | null>
   /** Importa/lee assets binarios (imagen/audio) de un `.brunch`. */
   assetRepository: AssetRepository
   /** Escribe en disco el HTML autónomo generado por `src/export`. */
   htmlBundleWriter: HtmlBundleWriter
   /** Escribe en disco el paquete SCORM (`.zip`) generado por `src/export`. */
   scormPackageWriter: ScormPackageWriter
+  /** Escribe en disco el documento de texto/Markdown generado por
+   *  `src/export` (hoy, únicamente el de revisión con IA). */
+  textDocumentWriter: TextDocumentWriter
   /**
    * Abre el diálogo nativo de "Abrir…" filtrado a archivos `.twee`/`.tw`,
    * para importar un archivo Twee como proyecto nuevo (ver `src/import/twee`).

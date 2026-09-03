@@ -8,6 +8,7 @@ import {
   TauriHtmlBundleWriter,
   TauriProjectRepository,
   TauriScormPackageWriter,
+  TauriTextDocumentWriter,
   TauriTextFileReader,
 } from '../persistence'
 import type { AppServices } from './AppServices'
@@ -27,6 +28,12 @@ const SCORM_FILE_FILTERS = [{ name: 'Paquete SCORM', extensions: ['zip'] }]
  *  (`pickExportTeacherReviewPathWithNativeDialog`) pueda distinguirse del
  *  export HTML normal sin acoplar los dos diálogos. */
 const TEACHER_REVIEW_FILE_FILTERS = [{ name: 'Página web', extensions: ['html'] }]
+
+/** Filtro del diálogo de guardado del "documento para revisión con IA"
+ *  (petición de usuario, ver `src/export/aiReviewExport.ts`) — Markdown en
+ *  vez de HTML: es texto plano pensado para pegarse o subirse tal cual a
+ *  una IA de chat externa, no un documento navegable. */
+const AI_REVIEW_FILE_FILTERS = [{ name: 'Documento Markdown', extensions: ['md'] }]
 
 /** Filtro del diálogo de abrir para importar un archivo Twee (ver `src/import/twee`). */
 const TWEE_FILE_FILTERS = [{ name: 'Archivo Twee', extensions: ['twee', 'tw'] }]
@@ -105,6 +112,16 @@ async function pickExportTeacherReviewPathWithNativeDialog(
   return path ?? null
 }
 
+async function pickExportAiReviewPathWithNativeDialog(
+  suggestedName?: string,
+): Promise<string | null> {
+  const defaultPath = suggestedName
+    ? `${sanitizeFileName(suggestedName)} - revisión IA.md`
+    : undefined
+  const path = await save({ filters: AI_REVIEW_FILE_FILTERS, defaultPath })
+  return path ?? null
+}
+
 async function pickImportTweePathWithNativeDialog(): Promise<string | null> {
   const selected = await open({ filters: TWEE_FILE_FILTERS, multiple: false, directory: false })
   return typeof selected === 'string' ? selected : null
@@ -164,9 +181,11 @@ export const defaultAppServices: AppServices = {
   pickExportHtmlPath: pickExportHtmlPathWithNativeDialog,
   pickExportScormPath: pickExportScormPathWithNativeDialog,
   pickExportTeacherReviewPath: pickExportTeacherReviewPathWithNativeDialog,
+  pickExportAiReviewPath: pickExportAiReviewPathWithNativeDialog,
   assetRepository: new TauriAssetRepository(),
   htmlBundleWriter: new TauriHtmlBundleWriter(),
   scormPackageWriter: new TauriScormPackageWriter(),
+  textDocumentWriter: new TauriTextDocumentWriter(),
   pickImportTweePath: pickImportTweePathWithNativeDialog,
   textFileReader: new TauriTextFileReader(),
   getInitialOpenPath: getInitialOpenPathFromTauri,

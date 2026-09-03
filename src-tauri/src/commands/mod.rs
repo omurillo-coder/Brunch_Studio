@@ -131,6 +131,24 @@ pub fn export_html_bundle(path: String, html: String) -> Result<(), PersistenceE
     persistence::write_html_bundle(Path::new(&path), &html)
 }
 
+/// Escribe en `path` un documento de texto plano/Markdown generado en
+/// TypeScript — hoy, únicamente el "documento para revisión con IA"
+/// (`src/export/aiReviewExport.ts`, petición de usuario: "que este archivo
+/// lo pudiese ver ChatGPT o alguna otra IA").
+///
+/// Reutiliza `persistence::write_html_bundle` tal cual, sin duplicar la
+/// lógica de escritura: esa función ya es genérica de verdad pese a su
+/// nombre (un simple `std::fs::write` con creación de carpetas intermedias,
+/// ver su comentario) — nunca interpretó ni validó el `html` que recibía,
+/// así que sirve igual para cualquier otro texto. `content` es texto opaco
+/// para Rust, igual que `html` en `export_html_bundle`; la ruta la elige el
+/// usuario con el diálogo nativo de guardar (`pickExportAiReviewPath` en
+/// `AppServices`).
+#[tauri::command]
+pub fn export_text_document(path: String, content: String) -> Result<(), PersistenceError> {
+    persistence::write_html_bundle(Path::new(&path), &content)
+}
+
 /// Escribe en `path` el paquete SCORM 2004 4ª edición (`.zip`) generado a partir de los
 /// dos textos ya construidos en TypeScript: el mismo `index.html` autónomo
 /// de `export_html_bundle` (`src/export/htmlBundle.ts`) y el

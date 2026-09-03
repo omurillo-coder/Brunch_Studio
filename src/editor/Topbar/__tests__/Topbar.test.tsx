@@ -8,6 +8,7 @@ import {
   MemoryAssetRepository,
   MemoryHtmlBundleWriter,
   MemoryScormPackageWriter,
+  MemoryTextDocumentWriter,
 } from '../../../persistence'
 import { useProjectStore } from '../../../store'
 import { resetProjectStore } from '../../../store/testHelpers'
@@ -332,13 +333,16 @@ describe('Topbar — menú "Exportar"', () => {
     expect(screen.queryByRole('menu', { name: 'Exportar' })).not.toBeInTheDocument()
   })
 
-  it('muestra las tres opciones, todas habilitadas', () => {
+  it('muestra las cuatro opciones, todas habilitadas', () => {
     renderTopbar()
     openExportMenu()
 
     expect(screen.getByRole('menuitem', { name: 'Exportar HTML' })).toBeInTheDocument()
     expect(screen.getByRole('menuitem', { name: 'Exportar SCORM' })).toBeInTheDocument()
     expect(screen.getByRole('menuitem', { name: 'Exportar revisión profes' })).not.toBeDisabled()
+    expect(
+      screen.getByRole('menuitem', { name: 'Exportar para revisión con IA' }),
+    ).not.toBeDisabled()
   })
 
   it('se cierra al hacer clic fuera', () => {
@@ -558,6 +562,65 @@ describe('Topbar — Exportar revisión profes', () => {
       )
     })
     expect(htmlBundleWriter.writtenPaths()).toEqual([])
+  })
+})
+
+describe('Topbar — Exportar para revisión con IA (petición de usuario: "que este archivo lo pudiese ver ChatGPT o alguna otra IA")', () => {
+  it('pide la ruta, genera el documento y lo escribe — SIN necesitar la portada completa', async () => {
+    // A diferencia de "Exportar HTML"/"Exportar SCORM"/"Exportar revisión
+    // profes", este export no bloquea con `validateIntroForExport` (ver
+    // `useAiReviewExport`): el proyecto "de fábrica" de `resetProjectStore`
+    // (sin `seedCompleteIntro`) ya debe bastar.
+    const textDocumentWriter = new MemoryTextDocumentWriter()
+    const pickExportAiReviewPath = vi.fn(async () => '/tmp/revision-ia.md')
+    renderTopbar({ pickExportAiReviewPath, textDocumentWriter })
+
+    openExportMenu()
+    fireEvent.click(screen.getByText('Exportar para revisión con IA'))
+
+    await waitFor(() => {
+      expect(screen.getByText('Documento para revisión con IA exportado.')).toBeInTheDocument()
+    })
+
+    expect(pickExportAiReviewPath).toHaveBeenCalledWith('Untitled')
+    expect(textDocumentWriter.writtenPaths()).toEqual(['/tmp/revision-ia.md'])
+    expect(textDocumentWriter.read('/tmp/revision-ia.md')).toContain(
+      '— Documento para revisión con IA',
+    )
+  })
+
+  it('si el usuario cancela el diálogo, no escribe nada ni muestra error', async () => {
+    const textDocumentWriter = new MemoryTextDocumentWriter()
+    const pickExportAiReviewPath = vi.fn(async () => null)
+    renderTopbar({ pickExportAiReviewPath, textDocumentWriter })
+
+    openExportMenu()
+    fireEvent.click(screen.getByText('Exportar para revisión con IA'))
+
+    await waitFor(() => {
+      expect(pickExportAiReviewPath).toHaveBeenCalled()
+    })
+    expect(textDocumentWriter.writtenPaths()).toEqual([])
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('muestra un mensaje honesto y sin jerga si la escritura falla', async () => {
+    const textDocumentWriter = new MemoryTextDocumentWriter()
+    textDocumentWriter.failNextWrite()
+    renderTopbar({
+      pickExportAiReviewPath: async () => '/tmp/revision-ia.md',
+      textDocumentWriter,
+    })
+
+    openExportMenu()
+    fireEvent.click(screen.getByText('Exportar para revisión con IA'))
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        'No se ha podido exportar el documento. Prueba con otra carpeta u otro nombre de archivo.',
+      )
+    })
+    expect(textDocumentWriter.writtenPaths()).toEqual([])
   })
 })
 
