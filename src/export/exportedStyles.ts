@@ -319,58 +319,72 @@ body {
    \`src/player/PlayerScreen.module.css\` (mismos nombres de clase, mismos
    valores). Construida por \`buildGameOverCard\` en \`exportedPlayerScript.ts\`.
 
-   Lo que NO está aquí (a propósito, mismo motivo que \`.introIllustration\`
-   más arriba): el \`background-image\` de \`.gameOverIllustration\`, un
-   \`data:\` URI que solo se conoce en tiempo de exportación
-   (\`introBrand.gameOverBackgroundDataUri\`) — lo inyecta
-   \`injectIntroBrandStyles\` en \`exportedPlayerScript.ts\` junto al de
-   \`.introIllustration\`.
+   Petición de usuario: UNA sola columna centrada — logo, título, ilustración
+   EN FLUJO NORMAL (un \`<img>\` de verdad, no un \`background-image\`, así que
+   no hace falta inyectar nada en tiempo de exportación como sí ocurre con
+   \`.introIllustration\`: \`buildGameOverCard\` fija \`img.src\` directamente,
+   igual que ya hace con el logo) y botones al final, todos centrados.
    --------------------------------------------------------------------- */
 
 .gameOverCard {
-  position: relative;
   width: 100%;
-  max-width: 920px;
-  min-height: 560px;
+  max-width: 640px;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  align-items: center;
+  gap: 24px;
+  padding: 48px 40px;
   border-radius: var(--bs-radius-lg);
   background: #ffffff;
   border: 1px solid var(--bs-color-border);
   box-shadow: var(--bs-shadow-sm);
   font-family: 'FS Millbank', var(--bs-font-sans);
   color: #0a0a0a;
+  text-align: center;
   animation: cardFadeIn 0.2s ease;
 }
 
-.gameOverContent {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 24px;
-  padding: 36px 40px 0;
+.gameOverLogo {
+  height: 26px;
+  width: auto;
+}
+
+.gameOverHeading {
+  margin: 0;
+  max-width: 32ch;
+  font-family: inherit;
+  font-weight: 700;
+  font-size: clamp(28px, 4vw, 42px);
+  line-height: 1.05;
+  letter-spacing: -0.01em;
+  color: #0a0a0a;
+}
+
+.gameOverIllustration {
+  display: block;
+  width: 100%;
+  max-width: 360px;
+  height: auto;
 }
 
 .gameOverButtons {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 16px;
   flex-wrap: wrap;
 }
 
 .gameOverButtonPrimary {
   flex: 0 0 auto;
-  padding: 13px 30px;
+  padding: 16px 40px;
   border: none;
   border-radius: var(--bs-radius-sm);
   background: var(--bs-color-accent);
   color: #0a0a0a;
   font-family: inherit;
   font-weight: 700;
-  font-size: 15px;
+  font-size: 17px;
   transition: background-color 0.15s ease;
 }
 
@@ -386,14 +400,14 @@ body {
 
 .gameOverButtonSecondary {
   flex: 0 0 auto;
-  padding: 12px 29px;
+  padding: 15px 39px;
   border: 2px solid var(--bs-color-accent);
   border-radius: var(--bs-radius-sm);
   background: transparent;
   color: #0a0a0a;
   font-family: inherit;
   font-weight: 700;
-  font-size: 15px;
+  font-size: 17px;
   transition:
     background-color 0.15s ease,
     border-color 0.15s ease;
@@ -404,26 +418,13 @@ body {
   border-color: var(--bs-color-accent-hover);
 }
 
-.gameOverIllustration {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  background-repeat: no-repeat;
-  background-position: bottom center;
-  background-size: 60% auto;
-}
-
 @media (max-width: 640px) {
-  .gameOverIllustration {
-    display: none;
-  }
-
   .gameOverCard {
-    min-height: 440px;
+    padding: 32px 24px;
   }
 
-  .gameOverContent {
-    padding: 28px 24px 0;
+  .gameOverIllustration {
+    max-width: 260px;
   }
 }
 

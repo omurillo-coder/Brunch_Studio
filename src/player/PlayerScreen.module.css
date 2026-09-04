@@ -762,74 +762,80 @@
 
 /* ---------------------------------------------------------------------
    Pantalla de marca bespoke "Game Over" (`SlideNode.brandedGameOverScreen`,
-   ver comentario de `GameOverCard` en `PlayerScreen.tsx`) — mismo shape que
-   `.introCard`/`.introContent`/`.introIllustration` justo arriba (mismos
-   valores de layout de la tarjeta), traducción literal en
-   `buildGameOverCard` de `src/export/exportedPlayerScript.ts`.
+   ver comentario de `GameOverCard` en `PlayerScreen.tsx`) — traducción
+   literal en `buildGameOverCard` de `src/export/exportedPlayerScript.ts`.
 
-   A diferencia de `fondo-inicio.jpg` (que sangra por la esquina superior
-   derecha, ver comentario de `.introIllustration`), `game-over.jpg` trae la
-   pareja de puertas CENTRADA sobre fondo blanco propio, con un margen
-   blanco generoso arriba (~36% de la altura de la imagen es blanco puro
-   antes de que empiecen las puertas) — por eso `.gameOverContent` NO se
-   limita a un 54% de ancho (no hay ninguna "mitad" que ceder a la
-   ilustración: el propio fondo blanco de la imagen ya hace de fondo de la
-   tarjeta) y `.gameOverIllustration` se ancla abajo-centro en vez de
-   arriba-derecha.
-
-   `min-height: 560px` (más alto que los 440px de `.introCard`) + verificado
-   visualmente con el arnés de `src/main.tsx` (ver tarea de verificación):
-   con 440px la ilustración a `background-size: 70% auto` quedaba tan alta
-   que las puertas (no solo el margen blanco de la imagen) tapaban el
-   título/los botones. Con 560px de alto y 60% de ancho, la imagen
-   (proporción ~1.23:1, mismo aspect ratio que el archivo fuente 1400×1142)
-   mide ~449px de alto; anclada abajo, su margen blanco superior cubre hasta
-   bien por encima de los botones y las puertas (el ~64% inferior de la
-   imagen) quedan claramente por debajo, sin solape. */
+   Petición de usuario ("quiero que esté todo centrado. Los botones debajo
+   de la imagen. Todo centrado. Los botones pueden ser más grandes"): a
+   diferencia de `.introCard` (texto a la izquierda, ilustración de fondo
+   sangrando a la derecha), esta es UNA sola columna centrada — logo,
+   título, ilustración EN FLUJO NORMAL (no fondo `position: absolute`, para
+   que caiga DEBAJO del título y ENCIMA de los botones en vez de detrás de
+   todo) y botones al final, todos alineados al centro. */
 .gameOverCard {
-  position: relative;
   width: 100%;
-  max-width: 920px;
-  min-height: 560px;
+  max-width: 640px;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  align-items: center;
+  gap: 24px;
+  padding: 48px 40px;
   border-radius: var(--bs-radius-lg);
   background: #ffffff;
   border: 1px solid var(--bs-color-border);
   box-shadow: var(--bs-shadow-sm);
   font-family: 'FS Millbank', var(--bs-font-sans);
   color: #0a0a0a;
+  text-align: center;
   animation: cardFadeIn 0.2s ease;
 }
 
-.gameOverContent {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 24px;
-  padding: 36px 40px 0;
+.gameOverLogo {
+  height: 26px;
+  width: auto;
+}
+
+.gameOverHeading {
+  margin: 0;
+  max-width: 32ch;
+  font-family: inherit;
+  font-weight: 700;
+  font-size: clamp(28px, 4vw, 42px);
+  line-height: 1.05;
+  letter-spacing: -0.01em;
+  color: #0a0a0a;
+}
+
+/* Proporción ~1.23:1 del archivo fuente (1400×1142) preservada por
+   `height: auto` — `max-width` es lo único que controla el tamaño, así que
+   nunca puede "tapar" el título ni los botones (siempre EN FLUJO NORMAL
+   entre ambos, nunca superpuesta). */
+.gameOverIllustration {
+  display: block;
+  width: 100%;
+  max-width: 360px;
+  height: auto;
 }
 
 .gameOverButtons {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 16px;
   flex-wrap: wrap;
 }
 
+/* Botones más grandes que los de `.introButton` (petición de usuario). */
 .gameOverButtonPrimary {
   flex: 0 0 auto;
-  padding: 13px 30px;
+  padding: 16px 40px;
   border: none;
   border-radius: var(--bs-radius-sm);
   background: var(--bs-color-accent);
   color: #0a0a0a;
   font-family: inherit;
   font-weight: 700;
-  font-size: 15px;
+  font-size: 17px;
   transition: background-color 0.15s ease;
 }
 
@@ -855,14 +861,14 @@
    misma pantalla de marca. */
 .gameOverButtonSecondary {
   flex: 0 0 auto;
-  padding: 12px 29px;
+  padding: 15px 39px;
   border: 2px solid var(--bs-color-accent);
   border-radius: var(--bs-radius-sm);
   background: transparent;
   color: #0a0a0a;
   font-family: inherit;
   font-weight: 700;
-  font-size: 15px;
+  font-size: 17px;
   transition:
     background-color 0.15s ease,
     border-color 0.15s ease;
@@ -876,31 +882,13 @@
   border-color: var(--bs-color-accent-hover);
 }
 
-.gameOverIllustration {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  background-image: url('../assets/playerIntro/game-over.jpg');
-  background-repeat: no-repeat;
-  background-position: bottom center;
-  background-size: 60% auto;
-}
-
-/* Pantalla estrecha (móvil): mismo criterio que `.introIllustration` — se
-   oculta, el contenido recupera el padding completo. Sin la ilustración
-   detrás, el alto extra de `.gameOverCard` (560px, ver su comentario) ya no
-   hace falta — vuelve a un alto similar al de `.introCard`. */
 @media (max-width: 640px) {
-  .gameOverIllustration {
-    display: none;
-  }
-
   .gameOverCard {
-    min-height: 440px;
+    padding: 32px 24px;
   }
 
-  .gameOverContent {
-    padding: 28px 24px 0;
+  .gameOverIllustration {
+    max-width: 260px;
   }
 }
 

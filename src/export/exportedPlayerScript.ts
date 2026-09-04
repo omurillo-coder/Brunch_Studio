@@ -1000,14 +1000,19 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
   }
 
   /** Inyecta EN \`<head>\`, UNA sola vez al arrancar (llamada junto a
-   *  \`render()\` al final de este script), los tres valores de
-   *  \`introBrand\` que \`exportedStyles.ts\` NO puede incluir por ser un
-   *  string estático sin interpolación (ver comentario de esa sección): los
-   *  dos \`@font-face\` de FS Millbank y el \`background-image\` de
-   *  \`.introIllustration\`, los tres como \`data:\` URI. Sin \`introBrand\`
-   *  (ver comentario de esa variable más arriba) no hace nada: el texto cae
-   *  a \`var(--bs-font-sans)\` y la ilustración queda sin imagen de fondo,
-   *  degradación correcta, no un error. */
+   *  \`render()\` al final de este script), los dos valores de \`introBrand\`
+   *  que \`exportedStyles.ts\` NO puede incluir por ser un string estático
+   *  sin interpolación (ver comentario de esa sección): los dos
+   *  \`@font-face\` de FS Millbank, como \`data:\` URI. Sin \`introBrand\` (ver
+   *  comentario de esa variable más arriba) no hace nada: el texto cae a
+   *  \`var(--bs-font-sans)\`, degradación correcta, no un error.
+   *
+   *  El \`background-image\` de \`.introIllustration\` (la portada) SÍ se
+   *  inyecta aquí, por el mismo motivo que las tipografías. La ilustración
+   *  de "Game Over" NO — a diferencia de la portada, es un \`<img>\` de
+   *  verdad en flujo normal (petición de usuario: "todo centrado, los
+   *  botones debajo de la imagen"), así que \`buildGameOverCard\` le fija
+   *  \`src\` directamente, igual que ya hace con el logo. */
   function injectIntroBrandStyles() {
     if (!introBrand) {
       return;
@@ -1022,13 +1027,6 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
       "') format('opentype'); font-weight: 700; font-style: normal; font-display: swap; }" +
       '.introIllustration { background-image: url("' +
       introBrand.backgroundDataUri +
-      '"); }' +
-      // Pantalla bespoke "Game Over" (\`brandedGameOverScreen\`, ver
-      // \`buildGameOverCard\` más abajo): mismo patrón que \`.introIllustration\`
-      // justo arriba, con su propio \`data:\` URI
-      // (\`introBrand.gameOverBackgroundDataUri\`).
-      '.gameOverIllustration { background-image: url("' +
-      introBrand.gameOverBackgroundDataUri +
       '"); }';
     document.head.appendChild(style);
   }
@@ -1105,11 +1103,12 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
 
   /**
    * Traducción literal de \`GameOverCard\` en \`src/player/PlayerScreen.tsx\`:
-   * logo + título fijo (\`texts.gameOverHeading\`) + ilustración de fondo a
-   * pantalla completa + dos botones cuyo TEXTO es fijo ("Reintentar"/
-   * "Salir") pero cuyo COMPORTAMIENTO es el real de \`retryResponse\`/
-   * \`exitResponse\` — misma lógica de clic que ya usa \`buildOption\` para
-   * cualquier respuesta genérica (\`actsAsExit\` -> \`attemptExit\`, si no ->
+   * logo + título fijo (\`texts.gameOverHeading\`) + ilustración EN FLUJO
+   * NORMAL (un \`<img>\`, no un fondo — cae entre el título y los botones, no
+   * detrás de todo) + dos botones cuyo TEXTO es fijo ("Reintentar"/"Salir")
+   * pero cuyo COMPORTAMIENTO es el real de \`retryResponse\`/\`exitResponse\`
+   * — misma lógica de clic que ya usa \`buildOption\` para cualquier
+   * respuesta genérica (\`actsAsExit\` -> \`attemptExit\`, si no ->
    * \`setState(choose(state, response.id))\`), nunca un comportamiento
    * hardcodeado nuevo. Ningún otro contenido del nodo (bloques de \`content\`)
    * se pinta aquí — mismo criterio que \`buildIntroCard\`.
@@ -1117,23 +1116,24 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
   function buildGameOverCard(retryResponse, exitResponse) {
     var card = el('section', 'gameOverCard');
 
-    var illustration = el('div', 'gameOverIllustration');
-    illustration.setAttribute('aria-hidden', 'true');
-    card.appendChild(illustration);
-
-    var content = el('div', 'gameOverContent');
-    card.appendChild(content);
-
     if (introBrand && introBrand.logoDataUri) {
-      var logo = el('img', 'introLogo');
+      var logo = el('img', 'gameOverLogo');
       logo.src = introBrand.logoDataUri;
       logo.alt = 'iLERNA';
-      content.appendChild(logo);
+      card.appendChild(logo);
     }
 
-    var heading = el('h1', 'introHeading');
+    var heading = el('h1', 'gameOverHeading');
     heading.textContent = texts.gameOverHeading;
-    content.appendChild(heading);
+    card.appendChild(heading);
+
+    if (introBrand && introBrand.gameOverBackgroundDataUri) {
+      var illustration = el('img', 'gameOverIllustration');
+      illustration.src = introBrand.gameOverBackgroundDataUri;
+      illustration.alt = '';
+      illustration.setAttribute('aria-hidden', 'true');
+      card.appendChild(illustration);
+    }
 
     function buildGameOverButton(response, className, label) {
       var button = el('button', className);
@@ -1162,7 +1162,7 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
     var buttons = el('div', 'gameOverButtons');
     buttons.appendChild(buildGameOverButton(retryResponse, 'gameOverButtonPrimary', 'Reintentar'));
     buttons.appendChild(buildGameOverButton(exitResponse, 'gameOverButtonSecondary', 'Salir'));
-    content.appendChild(buttons);
+    card.appendChild(buttons);
 
     return card;
   }

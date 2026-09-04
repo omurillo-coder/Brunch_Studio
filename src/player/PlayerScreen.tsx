@@ -30,6 +30,7 @@ import { useAssetDataUri } from '../hooks/useAssetDataUri'
 import type { AssetRepository } from '../persistence'
 import { RichTextView } from '../editor/richText/RichTextView'
 import ilernaLogoUrl from '../assets/playerIntro/ilerna-logo.png'
+import gameOverIllustrationUrl from '../assets/playerIntro/game-over.jpg'
 import styles from './PlayerScreen.module.css'
 
 
@@ -492,11 +493,11 @@ function IntroCard({ node, onContinue }: { node: IntroNode; onContinue: () => vo
 /**
  * Pantalla de marca "a medida" (bespoke) de la diapositiva "Game Over" del
  * pack "+1 fallo con Game Over" (`SlideNode.brandedGameOverScreen`, ver
- * comentario de ese campo en `src/domain/schemas.ts`) — modelada 1:1 sobre
- * `IntroCard` justo arriba: mismo `.introCard`-como-shape (aquí
- * `.gameOverCard`), logo + título fijo + ilustración de fondo a pantalla
- * completa, salvo que en vez de un único botón de continuar muestra DOS: uno
- * primario ("Reintentar") y uno secundario de contorno ("Salir"). NINGÚN
+ * comentario de ese campo en `src/domain/schemas.ts`) — logo + título fijo +
+ * ilustración + dos botones, todo en UNA sola columna centrada (a diferencia
+ * de `IntroCard`, que reparte texto a la izquierda e ilustración de fondo
+ * sangrando a la derecha: petición de usuario, "quiero que esté todo
+ * centrado", con los botones DEBAJO de la ilustración, no antes). NINGÚN
  * otro contenido del nodo (el bloque de texto/imagen que edita el
  * diseñador en el Inspector) se pinta aquí — mismo criterio que `IntroCard`,
  * que tampoco pinta ningún "body" genérico.
@@ -523,35 +524,36 @@ function GameOverCard({
 }) {
   return (
     <div className={styles.gameOverCard}>
-      <div className={styles.gameOverContent}>
-        <img className={styles.introLogo} src={ilernaLogoUrl} alt="iLERNA" />
-        <h1 className={styles.introHeading}>{GAME_OVER_HEADING}</h1>
-        <div className={styles.gameOverButtons}>
-          {/* Mismo criterio que `disabled` de `ResponseOption` en el layout
-              genérico: sin destino conectado, el botón se ve inactivo en vez
-              de aceptar un clic que no lleva a ninguna parte — relevante
-              mientras el diseñador todavía no ha conectado "Reintentar"
-              (nace sin destino, ver comentario de `addGameOverPack`).
-              "Salir" no necesita este chequeo: `actsAsExit` siempre
-              funciona. */}
-          <button
-            type="button"
-            className={styles.gameOverButtonPrimary}
-            disabled={!retryResponse.targetNodeId}
-            onClick={() => onChoose(retryResponse)}
-          >
-            Reintentar
-          </button>
-          <button
-            type="button"
-            className={styles.gameOverButtonSecondary}
-            onClick={() => onChoose(exitResponse)}
-          >
-            Salir
-          </button>
-        </div>
+      <img className={styles.gameOverLogo} src={ilernaLogoUrl} alt="iLERNA" />
+      <h1 className={styles.gameOverHeading}>{GAME_OVER_HEADING}</h1>
+      {/* Ilustración EN FLUJO NORMAL (no fondo `position: absolute` como
+          `.introIllustration`): tiene que caer DEBAJO del título y ENCIMA de
+          los botones en el orden visual, no detrás de todo. */}
+      <img className={styles.gameOverIllustration} src={gameOverIllustrationUrl} alt="" aria-hidden="true" />
+      <div className={styles.gameOverButtons}>
+        {/* Mismo criterio que `disabled` de `ResponseOption` en el layout
+            genérico: sin destino conectado, el botón se ve inactivo en vez
+            de aceptar un clic que no lleva a ninguna parte — relevante
+            mientras el diseñador todavía no ha conectado "Reintentar"
+            (nace sin destino, ver comentario de `addGameOverPack`).
+            "Salir" no necesita este chequeo: `actsAsExit` siempre
+            funciona. */}
+        <button
+          type="button"
+          className={styles.gameOverButtonPrimary}
+          disabled={!retryResponse.targetNodeId}
+          onClick={() => onChoose(retryResponse)}
+        >
+          Reintentar
+        </button>
+        <button
+          type="button"
+          className={styles.gameOverButtonSecondary}
+          onClick={() => onChoose(exitResponse)}
+        >
+          Salir
+        </button>
       </div>
-      <div className={styles.gameOverIllustration} aria-hidden="true" />
     </div>
   )
 }
