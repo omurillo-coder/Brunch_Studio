@@ -23,6 +23,7 @@
   color: var(--bs-color-text);
   font-size: var(--bs-font-size-sm);
   text-align: left;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
 }
 
 .addButton:hover {
@@ -46,6 +47,7 @@
   background: var(--bs-color-bg);
   color: var(--bs-color-text);
   font-size: var(--bs-font-size-sm);
+  transition: border-color 0.15s ease;
 }
 
 .searchInput:focus {
@@ -130,6 +132,7 @@
   text-align: left;
   font-size: var(--bs-font-size-sm);
   color: var(--bs-color-text);
+  transition: background-color 0.15s ease, border-color 0.15s ease;
 }
 
 .nodeItem:hover {

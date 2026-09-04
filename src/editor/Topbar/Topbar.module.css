@@ -49,6 +49,7 @@
   color: var(--bs-color-text-muted);
   font-size: var(--bs-font-size-lg);
   line-height: 1;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
 .iconButton:hover:not(:disabled) {
@@ -79,6 +80,7 @@
   color: var(--bs-color-text);
   font-size: var(--bs-font-size-sm);
   font-weight: 600;
+  transition: border-color 0.15s ease;
 }
 
 .exportButton:hover:not(:disabled) {
@@ -118,6 +120,16 @@
   border: 1px solid var(--bs-color-border);
   border-radius: var(--bs-radius-md);
   box-shadow: var(--bs-shadow-sm);
+  animation: exportMenuFadeIn 0.12s ease;
+}
+
+@keyframes exportMenuFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 .exportMenuItem {
@@ -129,6 +141,7 @@
   font-size: var(--bs-font-size-sm);
   text-align: left;
   white-space: nowrap;
+  transition: background-color 0.15s ease;
 }
 
 .exportMenuItem:hover:not(:disabled) {
@@ -166,6 +179,21 @@
   border: 1px solid var(--bs-color-border);
   box-shadow: var(--bs-shadow-sm);
   text-align: left;
+  opacity: 1;
+  transition: opacity 0.2s ease;
+}
+
+/* Fases de entrada/salida de `ExportToast` (ver `Topbar.tsx`): opacidad 0
+   tanto recién montado (`entering`, antes de que el navegador pinte el
+   primer frame — el `useEffect` que pasa a `visible` se dispara DESPUÉS de
+   ese pintado, así que la transición de opacidad sí llega a animarse) como
+   justo antes de desmontarse (`leaving`, ~200ms antes del `setTimeout` que
+   de verdad quita el nodo del DOM). */
+.exportStatus[data-phase='entering'],
+.exportError[data-phase='entering'],
+.exportStatus[data-phase='leaving'],
+.exportError[data-phase='leaving'] {
+  opacity: 0;
 }
 
 .exportStatus {
@@ -188,6 +216,7 @@
   color: var(--bs-color-accent-contrast);
   font-size: var(--bs-font-size-sm);
   font-weight: 600;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
 }
 
 .playButton:hover:not(:disabled) {
@@ -203,4 +232,19 @@
   border-color: var(--bs-color-border-strong);
   color: var(--bs-color-text-faint);
   cursor: default;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .iconButton,
+  .exportButton,
+  .exportMenuItem,
+  .exportStatus,
+  .exportError,
+  .playButton {
+    transition: none;
+  }
+
+  .exportMenu {
+    animation: none;
+  }
 }

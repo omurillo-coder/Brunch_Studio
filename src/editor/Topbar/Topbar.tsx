@@ -49,33 +49,60 @@ function SidebarToggleIcon() {
   )
 }
 
+/** Duración del fade-out de `ExportToast` antes de desmontarse de verdad
+ *  (ver `.exportStatus[data-phase='leaving']` en `Topbar.module.css`) — debe
+ *  coincidir con la `transition: opacity` de esa regla. */
+const TOAST_LEAVE_MS = 200
+
+type ToastPhase = 'entering' | 'visible' | 'leaving'
+
 /**
  * Aviso flotante del resultado de una exportación (éxito o error), anclado
  * bajo el botón "Exportar" (ver `.exportMessages` en `Topbar.module.css`) en
  * vez de metido en la fila de botones de la barra superior — donde antes
  * empujaba el resto de la barra y se quedaba fijo ahí para siempre.
  *
- * Se autodesaparece a los 5 segundos de montarse. El llamador solo lo monta
- * mientras `message` no es `null` (ver el `&&` en `Topbar`) y cada hook de
- * exportación pasa por `message: null` al empezar una exportación nueva
- * (`setMessage(null)` justo antes de `setStatus('exporting')`), así que una
- * exportación nueva siempre desmonta el aviso anterior y monta uno fresco
- * —con su propio temporizador desde cero— aunque el texto sea idéntico.
+ * Máquina de 3 fases con fundido vía `opacity` CSS (ver `data-phase` en
+ * `Topbar.module.css`): `entering` (opacidad 0, el frame recién montado —
+ * `useEffect` se dispara DESPUÉS de que el navegador pinte ese primer frame,
+ * así que el paso a `visible` sí anima) → `visible` (opacidad 1, los 5s de
+ * vida normal del aviso) → `leaving` (opacidad 0 otra vez, mismo elemento
+ * todavía en el DOM) → desmontado del todo `TOAST_LEAVE_MS` después, una vez
+ * ha terminado de desvanecerse. Antes desaparecía de golpe a los 5000ms en
+ * vez de sufrir este último tramo de fundido.
+ *
+ * El llamador solo lo monta mientras `message` no es `null` (ver el `&&` en
+ * `Topbar`) y cada hook de exportación pasa por `message: null` al empezar
+ * una exportación nueva (`setMessage(null)` justo antes de
+ * `setStatus('exporting')`), así que una exportación nueva siempre desmonta
+ * el aviso anterior y monta uno fresco —con su propia máquina de fases desde
+ * cero— aunque el texto sea idéntico.
  */
 function ExportToast({ status, message }: { status: string; message: string }) {
-  const [expired, setExpired] = useState(false)
+  const [phase, setPhase] = useState<ToastPhase>('entering')
+  const [removed, setRemoved] = useState(false)
 
   useEffect(() => {
-    const timer = setTimeout(() => setExpired(true), 5000)
-    return () => clearTimeout(timer)
+    // Se dispara tras el primer pintado (a diferencia de `useLayoutEffect`),
+    // así que el navegador ya ha pintado la opacidad 0 de `entering` antes
+    // de pasar a `visible` — condición necesaria para que la transición CSS
+    // anime el cambio en vez de saltar directamente a opacidad 1.
+    setPhase('visible')
+    const leaveTimer = setTimeout(() => setPhase('leaving'), 5000)
+    const removeTimer = setTimeout(() => setRemoved(true), 5000 + TOAST_LEAVE_MS)
+    return () => {
+      clearTimeout(leaveTimer)
+      clearTimeout(removeTimer)
+    }
   }, [])
 
-  if (expired) return null
+  if (removed) return null
 
   return (
     <div
       role={status === 'error' ? 'alert' : 'status'}
       className={status === 'error' ? styles.exportError : styles.exportStatus}
+      data-phase={phase}
     >
       {message}
     </div>

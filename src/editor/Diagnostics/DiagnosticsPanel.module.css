@@ -32,6 +32,7 @@
   font-weight: 600;
   cursor: pointer;
   box-shadow: var(--bs-shadow-sm);
+  transition: background-color 0.15s ease;
 }
 
 .badge:hover {
@@ -56,6 +57,7 @@
   font-weight: 600;
   cursor: pointer;
   box-shadow: var(--bs-shadow-sm);
+  transition: border-color 0.15s ease;
 }
 
 .badgeResolved:hover {
@@ -115,6 +117,7 @@
   background: var(--bs-color-bg);
   color: var(--bs-color-text);
   cursor: pointer;
+  transition: border-color 0.15s ease;
 }
 
 .rescanButton:hover:not(:disabled) {
@@ -154,6 +157,7 @@
   font-size: var(--bs-font-size-sm);
   line-height: 1.4;
   cursor: pointer;
+  transition: background-color 0.15s ease;
 }
 
 .issueRow:hover {
@@ -179,6 +183,7 @@
   font-size: var(--bs-font-size-sm);
   line-height: 1;
   cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
 }
 
 .dismissButton:hover {

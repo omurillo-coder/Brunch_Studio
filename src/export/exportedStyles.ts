@@ -109,6 +109,12 @@ body {
   text-align: center;
 }
 
+/* Fundido de entrada al cambiar de vista — traducción literal de la misma
+   regla en \`PlayerScreen.module.css\` (ver su comentario: SOLO \`opacity\`,
+   nunca \`transform\`, para no romper el confeti \`position: fixed\`).
+   \`render()\`/\`getView\` en \`exportedPlayerScript.ts\` reconstruyen \`root\` por
+   completo en cada cambio de vista (\`root.textContent = ''\`), así que este
+   \`animation\` en la propia clase basta, sin tocar ese fichero. */
 .card {
   width: 100%;
   max-width: 620px;
@@ -120,6 +126,16 @@ body {
   border-radius: var(--bs-radius-lg);
   background: var(--bs-color-surface);
   box-shadow: var(--bs-shadow-sm);
+  animation: cardFadeIn 0.2s ease;
+}
+
+@keyframes cardFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 .title {
@@ -161,6 +177,7 @@ body {
   box-shadow: var(--bs-shadow-sm);
   font-family: 'FS Millbank', var(--bs-font-sans);
   color: #0a0a0a;
+  animation: cardFadeIn 0.2s ease;
 }
 
 .introContent {
@@ -579,7 +596,12 @@ button:focus-visible {
   line-height: 0;
 }
 
-/* Lightbox de imagen ampliada — mismas reglas que PlayerScreen.module.css. */
+/* Lightbox de imagen ampliada — mismas reglas que PlayerScreen.module.css.
+   \`animation\` (no \`transition\`): \`ensureLightbox\`/\`openLightbox\` en
+   \`exportedPlayerScript.ts\` reutilizan el mismo nodo alternando
+   \`display: none\`/\`flex\` en vez de recrearlo — pasar de \`display: none\` a un
+   valor visible reinicia igualmente cualquier \`animation\` de la regla, así
+   que el fundido se reproduce sin tocar el JS de ese fichero. */
 .lightboxBackdrop {
   position: fixed;
   inset: 0;
@@ -590,6 +612,16 @@ button:focus-visible {
   padding: var(--bs-space-4);
   background: rgba(0, 0, 0, 0.85);
   cursor: zoom-out;
+  animation: lightboxFadeIn 0.15s ease;
+}
+
+@keyframes lightboxFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 .lightboxImage {
@@ -798,5 +830,17 @@ button:focus-visible {
   max-width: 220px;
   height: auto;
   margin: 0 auto;
+}
+
+/* Preferencia de accesibilidad "reducir movimiento": desactiva SOLO las
+   animaciones nuevas mirroreadas desde PlayerScreen.module.css — el confeti
+   (\`.confettiPiece\`, petición explícita de usuario: "muy ESPECTACULAR") se
+   deja intacto, no es parte de este alcance. */
+@media (prefers-reduced-motion: reduce) {
+  .lightboxBackdrop,
+  .card,
+  .introCard {
+    animation: none;
+  }
 }
 `

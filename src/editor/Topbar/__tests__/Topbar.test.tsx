@@ -393,7 +393,7 @@ describe('Topbar — Exportar HTML', () => {
     expect(htmlBundleWriter.read('/tmp/experiencia.html')).toContain('<!doctype html>')
   })
 
-  it('el aviso de éxito flota bajo el botón "Exportar" y desaparece solo a los 5 segundos', async () => {
+  it('el aviso de éxito flota bajo el botón "Exportar" y desaparece ~200ms después de los 5 segundos (fundido de salida)', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     try {
       const htmlBundleWriter = new MemoryHtmlBundleWriter()
@@ -419,6 +419,15 @@ describe('Topbar — Exportar HTML', () => {
 
       await act(async () => {
         await vi.advanceTimersByTimeAsync(5000)
+      })
+
+      // A los 5000ms exactos entra en la fase de salida (`data-phase`
+      // `leaving`, fundido de opacidad vía CSS) pero el nodo sigue montado
+      // — ya no desaparece de golpe como antes de la fase de salida.
+      expect(screen.getByText('Experiencia exportada a HTML.')).toBeInTheDocument()
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(200)
       })
 
       expect(screen.queryByText('Experiencia exportada a HTML.')).not.toBeInTheDocument()

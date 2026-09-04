@@ -45,6 +45,7 @@
   font-size: var(--bs-font-size-md);
   line-height: 1;
   cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
 .closeButton:hover {
@@ -77,6 +78,7 @@
   background: var(--bs-color-bg);
   color: var(--bs-color-text);
   font-size: var(--bs-font-size-md);
+  transition: border-color 0.15s ease;
 }
 
 .input:focus,
@@ -109,6 +111,7 @@
   color: var(--bs-color-text);
   font-size: var(--bs-font-size-sm);
   cursor: pointer;
+  transition: border-color 0.15s ease;
 }
 
 .addButton:hover {
@@ -170,6 +173,7 @@
   color: var(--bs-color-danger);
   font-size: var(--bs-font-size-sm);
   cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 .deleteButton:hover {
@@ -208,6 +212,7 @@
   color: var(--bs-color-danger-contrast);
   font-size: var(--bs-font-size-sm);
   cursor: pointer;
+  transition: background-color 0.15s ease;
 }
 
 .deleteConfirmButton:hover {
@@ -222,6 +227,7 @@
   color: var(--bs-color-text);
   font-size: var(--bs-font-size-sm);
   cursor: pointer;
+  transition: background-color 0.15s ease;
 }
 
 .cancelDeleteButton:hover {

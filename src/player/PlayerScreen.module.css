@@ -66,6 +66,7 @@
   background: var(--bs-color-bg);
   color: var(--bs-color-text);
   font-size: var(--bs-font-size-sm);
+  transition: border-color 0.15s ease;
 }
 
 .secondaryButton:hover {
@@ -93,6 +94,15 @@
   padding: var(--bs-space-6);
 }
 
+/* Fundido de entrada al cambiar de vista (intro/continuar/decisión/final,
+   ver `PlayerScreen.tsx`): cada cambio de vista remonta un `.card` nuevo
+   (por `key={view.node.id}` o simplemente porque React desmonta la rama
+   condicional anterior y monta otra), así que un `animation` en la propia
+   clase basta — sin tocar `runtime.ts` ni `render()`. SOLO `opacity`, nunca
+   `transform`: un `transform` en un ancestro de esta tarjeta la convertiría
+   en el *containing block* del confeti `position: fixed` (`.confetti`, más
+   abajo) y rompería que cubra la pantalla completa. Traducción literal en
+   `exportedStyles.ts`. */
 .card {
   width: 100%;
   max-width: 520px;
@@ -104,6 +114,16 @@
   border-radius: var(--bs-radius-lg);
   background: var(--bs-color-surface);
   box-shadow: var(--bs-shadow-sm);
+  animation: cardFadeIn 0.2s ease;
+}
+
+@keyframes cardFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 .title {
@@ -146,6 +166,7 @@
   color: var(--bs-color-accent-contrast);
   font-size: var(--bs-font-size-md);
   font-weight: 600;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
 }
 
 .primaryButton:hover {
@@ -199,7 +220,13 @@
 }
 
 /* Lightbox de imagen ampliada (ver `Lightbox` en `PlayerScreen.tsx`).
-   Traducción literal en `exportedStyles.ts`. */
+   Traducción literal en `exportedStyles.ts`. `animation` (no `transition`):
+   en React el backdrop se monta/desmonta entero cada vez (`{lightboxImage &&
+   <Lightbox .../>}`), y en el HTML exportado `ensureLightbox` reutiliza el
+   mismo nodo alternando `display: none`/`flex` (ver `exportedPlayerScript.ts`)
+   — pasar de `display: none` a un valor visible reinicia igualmente
+   cualquier `animation` de la regla, así que el fundido se reproduce en
+   ambos runtimes sin tocar ni una línea de JS. */
 .lightboxBackdrop {
   position: fixed;
   inset: 0;
@@ -210,6 +237,16 @@
   padding: var(--bs-space-4);
   background: rgba(0, 0, 0, 0.85);
   cursor: zoom-out;
+  animation: lightboxFadeIn 0.15s ease;
+}
+
+@keyframes lightboxFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 .lightboxImage {
@@ -236,6 +273,7 @@
   font-size: 20px;
   line-height: 1;
   cursor: pointer;
+  transition: background-color 0.15s ease;
 }
 
 .lightboxClose:hover {
@@ -288,6 +326,7 @@
   border: 1px solid var(--bs-color-border);
   border-radius: var(--bs-radius-md);
   background: var(--bs-color-bg);
+  transition: border-color 0.15s ease;
 }
 
 /* Hover: el borde ahora vive en `.option` (ver arriba), así que el cambio de
@@ -399,6 +438,7 @@
   font-size: var(--bs-font-size-md);
   font-weight: 600;
   cursor: pointer;
+  transition: border-color 0.15s ease;
 }
 
 .neutralButton:hover {
@@ -553,6 +593,7 @@
   box-shadow: var(--bs-shadow-sm);
   font-family: 'FS Millbank', var(--bs-font-sans);
   color: #0a0a0a;
+  animation: cardFadeIn 0.2s ease;
 }
 
 .introContent {
@@ -677,6 +718,7 @@
   font-family: inherit;
   font-weight: 700;
   font-size: 15px;
+  transition: background-color 0.15s ease;
 }
 
 .introButton:hover {
@@ -715,5 +757,26 @@
   .introContent {
     max-width: none;
     padding: 28px 24px;
+  }
+}
+
+/* Preferencia de accesibilidad "reducir movimiento": desactiva SOLO las
+   transiciones/animaciones nuevas de esta tarea — el confeti (`.confettiPiece`,
+   petición explícita de usuario: "muy ESPECTACULAR") se deja intacto, no es
+   parte de este alcance. */
+@media (prefers-reduced-motion: reduce) {
+  .secondaryButton,
+  .primaryButton,
+  .lightboxClose,
+  .option,
+  .neutralButton,
+  .introButton {
+    transition: none;
+  }
+
+  .lightboxBackdrop,
+  .card,
+  .introCard {
+    animation: none;
   }
 }

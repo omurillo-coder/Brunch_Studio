@@ -20,6 +20,7 @@
   cursor: col-resize;
   z-index: 5;
   touch-action: none;
+  transition: background-color 0.15s ease;
 }
 
 .resizeHandle:hover,
@@ -136,6 +137,7 @@
   background: var(--bs-color-bg);
   color: var(--bs-color-text);
   font-size: var(--bs-font-size-md);
+  transition: border-color 0.15s ease;
 }
 
 .input:focus {
@@ -157,6 +159,7 @@
   font-size: var(--bs-font-size-md);
   font-family: inherit;
   resize: vertical;
+  transition: border-color 0.15s ease;
 }
 
 .textarea:focus {
@@ -171,6 +174,7 @@
   background: var(--bs-color-bg);
   color: var(--bs-color-text);
   font-size: var(--bs-font-size-md);
+  transition: border-color 0.15s ease;
 }
 
 /* Campo de texto libre "por rellenar" (petición de usuario: los campos
@@ -220,6 +224,7 @@
   border-radius: 50%;
   border: 1px solid var(--bs-color-border-strong);
   cursor: pointer;
+  transition: border-color 0.15s ease;
 }
 
 .colorSwatch:hover {
@@ -336,6 +341,7 @@
   font-size: var(--bs-font-size-xs);
   font-weight: 600;
   cursor: pointer;
+  transition: background-color 0.15s ease;
 }
 
 .responseOrderButton + .responseOrderButton,
@@ -363,6 +369,7 @@
   color: var(--bs-color-text);
   font-size: var(--bs-font-size-xs);
   cursor: pointer;
+  transition: border-color 0.15s ease;
 }
 
 .addResponseButton:hover {
@@ -440,6 +447,7 @@
   font-size: var(--bs-font-size-xs);
   cursor: pointer;
   text-decoration: underline;
+  transition: color 0.15s ease;
 }
 
 .removeResponseButton:hover {
@@ -468,6 +476,7 @@
   color: var(--bs-color-text);
   font-size: var(--bs-font-size-xs);
   cursor: pointer;
+  transition: border-color 0.15s ease;
 }
 
 .attachButton:hover,
@@ -618,6 +627,7 @@
   font-size: var(--bs-font-size-xs);
   line-height: 1;
   cursor: pointer;
+  transition: border-color 0.15s ease;
 }
 
 .contentBlockMoveButton:hover:not(:disabled) {
@@ -674,6 +684,7 @@
   font-size: var(--bs-font-size-sm);
   text-align: left;
   cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
 }
 
 .connectionItem:hover {
@@ -703,6 +714,7 @@
   color: var(--bs-color-text);
   font-size: var(--bs-font-size-sm);
   cursor: pointer;
+  transition: background-color 0.15s ease;
 }
 
 .duplicateNodeButton:hover {
@@ -718,6 +730,7 @@
   color: var(--bs-color-danger);
   font-size: var(--bs-font-size-sm);
   cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 .deleteNodeButton:hover {
@@ -757,6 +770,7 @@
   color: var(--bs-color-danger-contrast);
   font-size: var(--bs-font-size-sm);
   cursor: pointer;
+  transition: background-color 0.15s ease;
 }
 
 .deleteNodeConfirmButton:hover {
@@ -771,6 +785,7 @@
   color: var(--bs-color-text);
   font-size: var(--bs-font-size-sm);
   cursor: pointer;
+  transition: background-color 0.15s ease;
 }
 
 .cancelDeleteButton:hover {
