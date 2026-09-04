@@ -765,22 +765,21 @@
    ver comentario de `GameOverCard` en `PlayerScreen.tsx`) — traducción
    literal en `buildGameOverCard` de `src/export/exportedPlayerScript.ts`.
 
-   Petición de usuario ("quiero que esté todo centrado. Los botones debajo
-   de la imagen. Todo centrado. Los botones pueden ser más grandes"): a
-   diferencia de `.introCard` (texto a la izquierda, ilustración de fondo
-   sangrando a la derecha), esta es UNA sola columna centrada — logo,
-   título, ilustración EN FLUJO NORMAL (no fondo `position: absolute`, para
-   que caiga DEBAJO del título y ENCIMA de los botones en vez de detrás de
-   todo) y botones al final, todos alineados al centro. */
+   Petición de usuario, en varias vueltas: (1) "todo centrado, los botones
+   pueden ser más grandes"; (2) "corta la parte blanca de arriba [de la
+   ilustración] y que esté más cerca del texto"; (3) "la imagen puede ser
+   mucho más ancha y los botones podrían salir en la parte de abajo de la
+   imagen, encima de ella". Resultado: UNA sola columna centrada — logo,
+   título, e ilustración a todo el ancho de la tarjeta con los botones
+   SUPERPUESTOS sobre su tramo de camino/suelo inferior (`.gameOverButtons`
+   es `position: absolute` dentro de `.gameOverIllustrationWrap`), en vez de
+   ir debajo de ella en flujo normal. */
 .gameOverCard {
   width: 100%;
-  max-width: 640px;
+  max-width: 860px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  /* Petición de usuario ("más cerca del texto por la parte superior"): 16px
-     entre logo/título/ilustración — `.gameOverButtons` compensa con su
-     propio `margin-top` para no quedar pegado a la ilustración. */
   gap: 16px;
   padding: 48px 40px;
   border-radius: var(--bs-radius-lg);
@@ -809,26 +808,40 @@
   color: #0a0a0a;
 }
 
-/* Proporción ~1.23:1 del archivo fuente (1400×1142) preservada por
-   `height: auto` — `max-width` es lo único que controla el tamaño, así que
-   nunca puede "tapar" el título ni los botones (siempre EN FLUJO NORMAL
-   entre ambos, nunca superpuesta). */
+/* `position: relative`: ancla `.gameOverButtons` (`position: absolute`)
+   sobre su tramo inferior sin salirse de sus límites. */
+.gameOverIllustrationWrap {
+  position: relative;
+  width: 100%;
+}
+
+/* Ilustración a todo el ancho de la tarjeta (petición de usuario: "mucho
+   más ancha") — proporción del archivo fuente (recortado, 1400×752)
+   preservada por `height: auto`. */
 .gameOverIllustration {
   display: block;
   width: 100%;
-  max-width: 360px;
   height: auto;
 }
 
+/* Superpuestos sobre el tramo de camino/suelo del tercio inferior de la
+   ilustración (petición de usuario). Fondo translúcido con desenfoque
+   detrás de los botones para que se lean bien sea cual sea el tono de la
+   ilustración justo debajo (puertas/camino/sombra). */
 .gameOverButtons {
+  position: absolute;
+  left: 50%;
+  bottom: 6%;
+  transform: translateX(-50%);
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 16px;
   flex-wrap: wrap;
-  /* Compensa el `gap: 16px` (más ajustado) de `.gameOverCard`: separación
-     cómoda respecto a la ilustración sin volver a alejar el título de ella. */
-  margin-top: 8px;
+  padding: 10px;
+  border-radius: var(--bs-radius-lg);
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(6px);
 }
 
 /* Botones más grandes que los de `.introButton` (petición de usuario). */
@@ -893,8 +906,18 @@
     padding: 32px 24px;
   }
 
-  .gameOverIllustration {
-    max-width: 260px;
+  /* Botones superpuestos más compactos en pantallas estrechas: la
+     ilustración (`width: 100%`, sin tope) ya se ha reducido con la
+     tarjeta, así que su tramo inferior mide menos de ancho. */
+  .gameOverButtons {
+    gap: 10px;
+    padding: 6px;
+  }
+
+  .gameOverButtonPrimary,
+  .gameOverButtonSecondary {
+    padding: 12px 20px;
+    font-size: 14px;
   }
 }
 

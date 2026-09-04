@@ -526,33 +526,41 @@ function GameOverCard({
     <div className={styles.gameOverCard}>
       <img className={styles.gameOverLogo} src={ilernaLogoUrl} alt="iLERNA" />
       <h1 className={styles.gameOverHeading}>{GAME_OVER_HEADING}</h1>
-      {/* Ilustración EN FLUJO NORMAL (no fondo `position: absolute` como
-          `.introIllustration`): tiene que caer DEBAJO del título y ENCIMA de
-          los botones en el orden visual, no detrás de todo. */}
-      <img className={styles.gameOverIllustration} src={gameOverIllustrationUrl} alt="" aria-hidden="true" />
-      <div className={styles.gameOverButtons}>
-        {/* Mismo criterio que `disabled` de `ResponseOption` en el layout
-            genérico: sin destino conectado, el botón se ve inactivo en vez
-            de aceptar un clic que no lleva a ninguna parte — relevante
-            mientras el diseñador todavía no ha conectado "Reintentar"
-            (nace sin destino, ver comentario de `addGameOverPack`).
-            "Salir" no necesita este chequeo: `actsAsExit` siempre
-            funciona. */}
-        <button
-          type="button"
-          className={styles.gameOverButtonPrimary}
-          disabled={!retryResponse.targetNodeId}
-          onClick={() => onChoose(retryResponse)}
-        >
-          Reintentar
-        </button>
-        <button
-          type="button"
-          className={styles.gameOverButtonSecondary}
-          onClick={() => onChoose(exitResponse)}
-        >
-          Salir
-        </button>
+      {/* Envoltorio `position: relative` (petición de usuario: "los botones
+          podrían salir en la parte de abajo de la imagen, encima de ella"):
+          los botones se superponen al tramo de camino/suelo de la propia
+          ilustración en vez de ir debajo de ella en flujo normal. */}
+      <div className={styles.gameOverIllustrationWrap}>
+        <img
+          className={styles.gameOverIllustration}
+          src={gameOverIllustrationUrl}
+          alt=""
+          aria-hidden="true"
+        />
+        <div className={styles.gameOverButtons}>
+          {/* Mismo criterio que `disabled` de `ResponseOption` en el layout
+              genérico: sin destino conectado, el botón se ve inactivo en vez
+              de aceptar un clic que no lleva a ninguna parte — relevante
+              mientras el diseñador todavía no ha conectado "Reintentar"
+              (nace sin destino, ver comentario de `addGameOverPack`).
+              "Salir" no necesita este chequeo: `actsAsExit` siempre
+              funciona. */}
+          <button
+            type="button"
+            className={styles.gameOverButtonPrimary}
+            disabled={!retryResponse.targetNodeId}
+            onClick={() => onChoose(retryResponse)}
+          >
+            Reintentar
+          </button>
+          <button
+            type="button"
+            className={styles.gameOverButtonSecondary}
+            onClick={() => onChoose(exitResponse)}
+          >
+            Salir
+          </button>
+        </div>
       </div>
     </div>
   )

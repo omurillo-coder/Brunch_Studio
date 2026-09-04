@@ -1127,12 +1127,19 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
     heading.textContent = texts.gameOverHeading;
     card.appendChild(heading);
 
+    // Envoltorio \`position: relative\` (petición de usuario: "los botones
+    // podrían salir en la parte de abajo de la imagen, encima de ella"):
+    // ancla \`.gameOverButtons\` (\`position: absolute\`) sobre el tramo
+    // inferior de la ilustración en vez de dejarlos en flujo normal debajo.
+    var illustrationWrap = el('div', 'gameOverIllustrationWrap');
+    card.appendChild(illustrationWrap);
+
     if (introBrand && introBrand.gameOverBackgroundDataUri) {
       var illustration = el('img', 'gameOverIllustration');
       illustration.src = introBrand.gameOverBackgroundDataUri;
       illustration.alt = '';
       illustration.setAttribute('aria-hidden', 'true');
-      card.appendChild(illustration);
+      illustrationWrap.appendChild(illustration);
     }
 
     function buildGameOverButton(response, className, label) {
@@ -1162,7 +1169,7 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
     var buttons = el('div', 'gameOverButtons');
     buttons.appendChild(buildGameOverButton(retryResponse, 'gameOverButtonPrimary', 'Reintentar'));
     buttons.appendChild(buildGameOverButton(exitResponse, 'gameOverButtonSecondary', 'Salir'));
-    card.appendChild(buttons);
+    illustrationWrap.appendChild(buttons);
 
     return card;
   }

@@ -319,16 +319,18 @@ body {
    \`src/player/PlayerScreen.module.css\` (mismos nombres de clase, mismos
    valores). Construida por \`buildGameOverCard\` en \`exportedPlayerScript.ts\`.
 
-   Petición de usuario: UNA sola columna centrada — logo, título, ilustración
-   EN FLUJO NORMAL (un \`<img>\` de verdad, no un \`background-image\`, así que
-   no hace falta inyectar nada en tiempo de exportación como sí ocurre con
-   \`.introIllustration\`: \`buildGameOverCard\` fija \`img.src\` directamente,
-   igual que ya hace con el logo) y botones al final, todos centrados.
+   Petición de usuario, en varias vueltas: UNA sola columna centrada — logo,
+   título, e ilustración a todo el ancho de la tarjeta con los botones
+   SUPERPUESTOS sobre su tramo de camino/suelo inferior (un \`<img>\` de
+   verdad, no un \`background-image\`, así que no hace falta inyectar nada en
+   tiempo de exportación como sí ocurre con \`.introIllustration\`:
+   \`buildGameOverCard\` fija \`img.src\` directamente, igual que ya hace con
+   el logo).
    --------------------------------------------------------------------- */
 
 .gameOverCard {
   width: 100%;
-  max-width: 640px;
+  max-width: 860px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -360,20 +362,31 @@ body {
   color: #0a0a0a;
 }
 
+.gameOverIllustrationWrap {
+  position: relative;
+  width: 100%;
+}
+
 .gameOverIllustration {
   display: block;
   width: 100%;
-  max-width: 360px;
   height: auto;
 }
 
 .gameOverButtons {
+  position: absolute;
+  left: 50%;
+  bottom: 6%;
+  transform: translateX(-50%);
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 16px;
   flex-wrap: wrap;
-  margin-top: 8px;
+  padding: 10px;
+  border-radius: var(--bs-radius-lg);
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(6px);
 }
 
 .gameOverButtonPrimary {
@@ -424,8 +437,15 @@ body {
     padding: 32px 24px;
   }
 
-  .gameOverIllustration {
-    max-width: 260px;
+  .gameOverButtons {
+    gap: 10px;
+    padding: 6px;
+  }
+
+  .gameOverButtonPrimary,
+  .gameOverButtonSecondary {
+    padding: 12px 20px;
+    font-size: 14px;
   }
 }
 
