@@ -27,3 +27,13 @@ export const INTRO_SUBTITLE_SUFFIX = ' en una situación realista.'
 export const INTRO_CICLO_PLACEHOLDER = '— Ciclo sin elegir —'
 export const INTRO_ASIGNATURA_PLACEHOLDER = '— Asignatura sin elegir —'
 export const INTRO_CASE_NAME_PLACEHOLDER = '— Título sin definir —'
+
+/**
+ * Título fijo de la pantalla de marca bespoke "Game Over"
+ * (`SlideNodeSchema.brandedGameOverScreen`, ver `GameOverCard` en
+ * `src/player/PlayerScreen.tsx`) — mismo criterio que `INTRO_HEADING` justo
+ * arriba: vive en el dominio para que `PlayerScreen.tsx` y `htmlBundle.ts`
+ * (`EXPORTED_TEXTS.gameOverHeading`, leído por `buildGameOverCard` en
+ * `exportedPlayerScript.ts`) importen la MISMA fuente.
+ */
+export const GAME_OVER_HEADING = '¿Seguro que no quieres volver a intentarlo?'

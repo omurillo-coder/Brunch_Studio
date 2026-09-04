@@ -365,6 +365,39 @@ describe('updateNode — responseOrder (petición de usuario: interruptor "Orden
   })
 })
 
+describe('updateNode — brandedGameOverScreen (pantalla de marca bespoke "Game Over")', () => {
+  it('fija true; un patch que no lo incluye no lo toca', () => {
+    let project = createProject('P')
+    const startId = project.graph.startNodeId
+
+    project = updateNode(project, startId, { brandedGameOverScreen: true })
+    let node = project.graph.nodes.find((n) => n.id === startId)
+    expect(node?.type === 'slide' ? node.brandedGameOverScreen : undefined).toBe(true)
+
+    // `undefined` no toca el campo.
+    project = updateNode(project, startId, { title: 'X' })
+    node = project.graph.nodes.find((n) => n.id === startId)
+    expect(node?.type === 'slide' ? node.brandedGameOverScreen : undefined).toBe(true)
+
+    // Mismo criterio que `celebrate`: no admite `null`, basta con fijar
+    // `false` para "apagarlo".
+    project = updateNode(project, startId, { brandedGameOverScreen: false })
+    node = project.graph.nodes.find((n) => n.id === startId)
+    expect(node?.type === 'slide' ? node.brandedGameOverScreen : 'missing').toBe(false)
+  })
+
+  it('lanza error al fijar brandedGameOverScreen en un nodo final o en el nodo intro', () => {
+    let project = createNode(createProject('P'), 'final', { x: 0, y: 0 })
+    const finalId = otherNodeIdOf(project, 'final')
+    expect(() => updateNode(project, finalId, { brandedGameOverScreen: true })).toThrow()
+
+    project = createNode(createProject('P'), 'intro', { x: 0, y: 0 })
+    const introId = project.graph.nodes.find((n) => n.type === 'intro')?.id
+    if (!introId) throw new Error('No se creó el nodo intro')
+    expect(() => updateNode(project, introId, { brandedGameOverScreen: true })).toThrow()
+  })
+})
+
 describe('updateNode — variant (tres variantes de Final: general/bueno/malo)', () => {
   it('un Final nuevo nace con variant "general"', () => {
     const project = createNode(createProject('P'), 'final', { x: 0, y: 0 })
@@ -645,6 +678,17 @@ describe('duplicateNode', () => {
     const copy = updated.graph.nodes.find((n) => n.id === nodeId) as SlideNode
 
     expect(copy.responseOrder).toBe('random')
+  })
+
+  it('la copia conserva brandedGameOverScreen (pantalla de marca bespoke "Game Over") de la diapositiva original', () => {
+    let project = createProject('P')
+    const startId = project.graph.startNodeId
+    project = updateNode(project, startId, { brandedGameOverScreen: true })
+
+    const { project: updated, nodeId } = duplicateNode(project, startId, { x: 40, y: 40 })
+    const copy = updated.graph.nodes.find((n) => n.id === nodeId) as SlideNode
+
+    expect(copy.brandedGameOverScreen).toBe(true)
   })
 
   it('corrección de revisión de código (milestone "+1 fallo con Game Over"): la copia de un Final SÍ conserva alternateCondition/alternateBody/celebrate', () => {

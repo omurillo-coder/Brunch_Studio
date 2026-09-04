@@ -760,6 +760,150 @@
   }
 }
 
+/* ---------------------------------------------------------------------
+   Pantalla de marca bespoke "Game Over" (`SlideNode.brandedGameOverScreen`,
+   ver comentario de `GameOverCard` en `PlayerScreen.tsx`) — mismo shape que
+   `.introCard`/`.introContent`/`.introIllustration` justo arriba (mismos
+   valores de layout de la tarjeta), traducción literal en
+   `buildGameOverCard` de `src/export/exportedPlayerScript.ts`.
+
+   A diferencia de `fondo-inicio.jpg` (que sangra por la esquina superior
+   derecha, ver comentario de `.introIllustration`), `game-over.jpg` trae la
+   pareja de puertas CENTRADA sobre fondo blanco propio, con un margen
+   blanco generoso arriba (~36% de la altura de la imagen es blanco puro
+   antes de que empiecen las puertas) — por eso `.gameOverContent` NO se
+   limita a un 54% de ancho (no hay ninguna "mitad" que ceder a la
+   ilustración: el propio fondo blanco de la imagen ya hace de fondo de la
+   tarjeta) y `.gameOverIllustration` se ancla abajo-centro en vez de
+   arriba-derecha.
+
+   `min-height: 560px` (más alto que los 440px de `.introCard`) + verificado
+   visualmente con el arnés de `src/main.tsx` (ver tarea de verificación):
+   con 440px la ilustración a `background-size: 70% auto` quedaba tan alta
+   que las puertas (no solo el margen blanco de la imagen) tapaban el
+   título/los botones. Con 560px de alto y 60% de ancho, la imagen
+   (proporción ~1.23:1, mismo aspect ratio que el archivo fuente 1400×1142)
+   mide ~449px de alto; anclada abajo, su margen blanco superior cubre hasta
+   bien por encima de los botones y las puertas (el ~64% inferior de la
+   imagen) quedan claramente por debajo, sin solape. */
+.gameOverCard {
+  position: relative;
+  width: 100%;
+  max-width: 920px;
+  min-height: 560px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: var(--bs-radius-lg);
+  background: #ffffff;
+  border: 1px solid var(--bs-color-border);
+  box-shadow: var(--bs-shadow-sm);
+  font-family: 'FS Millbank', var(--bs-font-sans);
+  color: #0a0a0a;
+  animation: cardFadeIn 0.2s ease;
+}
+
+.gameOverContent {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 24px;
+  padding: 36px 40px 0;
+}
+
+.gameOverButtons {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.gameOverButtonPrimary {
+  flex: 0 0 auto;
+  padding: 13px 30px;
+  border: none;
+  border-radius: var(--bs-radius-sm);
+  background: var(--bs-color-accent);
+  color: #0a0a0a;
+  font-family: inherit;
+  font-weight: 700;
+  font-size: 15px;
+  transition: background-color 0.15s ease;
+}
+
+.gameOverButtonPrimary:hover {
+  background: var(--bs-color-accent-hover);
+}
+
+/* Sin destino conectado todavía (ver comentario de `GameOverCard` en
+   PlayerScreen.tsx): mismo tratamiento que `.optionButton:disabled` del
+   layout genérico — atenuado y sin cursor de mano, en vez de un botón que
+   acepta el clic sin llevar a ninguna parte. Colores FIJOS (no
+   `var(--bs-color-*)`), mismo criterio que el resto de esta tarjeta de
+   marca: independiente del tema claro/oscuro de la app. */
+.gameOverButtonPrimary:disabled {
+  background: #e0e0e0;
+  color: #8a8a8a;
+  cursor: default;
+}
+
+/* Secundario/"Salir": mismas dimensiones que el primario, contorno en vez
+   de relleno — mismo acento de marca (`--bs-color-accent`) usado como color
+   de borde/texto, no gris neutro, para que siga leyéndose como parte de la
+   misma pantalla de marca. */
+.gameOverButtonSecondary {
+  flex: 0 0 auto;
+  padding: 12px 29px;
+  border: 2px solid var(--bs-color-accent);
+  border-radius: var(--bs-radius-sm);
+  background: transparent;
+  color: #0a0a0a;
+  font-family: inherit;
+  font-weight: 700;
+  font-size: 15px;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+/* `rgba` fijo (no `--bs-color-surface`, que cambia con el tema oscuro): esta
+   tarjeta es de colores FIJOS igual que `.introCard`, así que su fondo de
+   hover tampoco debe depender del tema. */
+.gameOverButtonSecondary:hover {
+  background: rgba(10, 10, 10, 0.05);
+  border-color: var(--bs-color-accent-hover);
+}
+
+.gameOverIllustration {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-image: url('../assets/playerIntro/game-over.jpg');
+  background-repeat: no-repeat;
+  background-position: bottom center;
+  background-size: 60% auto;
+}
+
+/* Pantalla estrecha (móvil): mismo criterio que `.introIllustration` — se
+   oculta, el contenido recupera el padding completo. Sin la ilustración
+   detrás, el alto extra de `.gameOverCard` (560px, ver su comentario) ya no
+   hace falta — vuelve a un alto similar al de `.introCard`. */
+@media (max-width: 640px) {
+  .gameOverIllustration {
+    display: none;
+  }
+
+  .gameOverCard {
+    min-height: 440px;
+  }
+
+  .gameOverContent {
+    padding: 28px 24px 0;
+  }
+}
+
 /* Preferencia de accesibilidad "reducir movimiento": desactiva SOLO las
    transiciones/animaciones nuevas de esta tarea — el confeti (`.confettiPiece`,
    petición explícita de usuario: "muy ESPECTACULAR") se deja intacto, no es
@@ -770,13 +914,16 @@
   .lightboxClose,
   .option,
   .neutralButton,
-  .introButton {
+  .introButton,
+  .gameOverButtonPrimary,
+  .gameOverButtonSecondary {
     transition: none;
   }
 
   .lightboxBackdrop,
   .card,
-  .introCard {
+  .introCard,
+  .gameOverCard {
     animation: none;
   }
 }

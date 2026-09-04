@@ -1,5 +1,4 @@
 import { addResponse, updateResponse } from './responses'
-import { addImageBlock, updateTextBlockBody } from './content'
 import { addVariable, createNode, updateNode } from './project'
 import { connect } from './graph'
 import { serializeRichBody } from '../editor/richText/richTextContent'
@@ -15,7 +14,7 @@ import type { NodePosition, ProjectDocument } from './schemas'
  * diapositivas y un Final con contenido predefinido — mismo criterio de
  * composición que las plantillas de `src/domain/templates.ts` (encadenar
  * funciones de dominio reales: `createNode`, `addResponse`,
- * `updateResponse`, `connect`, `updateTextBlockBody`), pero invocable sobre
+ * `updateResponse`, `connect`, `updateNode`), pero invocable sobre
  * un proyecto YA EN MARCHA (las plantillas solo se usan al crear un
  * proyecto nuevo desde `HomeScreen`).
  *
@@ -34,15 +33,23 @@ import type { NodePosition, ProjectDocument } from './schemas'
  *      intento, no solo con el primer fallo (milestone "+1 fallo con Game
  *      Over" en `runtime.ts`).
  *
- * 2. Diapositiva "Game Over", con contenido fijo:
- *    - Texto: "Lástima, parece que este caso se quedará sin resolver." +
- *      "¿De verdad quieres rendirte ahora?" (dos párrafos separados).
- *    - Un bloque de imagen "pendiente de subir" (sin `assetId` todavía, ver
- *      `ContentBlockSchema` — el "[imagen pendiente]" del encargo).
- *    - Respuesta "Vale, voy a intentarlo.": sin destino (el diseñador la
- *      conecta donde quiera — normalmente, de vuelta a "+1 Fallo").
- *    - Respuesta "No, me rindo.": `actsAsExit: true` (termina el recorrido
- *      ahí mismo, sin navegar a ningún nodo).
+ * 2. Diapositiva "Game Over": pantalla de marca "a medida" (bespoke,
+ *    `brandedGameOverScreen: true` en `SlideNodeSchema`), IDÉNTICA en diseño
+ *    a la portada iLERNA (`IntroCard`/`GameOverCard` en
+ *    `src/player/PlayerScreen.tsx`) — no el layout genérico de diapositiva
+ *    de decisión. Contenido FIJO de esta pantalla (no editable desde el
+ *    Inspector, ver comentario de `brandedGameOverScreen`):
+ *    - Logo iLERNA + título fijo "¿Seguro que no quieres volver a
+ *      intentarlo?" + ilustración de fondo a pantalla completa
+ *      (`src/assets/playerIntro/game-over.jpg`).
+ *    - Dos botones con el texto visible fijo "Reintentar" (primario,
+ *      relleno) / "Salir" (secundario, contorno) — el bloque de texto/
+ *      imagen que el nodo sigue teniendo en su `content` (heredado de
+ *      `createNode`, vacío por defecto) ya NO se muestra en esta pantalla.
+ *    - Respuesta "Reintentar": sin destino (el diseñador la conecta donde
+ *      quiera — normalmente, de vuelta a "+1 Fallo").
+ *    - Respuesta "Salir": `actsAsExit: true` (termina el recorrido ahí
+ *      mismo, sin navegar a ningún nodo).
  *
  * 3. Final "Perfecto"/"con fallos" — un ÚNICO nodo `final`, sin conectar a
  *    propósito (el diseñador lo cablea donde termine su propia narrativa):
@@ -67,23 +74,9 @@ import type { NodePosition, ProjectDocument } from './schemas'
  * se reutiliza tal cual (nunca se duplica ni se resetea su valor inicial).
  */
 
-/** Cuerpo Tiptap de dos párrafos, serializado — mismo formato que
- *  `updateTextBlockBody` espera (`serializeRichBody`,
- *  `src/editor/richText/richTextContent.ts`). Un simple string plano se
- *  interpretaría como UN ÚNICO párrafo (`wrapPlainText`, en ese mismo
- *  archivo), perdiendo el salto de línea entre las dos frases. */
-function twoParagraphBody(first: string, second: string): string {
-  return serializeRichBody({
-    type: 'doc',
-    content: [
-      { type: 'paragraph', content: [{ type: 'text', text: first }] },
-      { type: 'paragraph', content: [{ type: 'text', text: second }] },
-    ],
-  })
-}
-
 /** Cuerpo Tiptap de un titular (encabezado nivel 2) + dos párrafos,
- *  serializado — mismo criterio que `twoParagraphBody`, con un nodo
+ *  serializado — mismo formato que `updateNode({ body })` espera
+ *  (`serializeRichBody`, `src/editor/richText/richTextContent.ts`), con un nodo
  *  `heading` como primera línea: el titular "¡Impresionante!"/"¡Buen
  *  trabajo!" de cada variante del Final de este pack (ver comentario de
  *  cabecera del archivo), más prominente que un párrafo normal — mismo
@@ -123,23 +116,6 @@ function ensureFallosVariable(project: ProjectDocument): { project: ProjectDocum
     throw new Error('addGameOverPack: no se pudo crear la variable "Fallos".')
   }
   return { project: withVariable, variableId: created.id }
-}
-
-/** Localiza el único bloque de texto de una diapositiva recién creada (nace
- *  con exactamente uno, ver `newSlideNode` en `project.ts`) — mismo patrón
- *  que `firstTextBlockId` en `templates.ts`, no compartido a propósito
- *  (archivos de dominio distintos, cada uno gestiona sus propias búsquedas
- *  locales). */
-function firstTextBlockId(project: ProjectDocument, slideNodeId: string): string {
-  const node = project.graph.nodes.find((candidate) => candidate.id === slideNodeId)
-  if (!node || node.type !== 'slide') {
-    throw new Error(`addGameOverPack: "${slideNodeId}" no es una diapositiva.`)
-  }
-  const block = node.content.find((candidate) => candidate.type === 'text')
-  if (!block) {
-    throw new Error(`addGameOverPack: la diapositiva "${slideNodeId}" no tiene ningún bloque de texto.`)
-  }
-  return block.id
 }
 
 /**
@@ -201,21 +177,16 @@ export function addGameOverPack(project: ProjectDocument, position: NodePosition
   if (!gameOverId) {
     throw new Error('addGameOverPack: no se pudo identificar la diapositiva "Game Over" recién creada.')
   }
-  next = updateTextBlockBody(
-    next,
-    gameOverId,
-    firstTextBlockId(next, gameOverId),
-    twoParagraphBody(
-      'Lástima, parece que este caso se quedará sin resolver.',
-      '¿De verdad quieres rendirte ahora?',
-    ),
-  )
-  next = addImageBlock(next, gameOverId)
-  // Petición de usuario: insignia fija "GAME OVER" + marco rojo en el
-  // lienzo (ver comentario de `SlideNodeSchema.canvasBadge`). Sin
-  // `visitEffects` aquí — el efecto de sumar Fallos vive en "+1 Fallo"
-  // (más arriba), no en esta diapositiva.
-  next = updateNode(next, gameOverId, { canvasBadge: 'game-over' })
+  // Sin bloque de texto ni de imagen: esta pantalla es "a medida" (bespoke,
+  // `brandedGameOverScreen`) e ignora `node.content` por completo — nace con
+  // el bloque de texto vacío por defecto de `createNode`/`newSlideNode`, sin
+  // tocarlo. Petición de usuario: insignia fija "GAME OVER" + marco rojo en
+  // el lienzo (ver comentario de `SlideNodeSchema.canvasBadge`) Y la pantalla
+  // de marca bespoke (ver comentario de `SlideNodeSchema.brandedGameOverScreen`).
+  // Sin `visitEffects` aquí — el efecto de sumar Fallos vive en "+1 Fallo"
+  // (más arriba), no en esta diapositiva. Un único `updateNode`: los tres
+  // campos son exclusivos de `slide`.
+  next = updateNode(next, gameOverId, { canvasBadge: 'game-over', brandedGameOverScreen: true })
   next = addResponse(next, gameOverId)
   next = addResponse(next, gameOverId)
   const gameOverAfterResponses = next.graph.nodes.find((node) => node.id === gameOverId)
@@ -228,9 +199,13 @@ export function addGameOverPack(project: ProjectDocument, position: NodePosition
   if (!tryAgainResponseId || !giveUpResponseId) {
     throw new Error('addGameOverPack: no se pudieron crear las dos respuestas de "Game Over".')
   }
-  next = updateResponse(next, gameOverId, tryAgainResponseId, { text: 'Vale, voy a intentarlo.' })
+  // Textos fijos de la pantalla bespoke (ver `GameOverCard` en
+  // `src/player/PlayerScreen.tsx`) — el comportamiento real (navegación de
+  // "Reintentar", `actsAsExit` de "Salir") sigue siendo el de estas dos
+  // respuestas tal cual.
+  next = updateResponse(next, gameOverId, tryAgainResponseId, { text: 'Reintentar' })
   next = updateResponse(next, gameOverId, giveUpResponseId, {
-    text: 'No, me rindo.',
+    text: 'Salir',
     actsAsExit: true,
   })
 

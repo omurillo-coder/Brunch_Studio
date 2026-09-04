@@ -587,6 +587,31 @@ export const SlideNodeSchema = z.object({
    */
   canvasBadge: CanvasBadgeSchema.optional(),
   /**
+   * Pantalla de marca "a medida" (bespoke) para la diapositiva "Game Over"
+   * del pack "+1 fallo con Game Over" (`addGameOverPack`,
+   * `src/domain/nodePacks.ts`) — petición de usuario con mockup de diseño
+   * entregado, IDÉNTICA en tratamiento visual a la portada iLERNA
+   * (`IntroCard`/`.introCard` en `src/player/PlayerScreen.tsx`): logo +
+   * título fijo + ilustración de fondo a pantalla completa + dos botones
+   * (uno relleno, uno de contorno). `true` únicamente en la diapositiva
+   * "Game Over" que crea ese pack — no hay ningún control de Inspector que
+   * lo edite, mismo criterio que `canvasBadge`.
+   *
+   * A DIFERENCIA de `canvasBadge` (ver su comentario más arriba: "No afecta
+   * a ningún runtime... solo al lienzo"), este campo SÍ determina cómo se
+   * renderiza en el Player (in-app y exportado): con `true`, `PlayerScreen.tsx`
+   * (`GameOverCard`) y `exportedPlayerScript.ts` (`buildGameOverCard`)
+   * sustituyen el layout genérico de diapositiva de decisión por esta
+   * pantalla bespoke — el bloque de texto/imagen del nodo deja de mostrarse,
+   * y el texto visible de sus dos respuestas se sustituye por "Reintentar"/
+   * "Salir" fijos, aunque el comportamiento real (navegación/`actsAsExit`)
+   * sigue siendo el de las respuestas tal cual las definió el diseñador.
+   * `undefined`/ausente (cualquier otra diapositiva, incluidos documentos
+   * guardados antes de este campo) = layout genérico de siempre, cambio
+   * puramente aditivo, sin migración necesaria.
+   */
+  brandedGameOverScreen: z.boolean().optional(),
+  /**
    * Petición de usuario (interruptor "Ordenar"/"Random" junto al título
    * "Respuestas" del Inspector):
    * - `'ordered'`/ausente (valor por defecto): `responses` se presenta en

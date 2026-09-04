@@ -313,6 +313,120 @@ body {
   }
 }
 
+/* ---------------------------------------------------------------------
+   Pantalla de marca bespoke "Game Over" (\`SlideNode.brandedGameOverScreen\`)
+   — traducción literal de la misma sección de
+   \`src/player/PlayerScreen.module.css\` (mismos nombres de clase, mismos
+   valores). Construida por \`buildGameOverCard\` en \`exportedPlayerScript.ts\`.
+
+   Lo que NO está aquí (a propósito, mismo motivo que \`.introIllustration\`
+   más arriba): el \`background-image\` de \`.gameOverIllustration\`, un
+   \`data:\` URI que solo se conoce en tiempo de exportación
+   (\`introBrand.gameOverBackgroundDataUri\`) — lo inyecta
+   \`injectIntroBrandStyles\` en \`exportedPlayerScript.ts\` junto al de
+   \`.introIllustration\`.
+   --------------------------------------------------------------------- */
+
+.gameOverCard {
+  position: relative;
+  width: 100%;
+  max-width: 920px;
+  min-height: 560px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: var(--bs-radius-lg);
+  background: #ffffff;
+  border: 1px solid var(--bs-color-border);
+  box-shadow: var(--bs-shadow-sm);
+  font-family: 'FS Millbank', var(--bs-font-sans);
+  color: #0a0a0a;
+  animation: cardFadeIn 0.2s ease;
+}
+
+.gameOverContent {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 24px;
+  padding: 36px 40px 0;
+}
+
+.gameOverButtons {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.gameOverButtonPrimary {
+  flex: 0 0 auto;
+  padding: 13px 30px;
+  border: none;
+  border-radius: var(--bs-radius-sm);
+  background: var(--bs-color-accent);
+  color: #0a0a0a;
+  font-family: inherit;
+  font-weight: 700;
+  font-size: 15px;
+  transition: background-color 0.15s ease;
+}
+
+.gameOverButtonPrimary:hover {
+  background: var(--bs-color-accent-hover);
+}
+
+.gameOverButtonPrimary:disabled {
+  background: #e0e0e0;
+  color: #8a8a8a;
+  cursor: default;
+}
+
+.gameOverButtonSecondary {
+  flex: 0 0 auto;
+  padding: 12px 29px;
+  border: 2px solid var(--bs-color-accent);
+  border-radius: var(--bs-radius-sm);
+  background: transparent;
+  color: #0a0a0a;
+  font-family: inherit;
+  font-weight: 700;
+  font-size: 15px;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.gameOverButtonSecondary:hover {
+  background: rgba(10, 10, 10, 0.05);
+  border-color: var(--bs-color-accent-hover);
+}
+
+.gameOverIllustration {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-repeat: no-repeat;
+  background-position: bottom center;
+  background-size: 60% auto;
+}
+
+@media (max-width: 640px) {
+  .gameOverIllustration {
+    display: none;
+  }
+
+  .gameOverCard {
+    min-height: 440px;
+  }
+
+  .gameOverContent {
+    padding: 28px 24px 0;
+  }
+}
+
 .body {
   margin: 0;
   font-size: var(--bs-font-size-md);
@@ -839,7 +953,8 @@ button:focus-visible {
 @media (prefers-reduced-motion: reduce) {
   .lightboxBackdrop,
   .card,
-  .introCard {
+  .introCard,
+  .gameOverCard {
     animation: none;
   }
 }

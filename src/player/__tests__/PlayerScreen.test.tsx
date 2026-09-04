@@ -1121,6 +1121,79 @@ describe('PlayerScreen: milestone "+1 fallo con Game Over"', () => {
       expect(document.querySelector(`.${styles.confetti}`)).not.toBeInTheDocument()
     })
   })
+
+  describe('pantalla de marca bespoke "Game Over" (SlideNode.brandedGameOverScreen, GameOverCard)', () => {
+    /** Mismo recorrido de `buildGraphInStore` con una segunda respuesta
+     *  `actsAsExit` en la diapositiva de decisión, y esa diapositiva marcada
+     *  como `brandedGameOverScreen` — el mínimo para que se pinte
+     *  `GameOverCard` en vez del layout genérico. */
+    function buildBrandedGameOverInStore() {
+      const { decisionId, finalId, responseAId } = buildGraphInStore()
+      const exitResponseId = addResponseTo(decisionId)
+      act(() => {
+        useProjectStore.getState().updateResponse(decisionId, exitResponseId, {
+          text: 'No, me rindo.',
+          actsAsExit: true,
+        })
+        useProjectStore.getState().updateNode(decisionId, { brandedGameOverScreen: true })
+      })
+      return { decisionId, finalId, responseAId, exitResponseId }
+    }
+
+    it('pinta GameOverCard (logo + título fijo + botones "Reintentar"/"Salir") en vez del layout genérico — el texto real de las respuestas no se pinta', () => {
+      buildBrandedGameOverInStore()
+      renderPlayer()
+      fireEvent.click(screen.getByText('Continuar'))
+
+      expect(
+        screen.getByText('¿Seguro que no quieres volver a intentarlo?'),
+      ).toBeInTheDocument()
+      expect(screen.getByAltText('iLERNA')).toBeInTheDocument()
+      expect(screen.getByText('Reintentar')).toBeInTheDocument()
+      expect(screen.getByText('Salir')).toBeInTheDocument()
+      // El texto real de las respuestas ("Camino A"/"No, me rindo.") queda
+      // sustituido por el texto fijo — no se pinta en ningún sitio.
+      expect(screen.queryByText('Camino A')).not.toBeInTheDocument()
+      expect(screen.queryByText('No, me rindo.')).not.toBeInTheDocument()
+    })
+
+    it('"Reintentar" ejecuta el comportamiento REAL de la primera respuesta (navega a su destino, aquí el Final)', () => {
+      buildBrandedGameOverInStore()
+      renderPlayer()
+      fireEvent.click(screen.getByText('Continuar'))
+
+      fireEvent.click(screen.getByText('Reintentar'))
+
+      expect(screen.getByText('Fin de la experiencia')).toBeInTheDocument()
+      expect(screen.getByText('Llegaste al final A.')).toBeInTheDocument()
+    })
+
+    it('"Salir" ejecuta el comportamiento REAL de la segunda respuesta (actsAsExit: sale del modo "Probar")', () => {
+      buildBrandedGameOverInStore()
+      renderPlayer()
+      fireEvent.click(screen.getByText('Continuar'))
+
+      fireEvent.click(screen.getByText('Salir'))
+
+      expect(useProjectStore.getState().ui.previewMode).toBe(false)
+    })
+
+    it('con brandedGameOverScreen pero SIN exactamente 2 respuestas visibles, cae al layout genérico (fallback, caso raro de edición manual)', () => {
+      const { decisionId } = buildGraphInStore()
+      act(() => {
+        // Solo 1 respuesta visible ("Camino A") en vez de las 2 que
+        // `GameOverCard` espera.
+        useProjectStore.getState().updateNode(decisionId, { brandedGameOverScreen: true })
+      })
+      renderPlayer()
+      fireEvent.click(screen.getByText('Continuar'))
+
+      expect(
+        screen.queryByText('¿Seguro que no quieres volver a intentarlo?'),
+      ).not.toBeInTheDocument()
+      expect(screen.getByText('Camino A')).toBeInTheDocument()
+    })
+  })
 })
 
 describe('PlayerScreen: contenedor de scroll compartido por las 4 vistas', () => {

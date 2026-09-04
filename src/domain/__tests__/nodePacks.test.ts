@@ -52,7 +52,7 @@ describe('addGameOverPack', () => {
     expect(gameOver.visitEffects).toBeUndefined()
   })
 
-  it('la diapositiva "Game Over" tiene el texto exacto y una imagen pendiente', () => {
+  it('la diapositiva "Game Over" es la pantalla de marca bespoke, sin bloque de texto/imagen propio, con las respuestas "Reintentar"/"Salir"', () => {
     const project = createProject('P')
     const updated = addGameOverPack(project, { x: 0, y: 0 })
     const [, gameOverId] = newNodeIds(project, updated)
@@ -60,17 +60,16 @@ describe('addGameOverPack', () => {
     const gameOver = updated.graph.nodes.find((node) => node.id === gameOverId) as SlideNode
     expect(gameOver.type).toBe('slide')
 
-    const textBlock = gameOver.content.find((block) => block.type === 'text')
-    expect(textBlock?.type === 'text' ? textBlock.body : null).toContain(
-      'Lástima, parece que este caso se quedará sin resolver.',
-    )
-    expect(textBlock?.type === 'text' ? textBlock.body : null).toContain(
-      '¿De verdad quieres rendirte ahora?',
-    )
+    // Pantalla bespoke (`GameOverCard`/`buildGameOverCard`): sustituye el
+    // layout genérico, no muestra `content`.
+    expect(gameOver.brandedGameOverScreen).toBe(true)
 
-    const imageBlock = gameOver.content.find((block) => block.type === 'image')
-    expect(imageBlock).toBeDefined()
-    expect(imageBlock?.type === 'image' ? imageBlock.assetId : 'missing').toBeUndefined()
+    // Sin bloque de imagen "pendiente de subir" (ya no aplica: la
+    // ilustración de esta pantalla es fija, `game-over.jpg`) ni texto en el
+    // único bloque de texto por defecto (heredado vacío de `createNode`).
+    expect(gameOver.content.some((block) => block.type === 'image')).toBe(false)
+    const textBlock = gameOver.content.find((block) => block.type === 'text')
+    expect(textBlock?.type === 'text' ? textBlock.body : null).toBe('')
 
     const fallosVariable = updated.variables.find((variable) => variable.name === 'Fallos')
     expect(fallosVariable).toBeDefined()
@@ -78,12 +77,12 @@ describe('addGameOverPack', () => {
     expect(fallosVariable?.initialValue).toBe(0)
 
     expect(gameOver.responses).toHaveLength(2)
-    const tryAgain = gameOver.responses.find((response) => response.text === 'Vale, voy a intentarlo.')
+    const tryAgain = gameOver.responses.find((response) => response.text === 'Reintentar')
     expect(tryAgain).toBeDefined()
     expect(tryAgain?.targetNodeId).toBeUndefined()
     expect(tryAgain?.actsAsExit).toBeFalsy()
 
-    const giveUp = gameOver.responses.find((response) => response.text === 'No, me rindo.')
+    const giveUp = gameOver.responses.find((response) => response.text === 'Salir')
     expect(giveUp).toBeDefined()
     expect(giveUp?.actsAsExit).toBe(true)
     expect(giveUp?.targetNodeId).toBeUndefined()

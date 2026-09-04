@@ -138,6 +138,10 @@ export interface UpdateNodePatch {
    *  Mismo criterio de patch que `color`: `undefined` no toca, `null` borra
    *  (vuelve a `'ordered'` implícito). */
   responseOrder?: ResponseOrder | null
+  /** Solo en `slide` (ver `SlideNodeSchema.brandedGameOverScreen`). Mismo
+   *  criterio que `celebrate`: siempre un booleano definido, no admite
+   *  `null` — no hace falta "borrar" un `true`, basta con fijar `false`. */
+  brandedGameOverScreen?: boolean
 }
 
 /**
@@ -475,10 +479,11 @@ export function updateNode(
     patch.color !== undefined ||
     patch.visitEffects !== undefined ||
     patch.canvasBadge !== undefined ||
-    patch.responseOrder !== undefined
+    patch.responseOrder !== undefined ||
+    patch.brandedGameOverScreen !== undefined
   if (setsSlideOnlyField && node && node.type !== 'slide') {
     throw new Error(
-      `El nodo "${nodeId}" es de tipo "${node.type}" y no admite texto de continuar, enrutado condicional, color, efecto al visitar, insignia de lienzo ni orden de respuestas.`,
+      `El nodo "${nodeId}" es de tipo "${node.type}" y no admite texto de continuar, enrutado condicional, color, efecto al visitar, insignia de lienzo, orden de respuestas ni pantalla de marca "Game Over".`,
     )
   }
   if (patch.body !== undefined && node && node.type !== 'final') {
@@ -549,6 +554,9 @@ export function updateNode(
       }
       if (patch.responseOrder !== undefined) {
         draftNode.responseOrder = patch.responseOrder === null ? undefined : patch.responseOrder
+      }
+      if (patch.brandedGameOverScreen !== undefined) {
+        draftNode.brandedGameOverScreen = patch.brandedGameOverScreen
       }
     }
     if (draftNode.type === 'intro') {
@@ -740,6 +748,10 @@ export function duplicateNode(
         // `color` de arriba — comportamiento de la diapositiva, no una
         // conexión saliente que deba limpiarse.
         responseOrder: source.responseOrder,
+        // Mismo criterio que `canvasBadge`/`responseOrder`: comportamiento
+        // de la diapositiva (determina cómo se renderiza en el Player), no
+        // una conexión saliente — se copia tal cual.
+        brandedGameOverScreen: source.brandedGameOverScreen,
       }
       duplicate = node
       break

@@ -1648,6 +1648,68 @@ describe('buildHtmlBundle — milestone "+1 fallo con Game Over"', () => {
     expect(currentCard().querySelector('img')).toBeNull()
   })
 
+  describe('pantalla de marca bespoke "Game Over" (SlideNode.brandedGameOverScreen, buildGameOverCard)', () => {
+    /** `gameOverFeaturesProject()`, arrancando directamente en la decisión
+     *  (igual que el resto de este describe) y marcada como
+     *  `brandedGameOverScreen` — el mínimo para que `buildCard` pinte
+     *  `buildGameOverCard` en vez del layout genérico. */
+    function brandedGameOverProject(): ProjectDocument {
+      const project = gameOverFeaturesProject()
+      project.graph.startNodeId = VISIT_DECISION_ID
+      const decision = project.graph.nodes.find((node) => node.id === VISIT_DECISION_ID)
+      if (!decision || decision.type !== 'slide') throw new Error('setup inválido')
+      decision.brandedGameOverScreen = true
+      return project
+    }
+
+    it('pinta buildGameOverCard (logo + título fijo + botones "Reintentar"/"Salir") en vez del layout genérico — el texto real de las respuestas no se pinta', () => {
+      runExportedBundle(buildHtmlBundle(brandedGameOverProject(), {}))
+
+      const card = document.querySelector('#brunch-root .gameOverCard')
+      expect(card).not.toBeNull()
+      expect(card?.textContent).toContain('¿Seguro que no quieres volver a intentarlo?')
+      expect(card?.textContent).toContain('Reintentar')
+      expect(card?.textContent).toContain('Salir')
+      expect(card?.textContent).not.toContain('Seguir')
+      expect(card?.textContent).not.toContain('No, me rindo.')
+      expect(document.querySelector('#brunch-root .card')).toBeNull()
+    })
+
+    it('"Reintentar" ejecuta el comportamiento REAL de la primera respuesta visible (navega a su destino, aquí el Final)', () => {
+      runExportedBundle(buildHtmlBundle(brandedGameOverProject(), {}))
+
+      clickButton('Reintentar')
+
+      expect(currentCard().textContent).toContain('Final normal')
+    })
+
+    it('"Salir" ejecuta el comportamiento REAL de la segunda respuesta visible (actsAsExit: no navega, aviso de salir)', () => {
+      const closeSpy = vi.spyOn(window, 'close').mockImplementation(() => {})
+
+      runExportedBundle(buildHtmlBundle(brandedGameOverProject(), {}))
+
+      clickButton('Salir')
+
+      const card = document.querySelector('#brunch-root .gameOverCard')
+      expect(card).not.toBeNull()
+      expect(card?.textContent).toContain('Ya puedes cerrar esta pestaña.')
+
+      closeSpy.mockRestore()
+    })
+
+    it('con brandedGameOverScreen pero SIN exactamente 2 respuestas visibles, cae al layout genérico (fallback, caso raro de edición manual)', () => {
+      const project = brandedGameOverProject()
+      const decision = project.graph.nodes.find((node) => node.id === VISIT_DECISION_ID)
+      if (!decision || decision.type !== 'slide') throw new Error('setup inválido')
+      decision.responses = decision.responses.slice(0, 1)
+
+      runExportedBundle(buildHtmlBundle(project, {}))
+
+      expect(document.querySelector('#brunch-root .gameOverCard')).toBeNull()
+      expect(currentCard().textContent).toContain('Elige qué hacer')
+    })
+  })
+
   describe('confeti del Final "Perfecto" (petición de usuario: "con confeti", ampliada después: "si llegas al final sin fallos y con fallos, en los dos")', () => {
     it('celebrate + contenido por defecto -> confeti presente en el HTML exportado', () => {
       const project = gameOverFeaturesProject()

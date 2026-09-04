@@ -3,6 +3,7 @@ import {
   CICLOS,
   cicloOutputName,
   DEFAULT_CONTINUE_LABEL,
+  GAME_OVER_HEADING,
   INTRO_ASIGNATURA_PLACEHOLDER,
   INTRO_CASE_NAME_PLACEHOLDER,
   INTRO_CICLO_PLACEHOLDER,
@@ -74,6 +75,11 @@ interface ExportedTexts {
   introCicloPlaceholder: string
   introAsignaturaPlaceholder: string
   introCaseNamePlaceholder: string
+  /** Título fijo de la pantalla bespoke "Game Over" (ver `buildGameOverCard`
+   *  en `exportedPlayerScript.ts` y comentario de `GAME_OVER_HEADING` en
+   *  `playerIntroTexts.ts`, fuente única compartida con `GameOverCard` en
+   *  `PlayerScreen.tsx`). */
+  gameOverHeading: string
 }
 
 const EXPORTED_TEXTS: ExportedTexts = {
@@ -95,6 +101,7 @@ const EXPORTED_TEXTS: ExportedTexts = {
   introCicloPlaceholder: INTRO_CICLO_PLACEHOLDER,
   introAsignaturaPlaceholder: INTRO_ASIGNATURA_PLACEHOLDER,
   introCaseNamePlaceholder: INTRO_CASE_NAME_PLACEHOLDER,
+  gameOverHeading: GAME_OVER_HEADING,
 }
 
 /** Mensaje para quien abra el archivo con JavaScript desactivado. */

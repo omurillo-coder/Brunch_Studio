@@ -1022,6 +1022,13 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
       "') format('opentype'); font-weight: 700; font-style: normal; font-display: swap; }" +
       '.introIllustration { background-image: url("' +
       introBrand.backgroundDataUri +
+      '"); }' +
+      // Pantalla bespoke "Game Over" (\`brandedGameOverScreen\`, ver
+      // \`buildGameOverCard\` más abajo): mismo patrón que \`.introIllustration\`
+      // justo arriba, con su propio \`data:\` URI
+      // (\`introBrand.gameOverBackgroundDataUri\`).
+      '.gameOverIllustration { background-image: url("' +
+      introBrand.gameOverBackgroundDataUri +
       '"); }';
     document.head.appendChild(style);
   }
@@ -1096,9 +1103,88 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
     return card;
   }
 
+  /**
+   * Traducción literal de \`GameOverCard\` en \`src/player/PlayerScreen.tsx\`:
+   * logo + título fijo (\`texts.gameOverHeading\`) + ilustración de fondo a
+   * pantalla completa + dos botones cuyo TEXTO es fijo ("Reintentar"/
+   * "Salir") pero cuyo COMPORTAMIENTO es el real de \`retryResponse\`/
+   * \`exitResponse\` — misma lógica de clic que ya usa \`buildOption\` para
+   * cualquier respuesta genérica (\`actsAsExit\` -> \`attemptExit\`, si no ->
+   * \`setState(choose(state, response.id))\`), nunca un comportamiento
+   * hardcodeado nuevo. Ningún otro contenido del nodo (bloques de \`content\`)
+   * se pinta aquí — mismo criterio que \`buildIntroCard\`.
+   */
+  function buildGameOverCard(retryResponse, exitResponse) {
+    var card = el('section', 'gameOverCard');
+
+    var illustration = el('div', 'gameOverIllustration');
+    illustration.setAttribute('aria-hidden', 'true');
+    card.appendChild(illustration);
+
+    var content = el('div', 'gameOverContent');
+    card.appendChild(content);
+
+    if (introBrand && introBrand.logoDataUri) {
+      var logo = el('img', 'introLogo');
+      logo.src = introBrand.logoDataUri;
+      logo.alt = 'iLERNA';
+      content.appendChild(logo);
+    }
+
+    var heading = el('h1', 'introHeading');
+    heading.textContent = texts.gameOverHeading;
+    content.appendChild(heading);
+
+    function buildGameOverButton(response, className, label) {
+      var button = el('button', className);
+      button.type = 'button';
+      button.textContent = label;
+      // Mismo criterio que \`disabled\` de \`buildOption\` en el layout genérico:
+      // sin destino conectado (y sin \`actsAsExit\`, que "Salir" siempre trae),
+      // el botón se ve inactivo en vez de aceptar un clic que no lleva a
+      // ninguna parte — relevante mientras el diseñador no ha conectado
+      // "Reintentar" (nace sin destino, ver \`addGameOverPack\`).
+      if (!response.targetNodeId && !response.actsAsExit) {
+        button.disabled = true;
+      }
+      button.addEventListener('click', function () {
+        if (response.actsAsExit) {
+          // Igual que \`buildOption\`: no navega a ningún nodo, se queda en
+          // esta misma diapositiva.
+          attemptExit(card);
+          return;
+        }
+        setState(choose(state, response.id));
+      });
+      return button;
+    }
+
+    var buttons = el('div', 'gameOverButtons');
+    buttons.appendChild(buildGameOverButton(retryResponse, 'gameOverButtonPrimary', 'Reintentar'));
+    buttons.appendChild(buildGameOverButton(exitResponse, 'gameOverButtonSecondary', 'Salir'));
+    content.appendChild(buttons);
+
+    return card;
+  }
+
   function buildCard(view) {
     if (view.kind === 'intro') {
       return buildIntroCard(view.node);
+    }
+
+    // Pantalla bespoke "Game Over" (\`brandedGameOverScreen\`, ver comentario
+    // de \`buildGameOverCard\`): sustituye el layout genérico de decisión de
+    // más abajo SOLO cuando el nodo lo pide Y tiene exactamente las 2
+    // respuestas que esa pantalla espera — mismo fallback que
+    // \`PlayerScreen.tsx\` (cualquier otro caso cae al layout genérico, en vez
+    // de arriesgarse a un índice fuera de rango).
+    if (
+      view.kind === 'decision' &&
+      view.node.brandedGameOverScreen &&
+      view.visibleResponses &&
+      view.visibleResponses.length === 2
+    ) {
+      return buildGameOverCard(view.visibleResponses[0], view.visibleResponses[1]);
     }
 
     var card = el('section', 'card');
