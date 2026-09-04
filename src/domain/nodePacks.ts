@@ -1,22 +1,25 @@
 import { addResponse, updateResponse } from './responses'
 import { addVariable, createNode, updateNode } from './project'
 import { connect } from './graph'
-import { serializeRichBody } from '../editor/richText/richTextContent'
 import type { NodePosition, ProjectDocument } from './schemas'
 
 /**
  * ---------------------------------------------------------------------------
- * "+1 fallo con Game Over" (paquete de 3 nodos)
+ * "+1 fallo con Game Over" (paquete de 2 nodos)
  * ---------------------------------------------------------------------------
  *
  * Botón de creación rápida del panel izquierdo (`LeftPanel.tsx`, junto a "+
  * Diapositiva"/"+ Final") que añade DE UNA VEZ, ya cableadas entre sí, dos
- * diapositivas y un Final con contenido predefinido — mismo criterio de
- * composición que las plantillas de `src/domain/templates.ts` (encadenar
- * funciones de dominio reales: `createNode`, `addResponse`,
- * `updateResponse`, `connect`, `updateNode`), pero invocable sobre
- * un proyecto YA EN MARCHA (las plantillas solo se usan al crear un
- * proyecto nuevo desde `HomeScreen`).
+ * diapositivas con contenido predefinido — mismo criterio de composición
+ * que las plantillas de `src/domain/templates.ts` (encadenar funciones de
+ * dominio reales: `createNode`, `addResponse`, `updateResponse`, `connect`,
+ * `updateNode`), pero invocable sobre un proyecto YA EN MARCHA (las
+ * plantillas solo se usan al crear un proyecto nuevo desde `HomeScreen`).
+ *
+ * Petición de usuario: este pack SOLO crea las dos diapositivas — el Final
+ * "Perfecto"/"con fallos" que creaba en una versión anterior se eliminó
+ * (si el diseñador quiere un Final ahí, lo añade aparte con el botón
+ * "+ Final" genérico del panel).
  *
  * Contenido exacto (texto acordado con Content Factory, no un placeholder):
  *
@@ -51,47 +54,10 @@ import type { NodePosition, ProjectDocument } from './schemas'
  *    - Respuesta "Salir": `actsAsExit: true` (termina el recorrido ahí
  *      mismo, sin navegar a ningún nodo).
  *
- * 3. Final "Perfecto"/"con fallos" — un ÚNICO nodo `final`, sin conectar a
- *    propósito (el diseñador lo cablea donde termine su propia narrativa):
- *    - Contenido por defecto ("Perfecto", cuando Fallos = 0): "¡Impresionante!"
- *      + "Lo has resuelto en un momento." + "¿Quieres explorar otros
- *      caminos?".
- *    - Contenido alternativo ("con fallos", cuando Fallos > 0):
- *      "¡Buen trabajo!" + "Has conseguido resolver el caso, aunque has
- *      tenido algunos contratiempos." + "¿Qué decisiones cambiarías?", vía
- *      `alternateCondition`/`alternateBody` (milestone "+1 fallo con Game
- *      Over", `FinalNodeSchema`).
- *    - `celebrate: true` (petición de usuario: "el confeti lo quiero si
- *      llegas al final sin fallos y con fallos, en los dos" — ver
- *      `PlayerView.celebrate` en `src/player/runtime.ts`): confeti sobre
- *      AMBOS contenidos, el por defecto y el alternativo.
- *    - Los botones "Reintentar"/"Salir" de esta pantalla son los genéricos
- *      de cualquier Final (`PlayerScreen.tsx`/`exportedPlayerScript.ts`),
- *      no algo que fije este pack.
- *
  * La variable "Fallos" se crea automáticamente (número, valor inicial 0) si
  * el proyecto todavía no tiene ninguna con ese nombre exacto; si ya existe,
  * se reutiliza tal cual (nunca se duplica ni se resetea su valor inicial).
  */
-
-/** Cuerpo Tiptap de un titular (encabezado nivel 2) + dos párrafos,
- *  serializado — mismo formato que `updateNode({ body })` espera
- *  (`serializeRichBody`, `src/editor/richText/richTextContent.ts`), con un nodo
- *  `heading` como primera línea: el titular "¡Impresionante!"/"¡Buen
- *  trabajo!" de cada variante del Final de este pack (ver comentario de
- *  cabecera del archivo), más prominente que un párrafo normal — mismo
- *  nodo `heading` que ya produce el botón "H" del editor de texto
- *  enriquecido (`RICH_TEXT_EXTENSIONS`, que incluye `StarterKit`). */
-function headingBody(heading: string, first: string, second: string): string {
-  return serializeRichBody({
-    type: 'doc',
-    content: [
-      { type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: heading }] },
-      { type: 'paragraph', content: [{ type: 'text', text: first }] },
-      { type: 'paragraph', content: [{ type: 'text', text: second }] },
-    ],
-  })
-}
 
 const FALLOS_VARIABLE_NAME = 'Fallos'
 
@@ -119,17 +85,15 @@ function ensureFallosVariable(project: ProjectDocument): { project: ProjectDocum
 }
 
 /**
- * Añade el paquete "+1 fallo con Game Over" a `project`: dos diapositivas y
- * un Final, ya conectados entre sí donde corresponde (ver comentario de
- * cabecera del archivo) y con el contenido predefinido. `position` es la
- * posición de la PRIMERA diapositiva (la "en blanco"); "Game Over" nace a su
- * derecha y el Final debajo de ella, ambos con un offset fijo — no
+ * Añade el paquete "+1 fallo con Game Over" a `project`: dos diapositivas,
+ * ya conectadas entre sí (ver comentario de cabecera del archivo) y con el
+ * contenido predefinido. `position` es la posición de la PRIMERA diapositiva
+ * (la "en blanco"); "Game Over" nace a su derecha, con un offset fijo — no
  * pretende ser una disposición final perfecta, el diseñador puede mover
- * cualquiera de los tres desde el lienzo, mismo criterio que `seedIntroNode`
- * en `templates.ts`. El Final nace SIN conectar (ninguna respuesta de este
- * pack apunta a él): a diferencia de "Game Over" (destino fijo de la
- * segunda respuesta de "+1 Fallo"), dónde termina la narrativa del
- * diseñador es algo que este pack no puede decidir por él.
+ * cualquiera de las dos desde el lienzo, mismo criterio que `seedIntroNode`
+ * en `templates.ts`. Petición de usuario: este pack ya NO crea ningún Final
+ * — si el diseñador quiere uno, lo añade aparte con el botón "+ Final"
+ * genérico del panel.
  */
 export function addGameOverPack(project: ProjectDocument, position: NodePosition): ProjectDocument {
   const { project: withVariable, variableId: fallosVariableId } = ensureFallosVariable(project)
@@ -213,36 +177,6 @@ export function addGameOverPack(project: ProjectDocument, position: NodePosition
   // respuesta (`response1Id`, la primera, se deja deliberadamente sin
   // destino: el diseñador la conecta donde quiera).
   next = connect(next, slide1Id, gameOverId, response2Id)
-
-  // Final "Perfecto"/"con fallos": un único nodo, sin conectar (ver
-  // comentario de esta función). Nace con `body`/`variant` vacíos por
-  // defecto (`createNode`); el `updateNode` de después fija TODO su
-  // contenido de una vez — `body` (por defecto), `alternateCondition`/
-  // `alternateBody` (Fallos > 0) y `celebrate` (confeti sobre los dos
-  // contenidos, petición de usuario).
-  const finalPosition = { x: position.x, y: position.y + 240 }
-  const beforeFinal = next
-  next = createNode(next, 'final', finalPosition)
-  const finalId = next.graph.nodes.find(
-    (node) => !beforeFinal.graph.nodes.some((existing) => existing.id === node.id),
-  )?.id
-  if (!finalId) {
-    throw new Error('addGameOverPack: no se pudo identificar el Final recién creado.')
-  }
-  next = updateNode(next, finalId, {
-    body: headingBody(
-      '¡Impresionante!',
-      'Lo has resuelto en un momento.',
-      '¿Quieres explorar otros caminos?',
-    ),
-    alternateCondition: { variableId: fallosVariableId, operator: '>', value: 0 },
-    alternateBody: headingBody(
-      '¡Buen trabajo!',
-      'Has conseguido resolver el caso, aunque has tenido algunos contratiempos.',
-      '¿Qué decisiones cambiarías?',
-    ),
-    celebrate: true,
-  })
 
   return next
 }

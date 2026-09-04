@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { addGameOverPack } from '../nodePacks'
 import { createProject } from '../project'
-import type { FinalNode, ProjectDocument, SlideNode } from '../schemas'
+import type { ProjectDocument, SlideNode } from '../schemas'
 
 function newNodeIds(before: ProjectDocument, after: ProjectDocument): string[] {
   const beforeIds = new Set(before.graph.nodes.map((node) => node.id))
@@ -9,15 +9,16 @@ function newNodeIds(before: ProjectDocument, after: ProjectDocument): string[] {
 }
 
 describe('addGameOverPack', () => {
-  it('crea dos diapositivas y un Final, nuevos; las diapositivas conectadas entre sí', () => {
+  it('crea dos diapositivas nuevas, conectadas entre sí, y ningún otro nodo', () => {
     const project = createProject('P')
     const updated = addGameOverPack(project, { x: 0, y: 0 })
 
-    const [slide1Id, gameOverId, finalId] = newNodeIds(project, updated)
+    const [slide1Id, gameOverId] = newNodeIds(project, updated)
     expect(slide1Id).toBeDefined()
     expect(gameOverId).toBeDefined()
-    expect(finalId).toBeDefined()
-    expect(updated.graph.nodes).toHaveLength(project.graph.nodes.length + 3)
+    // Petición de usuario: este pack SOLO crea las dos diapositivas — ya no
+    // añade ningún Final (ver comentario de cabecera del archivo).
+    expect(updated.graph.nodes).toHaveLength(project.graph.nodes.length + 2)
 
     const slide1 = updated.graph.nodes.find((node) => node.id === slide1Id) as SlideNode
     expect(slide1.type).toBe('slide')
@@ -26,10 +27,6 @@ describe('addGameOverPack', () => {
     expect(slide1.responses[0]?.targetNodeId).toBeUndefined()
     // Segunda respuesta: conectada a "Game Over".
     expect(slide1.responses[1]?.targetNodeId).toBe(gameOverId)
-
-    // El Final nace SIN conectar (ver comentario de `addGameOverPack`).
-    const final = updated.graph.nodes.find((node) => node.id === finalId) as FinalNode
-    expect(final.type).toBe('final')
   })
 
   it('la primera diapositiva ("+1 Fallo") lleva la insignia de lienzo "plus-one-fallo" y +1 Fallos al visitarla; la de "Game Over" lleva "game-over" y NINGÚN efecto', () => {
@@ -88,34 +85,6 @@ describe('addGameOverPack', () => {
     expect(giveUp?.targetNodeId).toBeUndefined()
   })
 
-  it('el Final tiene el contenido "Perfecto" por defecto, "con fallos" como alternativo (Fallos > 0) y confeti en los dos', () => {
-    const project = createProject('P')
-    const updated = addGameOverPack(project, { x: 0, y: 0 })
-    const [, , finalId] = newNodeIds(project, updated)
-
-    const final = updated.graph.nodes.find((node) => node.id === finalId) as FinalNode
-    expect(final.type).toBe('final')
-
-    expect(final.body).toContain('¡Impresionante!')
-    expect(final.body).toContain('Lo has resuelto en un momento.')
-    expect(final.body).toContain('¿Quieres explorar otros caminos?')
-
-    expect(final.alternateBody).toContain('¡Buen trabajo!')
-    expect(final.alternateBody).toContain(
-      'Has conseguido resolver el caso, aunque has tenido algunos contratiempos.',
-    )
-    expect(final.alternateBody).toContain('¿Qué decisiones cambiarías?')
-
-    const fallosVariable = updated.variables.find((variable) => variable.name === 'Fallos')
-    expect(final.alternateCondition).toEqual({
-      variableId: fallosVariable?.id,
-      operator: '>',
-      value: 0,
-    })
-
-    expect(final.celebrate).toBe(true)
-  })
-
   it('reutiliza la variable "Fallos" si el proyecto ya tiene una con ese nombre, sin duplicarla ni reiniciar su valor', () => {
     let project = createProject('P')
     project = addGameOverPack(project, { x: 0, y: 0 })
@@ -130,18 +99,15 @@ describe('addGameOverPack', () => {
     expect(fallosVariables[0]?.id).toBe(firstFallosId)
   })
 
-  it('coloca la segunda diapositiva ("Game Over") a la derecha de la primera, y el Final debajo de la primera', () => {
+  it('coloca la segunda diapositiva ("Game Over") a la derecha de la primera', () => {
     const project = createProject('P')
     const updated = addGameOverPack(project, { x: 100, y: 50 })
-    const [slide1Id, gameOverId, finalId] = newNodeIds(project, updated)
+    const [slide1Id, gameOverId] = newNodeIds(project, updated)
 
     const slide1 = updated.graph.nodes.find((node) => node.id === slide1Id)
     const gameOver = updated.graph.nodes.find((node) => node.id === gameOverId)
-    const final = updated.graph.nodes.find((node) => node.id === finalId)
     expect(slide1?.position).toEqual({ x: 100, y: 50 })
     expect(gameOver?.position.x).toBeGreaterThan(slide1?.position.x ?? 0)
     expect(gameOver?.position.y).toBe(50)
-    expect(final?.position.x).toBe(100)
-    expect(final?.position.y).toBeGreaterThan(slide1?.position.y ?? 0)
   })
 })

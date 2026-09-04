@@ -54,14 +54,14 @@ describe('LeftPanel', () => {
     expect(useProjectStore.getState().selection.selectedNodeIds).toEqual([created.id])
   })
 
-  it('"+1 fallo con Game Over" añade los 2 diapositivas + 1 Final del paquete y selecciona la primera diapositiva (milestone "+1 fallo con Game Over")', () => {
+  it('"+1 fallo con Game Over" añade las 2 diapositivas del paquete (ningún Final) y selecciona la primera (milestone "+1 fallo con Game Over")', () => {
     render(<LeftPanel />)
     const before = useProjectStore.getState().project.graph.nodes.length
 
     fireEvent.click(screen.getByText('+1 fallo con Game Over'))
 
     const nodes = useProjectStore.getState().project.graph.nodes
-    expect(nodes.length).toBe(before + 3)
+    expect(nodes.length).toBe(before + 2)
 
     const selectedId = useProjectStore.getState().selection.selectedNodeIds[0]
     const selected = nodes.find((node) => node.id === selectedId)
