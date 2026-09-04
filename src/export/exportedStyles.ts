@@ -332,7 +332,7 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 24px;
+  gap: 16px;
   padding: 48px 40px;
   border-radius: var(--bs-radius-lg);
   background: #ffffff;
@@ -373,6 +373,7 @@ body {
   justify-content: center;
   gap: 16px;
   flex-wrap: wrap;
+  margin-top: 8px;
 }
 
 .gameOverButtonPrimary {

@@ -778,7 +778,10 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 24px;
+  /* Petición de usuario ("más cerca del texto por la parte superior"): 16px
+     entre logo/título/ilustración — `.gameOverButtons` compensa con su
+     propio `margin-top` para no quedar pegado a la ilustración. */
+  gap: 16px;
   padding: 48px 40px;
   border-radius: var(--bs-radius-lg);
   background: #ffffff;
@@ -823,6 +826,9 @@
   justify-content: center;
   gap: 16px;
   flex-wrap: wrap;
+  /* Compensa el `gap: 16px` (más ajustado) de `.gameOverCard`: separación
+     cómoda respecto a la ilustración sin volver a alejar el título de ella. */
+  margin-top: 8px;
 }
 
 /* Botones más grandes que los de `.introButton` (petición de usuario). */
