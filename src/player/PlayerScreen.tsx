@@ -607,6 +607,58 @@ function GameOverCard({
   )
 }
 
+/**
+ * Pantalla de marca "a medida" (bespoke) del Final "con fallos"
+ * (`view.usedAlternate`, ver comentario de ese campo en `src/player/runtime.ts`)
+ * — petición de usuario con mockup de diseño entregado: logo + título/cuerpo
+ * REALES del proyecto (`resolvedBody`, editable por el diseñador en el
+ * Inspector — a diferencia de `GameOverCard`, aquí el contenido NO es fijo,
+ * solo el ENVOLTORIO visual lo es) + ilustración de fondo sangrando por la
+ * derecha + botones Reintentar/Salir al pie de la columna de texto. Mismo
+ * shape que `IntroCard` (texto a la izquierda, ilustración de fondo tras él
+ * — petición de usuario: "el texto aparece encima de la imagen en la parte
+ * izquierda") en vez de `GameOverCard` (columna única centrada): esta
+ * pantalla SÍ tiene contenido variable de longitud impredecible (el cuerpo
+ * lo escribe el diseñador), así que el layout de `IntroCard` — pensado
+ * precisamente para eso — encaja mejor que forzar una columna centrada.
+ *
+ * El Final "por defecto" (sin fallos) NO pasa por aquí todavía — sigue
+ * usando el layout genérico de `.card` más abajo hasta que se rediseñe esa
+ * pantalla también (petición de usuario, pendiente, fuera de este alcance).
+ */
+function FinalAlternateCard({
+  resolvedBody,
+  totalPoints,
+  onRestart,
+  onExit,
+}: {
+  resolvedBody: string
+  totalPoints: number | null
+  onRestart: () => void
+  onExit: () => void
+}) {
+  return (
+    <div className={styles.finalAlternateCard}>
+      <div className={styles.finalAlternateContent}>
+        <img className={styles.introLogo} src={ilernaLogoUrl} alt="iLERNA" />
+        <RichTextView body={resolvedBody} className={styles.finalAlternateBody} />
+        {totalPoints !== null && (
+          <p className={styles.finalAlternatePoints}>Puntuación final: {totalPoints} puntos</p>
+        )}
+        <div className={styles.finalAlternateActions}>
+          <button type="button" className={styles.introButton} onClick={onRestart}>
+            Reintentar
+          </button>
+          <button type="button" className={styles.finalAlternateButtonSecondary} onClick={onExit}>
+            Salir
+          </button>
+        </div>
+      </div>
+      <div className={styles.finalAlternateIllustration} aria-hidden="true" />
+    </div>
+  )
+}
+
 /** Paleta fija de piezas de confeti (milestone "+1 fallo con Game Over",
  *  petición de usuario: "Final Perfecto... con confeti", ampliada después a
  *  petición de usuario: "muy ESPECTACULAR") — colores vivos DELIBERADAMENTE
@@ -977,18 +1029,29 @@ export function PlayerScreen({ filePath }: PlayerScreenProps) {
           </div>
         )}
 
-        {view.kind === 'final' && (
+        {/* Confeti (milestone "+1 fallo con Game Over", petición de usuario
+            ampliada después: "si llegas al final sin fallos y con fallos, en
+            los dos"): sobre CUALQUIER contenido de un Final con
+            `node.celebrate` (ver `view.celebrate` en `./runtime`), tanto el
+            genérico como `FinalAlternateCard`. Pintado a pantalla completa
+            (`.confetti` es `position: fixed`), así que montarlo aquí, como
+            hermano de las dos ramas de más abajo en vez de dentro de cada
+            una, es indiferente para su posición pero evita duplicar la
+            condición. */}
+        {view.kind === 'final' && view.celebrate && <Confetti />}
+
+        {view.kind === 'final' && view.usedAlternate && (
+          <FinalAlternateCard
+            key={view.node.id}
+            resolvedBody={view.resolvedBody}
+            totalPoints={playerState.totalPoints}
+            onRestart={handleRestart}
+            onExit={handleExit}
+          />
+        )}
+
+        {view.kind === 'final' && !view.usedAlternate && (
           <div key={view.node.id} className={styles.card}>
-            {/* Confeti (milestone "+1 fallo con Game Over", petición de
-                usuario ampliada después: "si llegas al final sin fallos y
-                con fallos, en los dos"): sobre CUALQUIER contenido de un
-                Final con `node.celebrate` (ver `view.celebrate` en
-                `./runtime`), el por defecto y el alternativo. Montado
-                dentro de la tarjeta pero pintado a pantalla completa
-                (`.confetti` es `position: fixed`, ver
-                `PlayerScreen.module.css`), así que su posición en el árbol
-                es irrelevante. */}
-            {view.celebrate && <Confetti />}
             <h1 className={styles.title}>Fin de la experiencia</h1>
             {view.resolvedBody.trim() ? (
               <RichTextView body={view.resolvedBody} className={styles.body} />

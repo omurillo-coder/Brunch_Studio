@@ -115,6 +115,17 @@ export type PlayerView =
        * dependa de `usedAlternate`.
        */
       celebrate: boolean
+      /**
+       * Petición de usuario ("vamos a por la pantalla de con fallos"):
+       * `true` cuando `resolvedBody` es `node.alternateBody` (no
+       * `node.body`) — reintroducido (se había quitado, ver comentario de
+       * `resolveFinalContent`, cuando solo hacía falta para `celebrate`,
+       * que ya no depende de esto) porque ahora SÍ hace falta distinguir
+       * las dos pantallas: la de "con fallos" usa un diseño de marca
+       * distinto (`FinalAlternateCard` en `PlayerScreen.tsx`) del genérico
+       * que sigue usando la de contenido por defecto.
+       */
+      usedAlternate: boolean
     }
   | { kind: 'dead-end'; node: Node | null }
 
@@ -264,21 +275,23 @@ function orderResponses(
 /**
  * Milestone "+1 fallo con Game Over": resuelve qué `body` debe pintarse
  * para un nodo `final` (ver el comentario de `PlayerView`, rama `'final'`,
- * campo `resolvedBody`). Ya NO distingue si resolvió al contenido por
- * defecto o al alternativo en su valor de retorno (`usedAlternate`,
- * quitado): con la petición de usuario de celebrar en los dos casos,
- * `celebrate` es directamente `node.celebrate`, sin necesitar saber cuál de
- * los dos se está mostrando.
+ * campo `resolvedBody`). `usedAlternate` se había quitado de aquí (cuando
+ * solo hacía falta para `celebrate`, que dejó de depender de esto), y se
+ * reintroduce ahora que además decide qué DISEÑO usar (`FinalAlternateCard`
+ * para "con fallos" vs el genérico para el contenido por defecto).
  */
-function resolveFinalContent(node: FinalNode, variables: VariableState): { body: string } {
+function resolveFinalContent(
+  node: FinalNode,
+  variables: VariableState,
+): { body: string; usedAlternate: boolean } {
   if (
     node.alternateCondition &&
     node.alternateBody?.trim() &&
     evaluateCondition(variables, node.alternateCondition)
   ) {
-    return { body: node.alternateBody }
+    return { body: node.alternateBody, usedAlternate: true }
   }
-  return { body: node.body }
+  return { body: node.body, usedAlternate: false }
 }
 
 /**
@@ -354,12 +367,13 @@ export function getView(project: ProjectDocument, state: PlayerState): PlayerVie
   }
 
   if (node.type === 'final') {
-    const { body } = resolveFinalContent(node, state.variables)
+    const { body, usedAlternate } = resolveFinalContent(node, state.variables)
     return {
       kind: 'final',
       node,
       resolvedBody: body,
       celebrate: node.celebrate === true,
+      usedAlternate,
     }
   }
 

@@ -314,6 +314,124 @@ body {
 }
 
 /* ---------------------------------------------------------------------
+   Final "con fallos" (petición de usuario) — traducción literal de la misma
+   sección de \`src/player/PlayerScreen.module.css\`. Construida por
+   \`buildFinalAlternateCard\` en \`exportedPlayerScript.ts\`. El
+   \`background-image\` de \`.finalAlternateIllustration\` NO está aquí, por el
+   mismo motivo que \`.introIllustration\`: es un \`data:\` URI que solo se
+   conoce en tiempo de exportación, y además OPCIONAL (solo si el proyecto
+   tiene algún Final con contenido alternativo) — lo inyecta
+   \`injectIntroBrandStyles\` en \`exportedPlayerScript.ts\`.
+   --------------------------------------------------------------------- */
+.finalAlternateCard {
+  position: relative;
+  width: 100%;
+  max-width: 920px;
+  min-height: 440px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: var(--bs-radius-lg);
+  background: #ffffff;
+  border: 1px solid var(--bs-color-border);
+  box-shadow: var(--bs-shadow-sm);
+  font-family: 'FS Millbank', var(--bs-font-sans);
+  color: #0a0a0a;
+  animation: cardFadeIn 0.2s ease;
+}
+
+.finalAlternateContent {
+  position: relative;
+  z-index: 1;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 18px;
+  max-width: 54%;
+  padding: 36px 40px;
+}
+
+.finalAlternateBody {
+  margin: 0;
+  font-family: inherit;
+  font-size: 17px;
+  line-height: 1.5;
+  color: #0a0a0a;
+}
+
+.finalAlternateBody h1,
+.finalAlternateBody h2,
+.finalAlternateBody h3 {
+  margin: 0 0 4px;
+  font-family: inherit;
+  font-weight: 700;
+  font-size: clamp(24px, 3.2vw, 34px);
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  color: #0a0a0a;
+}
+
+.finalAlternateBody p {
+  margin: 0;
+}
+
+.finalAlternatePoints {
+  margin: 0;
+  font-size: 13px;
+  color: #4a4a4a;
+}
+
+.finalAlternateActions {
+  margin-top: auto;
+  padding-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.finalAlternateButtonSecondary {
+  flex: 0 0 auto;
+  padding: 12px 29px;
+  border: 2px solid var(--bs-color-accent);
+  border-radius: var(--bs-radius-sm);
+  background: transparent;
+  color: #0a0a0a;
+  font-family: inherit;
+  font-weight: 700;
+  font-size: 15px;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.finalAlternateButtonSecondary:hover {
+  background: rgba(10, 10, 10, 0.05);
+  border-color: var(--bs-color-accent-hover);
+}
+
+.finalAlternateIllustration {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-repeat: no-repeat;
+  background-position: right center;
+  background-size: 46% auto;
+}
+
+@media (max-width: 640px) {
+  .finalAlternateIllustration {
+    display: none;
+  }
+
+  .finalAlternateContent {
+    max-width: none;
+    padding: 28px 24px;
+  }
+}
+
+/* ---------------------------------------------------------------------
    Pantalla de marca bespoke "Game Over" (\`SlideNode.brandedGameOverScreen\`)
    — traducción literal de la misma sección de
    \`src/player/PlayerScreen.module.css\` (mismos nombres de clase, mismos

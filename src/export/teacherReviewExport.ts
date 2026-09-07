@@ -1,7 +1,11 @@
 import type { ProjectDocument } from '../domain'
 import type { ExportAssetMap } from './exportAssets'
 import { buildHtmlBundle } from './htmlBundle'
-import { projectNeedsGameOverAssets, resolvePlayerIntroBrandAssets } from './introBrandAssets'
+import {
+  projectNeedsFinalAlternateAssets,
+  projectNeedsGameOverAssets,
+  resolvePlayerIntroBrandAssets,
+} from './introBrandAssets'
 /**
  * Ruta del archivo binario de la imagen de felicitación, resuelta a una URL
  * en tiempo de build/dev por Vite (sufijo `?url`) — mismo mecanismo que
@@ -106,7 +110,10 @@ export async function buildTeacherReviewBundle(
 ): Promise<string> {
   const [penguinDataUri, introBrandAssets] = await Promise.all([
     resolveCompletionPenguinDataUri(),
-    resolvePlayerIntroBrandAssets(projectNeedsGameOverAssets(project)),
+    resolvePlayerIntroBrandAssets({
+      gameOver: projectNeedsGameOverAssets(project),
+      finalAlternate: projectNeedsFinalAlternateAssets(project),
+    }),
   ])
   return buildHtmlBundle(
     project,

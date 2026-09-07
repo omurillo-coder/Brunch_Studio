@@ -234,11 +234,14 @@ function runExportedBundle(html: string): void {
   new Function(script.textContent ?? '')()
 }
 
-/** `.introCard` (portada de marca) es una tarjeta con su propio layout,
- *  distinta de `.card` (el resto de vistas) — ver `buildIntroCard` en
- *  `exportedPlayerScript.ts`. */
+/** `.introCard` (portada de marca) y `.finalAlternateCard` (Final "con
+ *  fallos", petición de usuario) son tarjetas con su propio layout,
+ *  distintas de `.card` (el resto de vistas) — ver `buildIntroCard`/
+ *  `buildFinalAlternateCard` en `exportedPlayerScript.ts`. */
 function currentCard(): HTMLElement {
-  const card = document.querySelector<HTMLElement>('#brunch-root .card, #brunch-root .introCard')
+  const card = document.querySelector<HTMLElement>(
+    '#brunch-root .card, #brunch-root .introCard, #brunch-root .finalAlternateCard',
+  )
   if (!card) {
     throw new Error('No se ha pintado ninguna tarjeta en el HTML exportado.')
   }

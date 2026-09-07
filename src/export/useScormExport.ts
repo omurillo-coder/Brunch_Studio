@@ -4,7 +4,11 @@ import { useProject } from '../store'
 import { validateIntroForExport, validatePendingContentForExport } from '../domain'
 import { resolveExportAssets } from './exportAssets'
 import { buildHtmlBundle } from './htmlBundle'
-import { projectNeedsGameOverAssets, resolvePlayerIntroBrandAssets } from './introBrandAssets'
+import {
+  projectNeedsFinalAlternateAssets,
+  projectNeedsGameOverAssets,
+  resolvePlayerIntroBrandAssets,
+} from './introBrandAssets'
 import { buildScormManifest } from './scormManifest'
 import { waitForRenderFlush } from './waitForRenderFlush'
 
@@ -91,7 +95,10 @@ export function useScormExport(filePath: string): ScormExportState {
         project,
         assetRepository,
       )
-      const introBrandAssets = await resolvePlayerIntroBrandAssets(projectNeedsGameOverAssets(project))
+      const introBrandAssets = await resolvePlayerIntroBrandAssets({
+        gameOver: projectNeedsGameOverAssets(project),
+        finalAlternate: projectNeedsFinalAlternateAssets(project),
+      })
       const html = buildHtmlBundle(project, assets, undefined, introBrandAssets)
       const manifest = buildScormManifest(project)
       await scormPackageWriter.writeScormPackage(path, html, manifest)

@@ -761,6 +761,160 @@
 }
 
 /* ---------------------------------------------------------------------
+   Final "con fallos" (`view.usedAlternate`, ver comentario de
+   `FinalAlternateCard` en `PlayerScreen.tsx`) — MISMO shape que `.introCard`
+   justo arriba (texto a la izquierda, ilustración de fondo sangrando por la
+   derecha), con dos diferencias: el cuerpo es de longitud variable (lo
+   escribe el diseñador, no un titular fijo de una línea) y hay DOS botones
+   en vez de uno. Traducción literal en `buildFinalAlternateCard` de
+   `src/export/exportedPlayerScript.ts`. */
+.finalAlternateCard {
+  position: relative;
+  width: 100%;
+  max-width: 920px;
+  min-height: 440px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: var(--bs-radius-lg);
+  background: #ffffff;
+  border: 1px solid var(--bs-color-border);
+  box-shadow: var(--bs-shadow-sm);
+  font-family: 'FS Millbank', var(--bs-font-sans);
+  color: #0a0a0a;
+  animation: cardFadeIn 0.2s ease;
+}
+
+.finalAlternateContent {
+  position: relative;
+  z-index: 1;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 18px;
+  max-width: 54%;
+  padding: 36px 40px;
+}
+
+/* El cuerpo es contenido REAL del proyecto (Tiptap, ver `RichTextView`),
+   no un titular fijo — por eso necesita su propio tamaño/line-height (el de
+   `.introHeading` es demasiado grande para un párrafo largo) en vez de
+   reutilizar una clase de `IntroCard`. El primer `<h2>`/`<h1>` que traiga el
+   contenido (el titular "¡Buen trabajo!" del pack, ver `nodePacks.ts`) hereda
+   el mismo tono de marca sin ser un elemento nuevo aparte. */
+.finalAlternateBody {
+  margin: 0;
+  font-family: inherit;
+  font-size: 17px;
+  line-height: 1.5;
+  color: #0a0a0a;
+}
+
+/* `RichTextView` envuelve SIEMPRE el contenido en un `div.tiptap` con su
+ * propia `font-family`/`font-size`/`color` fijos (`.content :global(.tiptap)`
+ * en `RichTextView.module.css`, pensado para el cuerpo genérico de una
+ * diapositiva) — sin este override, esas reglas ganan sobre las de arriba
+ * (misma especificidad, pero se insertan antes) y rompen la cadena de
+ * herencia: el `h1`/`p` de dentro heredaría de `.tiptap`, no de
+ * `.finalAlternateBody`, y la tarjeta perdería FS Millbank. Se repite la
+ * cualificación con `.finalAlternateCard` (en vez de solo
+ * `.finalAlternateBody`) para que la especificidad (0,3,0) gane con
+ * independencia del orden de inserción de los módulos CSS. */
+.finalAlternateCard .finalAlternateBody :global(.tiptap) {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+
+.finalAlternateBody :global(h1),
+.finalAlternateBody :global(h2),
+.finalAlternateBody :global(h3) {
+  margin: 0 0 4px;
+  font-family: inherit;
+  font-weight: 700;
+  font-size: clamp(24px, 3.2vw, 34px);
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  color: #0a0a0a;
+}
+
+.finalAlternateBody :global(p) {
+  margin: 0;
+}
+
+.finalAlternatePoints {
+  margin: 0;
+  font-size: 13px;
+  color: #4a4a4a;
+}
+
+.finalAlternateActions {
+  margin-top: auto;
+  padding-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+/* Secundario/"Salir": mismo criterio que `.gameOverButtonSecondary` —
+   contorno en vez de relleno, mismo acento de marca como color de borde/
+   texto, colores FIJOS (no `var(--bs-color-*)`) porque esta tarjeta, como
+   `.introCard`, no se adapta al tema claro/oscuro de la app. */
+.finalAlternateButtonSecondary {
+  flex: 0 0 auto;
+  padding: 12px 29px;
+  border: 2px solid var(--bs-color-accent);
+  border-radius: var(--bs-radius-sm);
+  background: transparent;
+  color: #0a0a0a;
+  font-family: inherit;
+  font-weight: 700;
+  font-size: 15px;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.finalAlternateButtonSecondary:hover {
+  background: rgba(10, 10, 10, 0.05);
+  border-color: var(--bs-color-accent-hover);
+}
+
+/* Ilustración de fondo a pantalla completa de la tarjeta — mismo patrón que
+   `.introIllustration` (capa `position: absolute` por DEBAJO del texto,
+   petición de usuario: "el texto aparece encima de la imagen"): el propio
+   fondo blanco de `final-alt.jpg` hace de fondo de la mitad derecha de la
+   tarjeta, así que no hace falta una columna de layout aparte. El contenido
+   de la ilustración (la persona en la puerta) está centrado en su tercio
+   derecho — a diferencia de `fondo-inicio.jpg`, que sangra por la esquina
+   superior derecha — así que se ancla a la derecha, centrada verticalmente,
+   en vez de "top right". */
+.finalAlternateIllustration {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-image: url('../assets/playerIntro/final-alt.jpg');
+  background-repeat: no-repeat;
+  background-position: right center;
+  background-size: 46% auto;
+}
+
+/* Pantalla estrecha (móvil): mismo criterio que `.introIllustration` — se
+   oculta, el contenido recupera el ancho completo de la tarjeta. */
+@media (max-width: 640px) {
+  .finalAlternateIllustration {
+    display: none;
+  }
+
+  .finalAlternateContent {
+    max-width: none;
+    padding: 28px 24px;
+  }
+}
+
+/* ---------------------------------------------------------------------
    Pantalla de marca bespoke "Game Over" (`SlideNode.brandedGameOverScreen`,
    ver comentario de `GameOverCard` en `PlayerScreen.tsx`) — traducción
    literal en `buildGameOverCard` de `src/export/exportedPlayerScript.ts`.

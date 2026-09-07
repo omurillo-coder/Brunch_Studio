@@ -429,13 +429,11 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
    *  cambiar el otro). Esta función decide solo QUÉ CLAVE/texto plano usar,
    *  nunca genera HTML — eso ya está hecho. \`rawBody\` viaja además del id
    *  porque \`appendBody\` lo necesita para decidir "vacío = nada" (mismo
-   *  criterio que con \`node.body\` de siempre). Ya NO distingue si resolvió
-   *  al contenido por defecto o al alternativo en su valor de retorno
-   *  (\`usedAlternate\`, quitado): con la petición de usuario de celebrar en
-   *  los dos casos ("si llegas al final sin fallos y con fallos, en los
-   *  dos"), el confeti es directamente \`node.celebrate\`, sin necesitar
-   *  saber cuál de los dos se está mostrando — ver el punto de llamada más
-   *  abajo, en \`render()\`. */
+   *  criterio que con \`node.body\` de siempre). \`usedAlternate\` (petición de
+   *  usuario: "vamos a por la pantalla de con fallos") decide además qué
+   *  DISEÑO usar (\`buildFinalAlternateCard\` para "con fallos", el genérico
+   *  para el contenido por defecto) — se había quitado cuando solo hacía
+   *  falta para el confeti, que dejó de depender de esto. */
   function resolveFinalContent(node, variables) {
     if (
       node.alternateCondition &&
@@ -443,9 +441,9 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
       trimmed(node.alternateBody) &&
       evaluateCondition(variables, node.alternateCondition)
     ) {
-      return { bodyId: node.id + ':alternate', rawBody: node.alternateBody };
+      return { bodyId: node.id + ':alternate', rawBody: node.alternateBody, usedAlternate: true };
     }
-    return { bodyId: node.id, rawBody: node.body };
+    return { bodyId: node.id, rawBody: node.body, usedAlternate: false };
   }
 
   /** Traducción literal de \`Confetti\` (\`src/player/PlayerScreen.tsx\`,
@@ -698,16 +696,17 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
    *  con Game Over"): el único llamador (la vista 'final') necesita poder
    *  pedir el \`body\` por defecto O el alternativo, cada uno con su propia
    *  clave en \`bodyHtml\` — ver \`resolveFinalContent\`. */
-  function appendBody(card, bodyId, rawBody, fallback) {
+  function appendBody(card, bodyId, rawBody, fallback, className) {
+    var cls = className || 'body';
     var html = bodyHtml[bodyId];
     if (trimmed(rawBody) && html) {
-      var rich = el('div', 'body');
+      var rich = el('div', cls);
       rich.innerHTML = html;
       card.appendChild(rich);
       return;
     }
     if (fallback !== null) {
-      var paragraph = el('p', 'body');
+      var paragraph = el('p', cls);
       paragraph.textContent = fallback;
       card.appendChild(paragraph);
     }
@@ -1038,6 +1037,18 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
       '.introIllustration { background-image: url("' +
       introBrand.backgroundDataUri +
       '"); }';
+    // Final "con fallos" (petición de usuario, ver \`buildFinalAlternateCard\`):
+    // igual que \`.introIllustration\`, pero OPCIONAL — solo se resuelve en
+    // \`introBrandAssets.ts\` (y por tanto solo se inyecta esta regla) cuando
+    // el proyecto tiene de verdad algún Final con contenido alternativo (ver
+    // \`projectNeedsFinalAlternateAssets\`), así que un proyecto sin ninguno
+    // no paga por este asset.
+    if (introBrand.finalAlternateBackgroundDataUri) {
+      style.textContent +=
+        '.finalAlternateIllustration { background-image: url("' +
+        introBrand.finalAlternateBackgroundDataUri +
+        '"); }';
+    }
     document.head.appendChild(style);
   }
 
@@ -1224,6 +1235,67 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
     return card;
   }
 
+  /** Traducción literal de \`FinalAlternateCard\` en
+   *  \`src/player/PlayerScreen.tsx\`: logo + cuerpo REAL del proyecto
+   *  (\`finalContent\`, contenido variable — a diferencia de
+   *  \`buildGameOverCard\`, aquí NO hay texto fijo) + ilustración de fondo
+   *  sangrando por la derecha + botones Reintentar/Salir al pie. Mismo shape
+   *  que \`buildIntroCard\` (columna de texto + fondo), no
+   *  \`buildGameOverCard\` (columna única centrada). */
+  function buildFinalAlternateCard(node, finalContent, totalPoints) {
+    var card = el('section', 'finalAlternateCard');
+
+    var illustration = el('div', 'finalAlternateIllustration');
+    illustration.setAttribute('aria-hidden', 'true');
+    card.appendChild(illustration);
+
+    var content = el('div', 'finalAlternateContent');
+    card.appendChild(content);
+
+    if (introBrand && introBrand.logoDataUri) {
+      var logo = el('img', 'introLogo');
+      logo.src = introBrand.logoDataUri;
+      logo.alt = 'iLERNA';
+      content.appendChild(logo);
+    }
+
+    appendBody(
+      content,
+      finalContent.bodyId,
+      finalContent.rawBody,
+      trimmed(node.title) || texts.finalFallbackBody,
+      'finalAlternateBody',
+    );
+
+    if (totalPoints !== null) {
+      var points = el('p', 'finalAlternatePoints');
+      points.textContent = texts.pointsPrefix + totalPoints + texts.pointsSuffix;
+      content.appendChild(points);
+    }
+
+    var actions = el('div', 'finalAlternateActions');
+
+    var retryButton = el('button', 'introButton');
+    retryButton.type = 'button';
+    retryButton.textContent = texts.retry;
+    retryButton.addEventListener('click', function () {
+      setState(restart());
+    });
+    actions.appendChild(retryButton);
+
+    var exitButton = el('button', 'finalAlternateButtonSecondary');
+    exitButton.type = 'button';
+    exitButton.textContent = EXIT_BUTTON_LABEL;
+    exitButton.addEventListener('click', function () {
+      attemptExit(card);
+    });
+    actions.appendChild(exitButton);
+
+    content.appendChild(actions);
+
+    return card;
+  }
+
   function buildCard(view) {
     if (view.kind === 'intro') {
       return buildIntroCard(view.node);
@@ -1283,6 +1355,20 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
     if (view.kind === 'final') {
       scormReportCompletion(state.totalPoints);
       var finalContent = resolveFinalContent(view.node, state.variables);
+
+      // Pantalla bespoke "con fallos" (\`finalContent.usedAlternate\`, petición
+      // de usuario "vamos a por la pantalla de con fallos"): sustituye el
+      // layout genérico de más abajo SOLO cuando se resolvió al contenido
+      // alternativo — el contenido por defecto ("Perfecto") sigue con el
+      // genérico hasta que se rediseñe también (fuera de este alcance).
+      if (finalContent.usedAlternate) {
+        var altCard = buildFinalAlternateCard(view.node, finalContent, state.totalPoints);
+        if (view.node.celebrate === true) {
+          altCard.appendChild(buildConfetti());
+        }
+        return altCard;
+      }
+
       // Confeti (milestone "+1 fallo con Game Over", petición de usuario
       // ampliada después: "si llegas al final sin fallos y con fallos, en
       // los dos"): traducción literal de \`view.celebrate\` en

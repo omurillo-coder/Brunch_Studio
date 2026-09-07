@@ -4,7 +4,11 @@ import { useProject } from '../store'
 import { validateIntroForExport, validatePendingContentForExport } from '../domain'
 import { resolveExportAssets } from './exportAssets'
 import { buildHtmlBundle } from './htmlBundle'
-import { projectNeedsGameOverAssets, resolvePlayerIntroBrandAssets } from './introBrandAssets'
+import {
+  projectNeedsFinalAlternateAssets,
+  projectNeedsGameOverAssets,
+  resolvePlayerIntroBrandAssets,
+} from './introBrandAssets'
 import { waitForRenderFlush } from './waitForRenderFlush'
 
 /**
@@ -93,7 +97,10 @@ export function useHtmlExport(filePath: string): HtmlExportState {
         project,
         assetRepository,
       )
-      const introBrandAssets = await resolvePlayerIntroBrandAssets(projectNeedsGameOverAssets(project))
+      const introBrandAssets = await resolvePlayerIntroBrandAssets({
+        gameOver: projectNeedsGameOverAssets(project),
+        finalAlternate: projectNeedsFinalAlternateAssets(project),
+      })
       const html = buildHtmlBundle(project, assets, undefined, introBrandAssets)
       await htmlBundleWriter.writeHtmlBundle(path, html)
 
