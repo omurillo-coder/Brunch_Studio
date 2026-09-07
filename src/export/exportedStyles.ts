@@ -417,7 +417,7 @@ body {
   z-index: 0;
   background-repeat: no-repeat;
   background-position: right center;
-  background-size: 46% auto;
+  background-size: auto 82%;
 }
 
 @media (max-width: 640px) {

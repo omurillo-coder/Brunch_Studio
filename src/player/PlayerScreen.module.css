@@ -886,11 +886,18 @@
    `.introIllustration` (capa `position: absolute` por DEBAJO del texto,
    petición de usuario: "el texto aparece encima de la imagen"): el propio
    fondo blanco de `final-alt.jpg` hace de fondo de la mitad derecha de la
-   tarjeta, así que no hace falta una columna de layout aparte. El contenido
-   de la ilustración (la persona en la puerta) está centrado en su tercio
-   derecho — a diferencia de `fondo-inicio.jpg`, que sangra por la esquina
-   superior derecha — así que se ancla a la derecha, centrada verticalmente,
-   en vez de "top right". */
+   tarjeta, así que no hace falta una columna de layout aparte. Se ancla a la
+   derecha, centrada verticalmente.
+   *
+   * `final-alt.jpg` está recortado pegado a la silueta (sin el margen blanco
+   * enorme del original: "not bad.jpg" solo ocupaba su tercio derecho) —
+   * corrección de revisión de usuario ("corta la imagen... queda muy
+   * separado del texto"): con el margen sin recortar, escalar por ANCHO
+   * dejaba casi toda esa franja en blanco entre el texto y la silueta
+   * visible. Al ir pegado a la silueta, el tamaño se fija por ALTURA
+   * (`auto <alto>`, no `<ancho> auto`): la imagen recortada es más alta que
+   * ancha (retrato), así que escalar por ancho la desbordaría por arriba/
+   * abajo y la recortaría contra el borde de la tarjeta. */
 .finalAlternateIllustration {
   position: absolute;
   inset: 0;
@@ -898,7 +905,7 @@
   background-image: url('../assets/playerIntro/final-alt.jpg');
   background-repeat: no-repeat;
   background-position: right center;
-  background-size: 46% auto;
+  background-size: auto 82%;
 }
 
 /* Pantalla estrecha (móvil): mismo criterio que `.introIllustration` — se
