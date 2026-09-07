@@ -432,6 +432,18 @@ body {
   border-color: var(--bs-color-accent-hover);
 }
 
+/* Faltaba en el export (código review): \`buildGameOverButton\` ya aplica
+   \`button.disabled = true\` a AMBOS botones cuando corresponde, pero solo
+   \`.gameOverButtonPrimary:disabled\` tenía estilo — el secundario quedaba
+   con el atributo \`disabled\` sin ningún cambio visual. Va DESPUÉS de
+   \`:hover\` para ganar sobre él. Mismo criterio que
+   \`.gameOverButtonPrimary:disabled\`. */
+.gameOverButtonSecondary:disabled {
+  border-color: #e0e0e0;
+  color: #8a8a8a;
+  cursor: default;
+}
+
 @media (max-width: 640px) {
   .gameOverCard {
     padding: 32px 24px;

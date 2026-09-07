@@ -1708,6 +1708,63 @@ describe('buildHtmlBundle — milestone "+1 fallo con Game Over"', () => {
       expect(document.querySelector('#brunch-root .gameOverCard')).toBeNull()
       expect(currentCard().textContent).toContain('Elige qué hacer')
     })
+
+    /** Corrección de revisión de código: antes `buildCard` pasaba
+     *  `view.visibleResponses[0]`/`[1]` por POSICIÓN a `buildGameOverCard`,
+     *  así que invertir el orden del array (el interruptor "Ordenar"/
+     *  "Random" del Inspector, disponible en cualquier diapositiva) dejaba
+     *  "Reintentar" disparando la respuesta `actsAsExit`. Este test invierte
+     *  el array a mano y comprueba que la resolución por rol
+     *  (`resolveGameOverResponses`) sigue emparejando bien el texto con el
+     *  comportamiento. */
+    it('con las respuestas invertidas en el array, "Reintentar"/"Salir" siguen disparando el comportamiento correcto (resolución por rol, no por posición)', () => {
+      const project = brandedGameOverProject()
+      const decision = project.graph.nodes.find((node) => node.id === VISIT_DECISION_ID)
+      if (!decision || decision.type !== 'slide') throw new Error('setup inválido')
+      decision.responses = [...decision.responses].reverse()
+
+      runExportedBundle(buildHtmlBundle(project, {}))
+      clickButton('Reintentar')
+
+      expect(currentCard().textContent).toContain('Final normal')
+    })
+
+    it('con las respuestas invertidas en el array, "Salir" sigue actuando como actsAsExit (no navega)', () => {
+      const closeSpy = vi.spyOn(window, 'close').mockImplementation(() => {})
+      const project = brandedGameOverProject()
+      const decision = project.graph.nodes.find((node) => node.id === VISIT_DECISION_ID)
+      if (!decision || decision.type !== 'slide') throw new Error('setup inválido')
+      decision.responses = [...decision.responses].reverse()
+
+      runExportedBundle(buildHtmlBundle(project, {}))
+      clickButton('Salir')
+
+      const card = document.querySelector('#brunch-root .gameOverCard')
+      expect(card?.textContent).toContain('Ya puedes cerrar esta pestaña.')
+      closeSpy.mockRestore()
+    })
+
+    /** Corrección de revisión de código: el botón "Salir" no tenía ningún
+     *  `disabled` en React (asimetría real frente al export, que sí
+     *  aplicaba el mismo criterio a ambos botones) — este test cubre el
+     *  lado exportado, que ya lo hacía bien, para que no se pierda al
+     *  tocar `buildGameOverButton`. */
+    it('"Reintentar" aparece deshabilitado si su respuesta no tiene destino conectado', () => {
+      const project = brandedGameOverProject()
+      const decision = project.graph.nodes.find((node) => node.id === VISIT_DECISION_ID)
+      if (!decision || decision.type !== 'slide') throw new Error('setup inválido')
+      const retry = decision.responses.find((response) => !response.actsAsExit)
+      if (!retry) throw new Error('setup inválido')
+      retry.targetNodeId = undefined
+
+      runExportedBundle(buildHtmlBundle(project, {}))
+
+      const buttons = [...document.querySelectorAll('#brunch-root .gameOverButtons button')]
+      const retryButton = buttons.find((button) => button.textContent === 'Reintentar')
+      const exitButton = buttons.find((button) => button.textContent === 'Salir')
+      expect(retryButton).toBeDisabled()
+      expect(exitButton).not.toBeDisabled()
+    })
   })
 
   describe('confeti del Final "Perfecto" (petición de usuario: "con confeti", ampliada después: "si llegas al final sin fallos y con fallos, en los dos")', () => {

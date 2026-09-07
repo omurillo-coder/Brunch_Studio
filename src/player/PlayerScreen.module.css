@@ -901,6 +901,20 @@
   border-color: var(--bs-color-accent-hover);
 }
 
+/* Defensivo (código review): `exitResponse` siempre es `actsAsExit`
+   (`resolveGameOverResponses` la resuelve así), así que
+   `isResponseActionable` nunca la deshabilita en la práctica hoy — pero el
+   botón lleva su propio estado `:disabled` de todos modos, para no quedar
+   sin estilo si esa garantía cambia alguna vez. Va DESPUÉS de `:hover` en
+   la cascada (misma posición relativa que `.gameOverButtonPrimary:disabled`
+   respecto a su propio `:hover`) para que gane sobre él. Colores FIJOS,
+   mismo criterio que `.gameOverButtonPrimary:disabled`. */
+.gameOverButtonSecondary:disabled {
+  border-color: #e0e0e0;
+  color: #8a8a8a;
+  cursor: default;
+}
+
 @media (max-width: 640px) {
   .gameOverCard {
     padding: 32px 24px;

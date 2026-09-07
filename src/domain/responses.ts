@@ -10,6 +10,22 @@ import type {
 } from './schemas'
 
 /**
+ * ¿Lleva `response` a alguna parte al elegirla — tiene un destino real
+ * (`targetNodeId`) o termina el recorrido (`actsAsExit`)? Regla única para
+ * decidir si el botón de una respuesta debe verse deshabilitado (código
+ * review de la pantalla bespoke "Game Over": `PlayerScreen.tsx`'s
+ * `ResponseOption` y `GameOverCard` habían llegado a implementar esta
+ * comprobación cada uno a su manera, y una de las dos copias se quedó corta
+ * — de ahí extraerla aquí en vez de dejar que cada sitio la reescriba).
+ * Traducción literal (misma expresión booleana) en `buildOption`/
+ * `buildGameOverButton` de `src/export/exportedPlayerScript.ts`, que no
+ * puede importar esta función al ser un string de JS vanilla sin imports.
+ */
+export function isResponseActionable(response: DecisionResponse): boolean {
+  return Boolean(response.targetNodeId) || Boolean(response.actsAsExit)
+}
+
+/**
  * Localiza la diapositiva sobre la que operan las funciones de respuesta.
  * Lanza `Error` si el nodo no existe o no es una diapositiva (un `final` no
  * puede tener respuestas).

@@ -4,7 +4,7 @@ import { useProject } from '../store'
 import { validateIntroForExport, validatePendingContentForExport } from '../domain'
 import { resolveExportAssets } from './exportAssets'
 import { buildHtmlBundle } from './htmlBundle'
-import { resolvePlayerIntroBrandAssets } from './introBrandAssets'
+import { projectNeedsGameOverAssets, resolvePlayerIntroBrandAssets } from './introBrandAssets'
 
 /**
  * Orquestación del flujo "Exportar HTML" (Milestone 3, fase 1):
@@ -88,7 +88,7 @@ export function useHtmlExport(filePath: string): HtmlExportState {
         project,
         assetRepository,
       )
-      const introBrandAssets = await resolvePlayerIntroBrandAssets()
+      const introBrandAssets = await resolvePlayerIntroBrandAssets(projectNeedsGameOverAssets(project))
       const html = buildHtmlBundle(project, assets, undefined, introBrandAssets)
       await htmlBundleWriter.writeHtmlBundle(path, html)
 

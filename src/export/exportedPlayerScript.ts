@@ -1010,9 +1010,9 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
    *  El \`background-image\` de \`.introIllustration\` (la portada) SÍ se
    *  inyecta aquí, por el mismo motivo que las tipografías. La ilustración
    *  de "Game Over" NO — a diferencia de la portada, es un \`<img>\` de
-   *  verdad en flujo normal (petición de usuario: "todo centrado, los
-   *  botones debajo de la imagen"), así que \`buildGameOverCard\` le fija
-   *  \`src\` directamente, igual que ya hace con el logo. */
+   *  verdad (petición de usuario: "todo centrado"), así que
+   *  \`buildGameOverCard\` le fija \`src\` directamente, igual que ya hace con
+   *  el logo. */
   function injectIntroBrandStyles() {
     if (!introBrand) {
       return;
@@ -1102,13 +1102,46 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
   }
 
   /**
+   * Traducción literal de \`resolveGameOverResponses\` en
+   * \`src/player/PlayerScreen.tsx\`: resuelve los dos ROLES fijos de la
+   * pantalla ("Reintentar"/"Salir") por \`actsAsExit\`, NUNCA por posición en
+   * \`responses\` (corrección de revisión de código: la versión anterior
+   * pasaba \`view.visibleResponses[0]\`/\`[1]\` directamente a
+   * \`buildGameOverCard\`, así que el interruptor "Ordenar"/"Random" del
+   * Inspector — disponible en cualquier diapositiva, sin excepción para
+   * \`brandedGameOverScreen\` — podía dejar el botón "Reintentar" disparando
+   * la respuesta \`actsAsExit\` y viceversa). \`null\` si no hay EXACTAMENTE
+   * una \`actsAsExit\` y una que no lo sea.
+   */
+  function resolveGameOverResponses(responses) {
+    if (!responses || responses.length !== 2) {
+      return null;
+    }
+    var exitResponse = null;
+    var retryResponse = null;
+    for (var i = 0; i < responses.length; i += 1) {
+      if (responses[i].actsAsExit) {
+        exitResponse = responses[i];
+      } else {
+        retryResponse = responses[i];
+      }
+    }
+    if (!exitResponse || !retryResponse) {
+      return null;
+    }
+    return { retryResponse: retryResponse, exitResponse: exitResponse };
+  }
+
+  /**
    * Traducción literal de \`GameOverCard\` en \`src/player/PlayerScreen.tsx\`:
-   * logo + título fijo (\`texts.gameOverHeading\`) + ilustración EN FLUJO
-   * NORMAL (un \`<img>\`, no un fondo — cae entre el título y los botones, no
-   * detrás de todo) + dos botones cuyo TEXTO es fijo ("Reintentar"/"Salir")
-   * pero cuyo COMPORTAMIENTO es el real de \`retryResponse\`/\`exitResponse\`
-   * — misma lógica de clic que ya usa \`buildOption\` para cualquier
-   * respuesta genérica (\`actsAsExit\` -> \`attemptExit\`, si no ->
+   * logo + título fijo (\`texts.gameOverHeading\`) + ilustración (un
+   * \`<img>\` de verdad, no un fondo) + dos botones SUPERPUESTOS sobre su
+   * tramo inferior (ver \`.gameOverIllustrationWrap\`/\`.gameOverButtons\` en
+   * \`exportedStyles.ts\`) cuyo TEXTO es fijo ("Reintentar"/"Salir") pero
+   * cuyo COMPORTAMIENTO es el real de \`retryResponse\`/\`exitResponse\` — ya
+   * resueltas por ROL, no por posición, por \`resolveGameOverResponses\` —
+   * misma lógica de clic que ya usa \`buildOption\` para cualquier respuesta
+   * genérica (\`actsAsExit\` -> \`attemptExit\`, si no ->
    * \`setState(choose(state, response.id))\`), nunca un comportamiento
    * hardcodeado nuevo. Ningún otro contenido del nodo (bloques de \`content\`)
    * se pinta aquí — mismo criterio que \`buildIntroCard\`.
@@ -1180,18 +1213,17 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
     }
 
     // Pantalla bespoke "Game Over" (\`brandedGameOverScreen\`, ver comentario
-    // de \`buildGameOverCard\`): sustituye el layout genérico de decisión de
-    // más abajo SOLO cuando el nodo lo pide Y tiene exactamente las 2
-    // respuestas que esa pantalla espera — mismo fallback que
-    // \`PlayerScreen.tsx\` (cualquier otro caso cae al layout genérico, en vez
-    // de arriesgarse a un índice fuera de rango).
-    if (
-      view.kind === 'decision' &&
-      view.node.brandedGameOverScreen &&
-      view.visibleResponses &&
-      view.visibleResponses.length === 2
-    ) {
-      return buildGameOverCard(view.visibleResponses[0], view.visibleResponses[1]);
+    // de \`buildGameOverCard\`/\`resolveGameOverResponses\`): sustituye el
+    // layout genérico de decisión de más abajo SOLO cuando el nodo lo pide Y
+    // tiene exactamente una respuesta \`actsAsExit\` y otra que no lo es —
+    // mismo fallback que \`PlayerScreen.tsx\` (cualquier otro caso cae al
+    // layout genérico, en vez de arriesgarse a un índice fuera de rango o a
+    // una asignación de rol ambigua).
+    if (view.kind === 'decision' && view.node.brandedGameOverScreen) {
+      var gameOverResponses = resolveGameOverResponses(view.visibleResponses);
+      if (gameOverResponses) {
+        return buildGameOverCard(gameOverResponses.retryResponse, gameOverResponses.exitResponse);
+      }
     }
 
     var card = el('section', 'card');

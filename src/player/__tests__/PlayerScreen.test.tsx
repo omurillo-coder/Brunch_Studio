@@ -1193,6 +1193,68 @@ describe('PlayerScreen: milestone "+1 fallo con Game Over"', () => {
       ).not.toBeInTheDocument()
       expect(screen.getByText('Camino A')).toBeInTheDocument()
     })
+
+    /** Corrección de revisión de código: antes `GameOverCard` asignaba
+     *  "Reintentar"/"Salir" por POSICIÓN en `visibleResponses` (`[0]`/`[1]`),
+     *  así que reordenar las respuestas (el interruptor "Ordenar"/"Random"
+     *  del Inspector, o `moveResponse`, están disponibles en CUALQUIER
+     *  diapositiva, sin excepción para `brandedGameOverScreen`) dejaba el
+     *  botón "Reintentar" disparando la respuesta `actsAsExit` y viceversa.
+     *  Este test mueve la respuesta `actsAsExit` a la PRIMERA posición del
+     *  array y comprueba que el texto de los botones SIGUE emparejado con
+     *  el comportamiento correcto (resolución por rol, no por índice). */
+    it('con las respuestas reordenadas a mano, "Reintentar"/"Salir" siguen disparando el comportamiento correcto (resolución por rol, no por posición)', () => {
+      const { decisionId, exitResponseId } = buildBrandedGameOverInStore()
+      act(() => {
+        // La respuesta actsAsExit ("No, me rindo.") nace en el índice 1;
+        // la movemos al 0, invirtiendo el orden del array.
+        useProjectStore.getState().moveResponse(decisionId, exitResponseId, 0)
+      })
+      renderPlayer()
+      fireEvent.click(screen.getByText('Continuar'))
+
+      // Sigue habiendo un único "Reintentar" y un único "Salir" (el texto es
+      // fijo, no depende del orden) — lo que importa es el comportamiento.
+      fireEvent.click(screen.getByText('Salir'))
+      expect(useProjectStore.getState().ui.previewMode).toBe(false)
+    })
+
+    it('con las respuestas reordenadas a mano, "Reintentar" sigue navegando a su destino real (no sale de la experiencia)', () => {
+      const { decisionId, exitResponseId } = buildBrandedGameOverInStore()
+      act(() => {
+        useProjectStore.getState().moveResponse(decisionId, exitResponseId, 0)
+      })
+      renderPlayer()
+      fireEvent.click(screen.getByText('Continuar'))
+
+      fireEvent.click(screen.getByText('Reintentar'))
+
+      // Navega al Final real de "Camino A" — si el bug de resolución por
+      // posición reapareciera, "Reintentar" dispararía la respuesta
+      // actsAsExit en su lugar y esta pantalla nunca aparecería.
+      expect(screen.getByText('Fin de la experiencia')).toBeInTheDocument()
+      expect(screen.getByText('Llegaste al final A.')).toBeInTheDocument()
+    })
+
+    /** Corrección de revisión de código: `disabled` solo se comprobaba en el
+     *  botón "Reintentar" (y sin el `&& !actsAsExit` que sí aplica el resto
+     *  del Player), y "Salir" no tenía ningún chequeo — asimetría real
+     *  frente al HTML exportado, que sí aplicaba el mismo criterio a ambos
+     *  botones. */
+    it('"Reintentar" aparece deshabilitado si su respuesta no tiene destino conectado; "Salir" (actsAsExit) nunca lo está', () => {
+      const { decisionId, responseAId } = buildBrandedGameOverInStore()
+      act(() => {
+        // "Camino A" (la respuesta de "Reintentar") nace conectada al Final
+        // en `buildGraphInStore` — la desconectamos para probar el estado
+        // deshabilitado.
+        useProjectStore.getState().disconnect(decisionId, responseAId)
+      })
+      renderPlayer()
+      fireEvent.click(screen.getByText('Continuar'))
+
+      expect(screen.getByText('Reintentar').closest('button')).toBeDisabled()
+      expect(screen.getByText('Salir').closest('button')).not.toBeDisabled()
+    })
   })
 })
 

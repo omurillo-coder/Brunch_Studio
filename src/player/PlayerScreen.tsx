@@ -13,6 +13,7 @@ import {
   INTRO_SUBTITLE_ACCENT,
   INTRO_SUBTITLE_PREFIX,
   INTRO_SUBTITLE_SUFFIX,
+  isResponseActionable,
 } from '../domain'
 import type {
   ContentBlock,
@@ -491,26 +492,53 @@ function IntroCard({ node, onContinue }: { node: IntroNode; onContinue: () => vo
 }
 
 /**
+ * Resuelve los dos ROLES fijos de `GameOverCard` (qué respuesta es
+ * "Reintentar" y cuál es "Salir") a partir de `visibleResponses` — POR
+ * ROL (`actsAsExit`), NUNCA por posición en el array (corrección de
+ * revisión de código: la versión anterior usaba `visibleResponses[0]`/`[1]`
+ * directamente, así que el interruptor "Ordenar"/"Random" del Inspector —
+ * disponible en CUALQUIER diapositiva, sin excepción para
+ * `brandedGameOverScreen` — o un simple reordenar a mano podían dejar el
+ * botón "Reintentar" disparando la respuesta `actsAsExit` y viceversa).
+ * `null` si el array no tiene EXACTAMENTE una respuesta `actsAsExit` y una
+ * que no lo sea (caso raro de edición manual): el llamador cae entonces al
+ * layout genérico, igual que antes hacía el chequeo de "exactamente 2
+ * respuestas". Traducción literal en `resolveGameOverResponses` de
+ * `src/export/exportedPlayerScript.ts`.
+ */
+function resolveGameOverResponses(
+  responses: DecisionResponse[],
+): { retryResponse: DecisionResponse; exitResponse: DecisionResponse } | null {
+  if (responses.length !== 2) return null
+  const exitResponse = responses.find((response) => response.actsAsExit)
+  const retryResponse = responses.find((response) => !response.actsAsExit)
+  if (!exitResponse || !retryResponse) return null
+  return { retryResponse, exitResponse }
+}
+
+/**
  * Pantalla de marca "a medida" (bespoke) de la diapositiva "Game Over" del
  * pack "+1 fallo con Game Over" (`SlideNode.brandedGameOverScreen`, ver
  * comentario de ese campo en `src/domain/schemas.ts`) — logo + título fijo +
  * ilustración + dos botones, todo en UNA sola columna centrada (a diferencia
  * de `IntroCard`, que reparte texto a la izquierda e ilustración de fondo
- * sangrando a la derecha: petición de usuario, "quiero que esté todo
- * centrado", con los botones DEBAJO de la ilustración, no antes). NINGÚN
- * otro contenido del nodo (el bloque de texto/imagen que edita el
- * diseñador en el Inspector) se pinta aquí — mismo criterio que `IntroCard`,
- * que tampoco pinta ningún "body" genérico.
+ * sangrando a la derecha). Petición de usuario, en varias vueltas: "todo
+ * centrado" y, más tarde, que los botones queden SUPERPUESTOS sobre el
+ * tramo inferior de la ilustración (`.gameOverIllustrationWrap`, ver su
+ * CSS) en vez de debajo de ella en flujo normal. NINGÚN otro contenido del
+ * nodo (el bloque de texto/imagen que edita el diseñador en el Inspector)
+ * se pinta aquí — mismo criterio que `IntroCard`, que tampoco pinta ningún
+ * "body" genérico.
  *
  * El texto de los botones es fijo, pero el COMPORTAMIENTO real es el de las
- * dos respuestas reales del nodo (`retryResponse`/`exitResponse`, ya
- * resueltas por quien llama a partir de `view.visibleResponses[0]`/`[1]`):
- * `onChoose` es la MISMA función que ya usa `ResponseOption` para cualquier
- * respuesta genérica (ver su paso en el render de `view.kind === 'decision'`
- * más abajo), así que "Reintentar" navega adonde el diseñador haya
- * conectado la primera respuesta y "Salir" se comporta como cualquier
- * respuesta `actsAsExit` — nunca un comportamiento hardcodeado nuevo.
- * Traducción literal en `buildGameOverCard` de
+ * dos respuestas reales del nodo — `retryResponse`/`exitResponse`, ya
+ * resueltas por ROL (no por posición, ver `resolveGameOverResponses`) por
+ * quien llama. `onChoose` es la MISMA función que ya usa `ResponseOption`
+ * para cualquier respuesta genérica (ver su paso en el render de
+ * `view.kind === 'decision'` más abajo), así que "Reintentar" navega adonde
+ * el diseñador haya conectado esa respuesta y "Salir" se comporta como
+ * cualquier respuesta `actsAsExit` — nunca un comportamiento hardcodeado
+ * nuevo. Traducción literal en `buildGameOverCard` de
  * `src/export/exportedPlayerScript.ts`.
  */
 function GameOverCard({
@@ -538,17 +566,20 @@ function GameOverCard({
           aria-hidden="true"
         />
         <div className={styles.gameOverButtons}>
-          {/* Mismo criterio que `disabled` de `ResponseOption` en el layout
-              genérico: sin destino conectado, el botón se ve inactivo en vez
+          {/* Mismo criterio de `disabled` que `ResponseOption` en el layout
+              genérico (`isResponseActionable`, `src/domain/responses.ts`):
+              sin destino Y sin `actsAsExit`, el botón se ve inactivo en vez
               de aceptar un clic que no lleva a ninguna parte — relevante
               mientras el diseñador todavía no ha conectado "Reintentar"
-              (nace sin destino, ver comentario de `addGameOverPack`).
-              "Salir" no necesita este chequeo: `actsAsExit` siempre
-              funciona. */}
+              (nace sin destino, ver comentario de `addGameOverPack`). Se
+              aplica a AMBOS botones (antes solo al primero) para que
+              "Probar" y el HTML exportado (`buildGameOverButton`) coincidan
+              siempre, sea cual sea la configuración real de las
+              respuestas. */}
           <button
             type="button"
             className={styles.gameOverButtonPrimary}
-            disabled={!retryResponse.targetNodeId}
+            disabled={!isResponseActionable(retryResponse)}
             onClick={() => onChoose(retryResponse)}
           >
             Reintentar
@@ -556,6 +587,7 @@ function GameOverCard({
           <button
             type="button"
             className={styles.gameOverButtonSecondary}
+            disabled={!isResponseActionable(exitResponse)}
             onClick={() => onChoose(exitResponse)}
           >
             Salir
@@ -827,6 +859,14 @@ export function PlayerScreen({ filePath }: PlayerScreenProps) {
   }
 
   const view = getView(project, playerState)
+  // Calculado UNA vez aquí (no dentro de cada rama del JSX) para que las dos
+  // ramas de `view.kind === 'decision'` de más abajo compartan exactamente
+  // la misma condición en vez de repetirla una vez en positivo y otra
+  // negada (riesgo real: que alguien actualice una copia y no la otra).
+  const gameOverResponses =
+    view.kind === 'decision' && view.node.brandedGameOverScreen
+      ? resolveGameOverResponses(view.visibleResponses)
+      : null
 
   return (
     <div className={styles.screen}>
@@ -883,50 +923,50 @@ export function PlayerScreen({ filePath }: PlayerScreenProps) {
         )}
 
         {/* Pantalla bespoke "Game Over" (`brandedGameOverScreen`, ver
-            comentario de `GameOverCard`): sustituye el layout genérico de
-            decisión de más abajo SOLO cuando el nodo lo pide Y tiene
-            exactamente las 2 respuestas que esa pantalla espera — cualquier
-            otro caso (nadie debería editarlas a mano, pero por si acaso) cae
-            al layout genérico, en vez de arriesgarse a un índice fuera de
-            rango. */}
-        {view.kind === 'decision' && view.node.brandedGameOverScreen && view.visibleResponses.length === 2 && (
+            comentario de `GameOverCard`/`resolveGameOverResponses`):
+            sustituye el layout genérico de decisión de más abajo SOLO
+            cuando el nodo lo pide Y tiene exactamente una respuesta
+            `actsAsExit` y otra que no lo es — cualquier otro caso (nadie
+            debería editarlas a mano así, pero por si acaso) cae al layout
+            genérico, en vez de arriesgarse a un índice fuera de rango o a
+            una asignación de rol ambigua. */}
+        {view.kind === 'decision' && gameOverResponses && (
           <GameOverCard
             key={view.node.id}
-            retryResponse={view.visibleResponses[0]!}
-            exitResponse={view.visibleResponses[1]!}
+            retryResponse={gameOverResponses.retryResponse}
+            exitResponse={gameOverResponses.exitResponse}
             onChoose={chooseResponse}
           />
         )}
 
-        {view.kind === 'decision' &&
-          !(view.node.brandedGameOverScreen && view.visibleResponses.length === 2) && (
-            <div key={view.node.id} className={styles.card}>
-              {/* Misma referencia interna que en 'continue': gris claro. */}
-              {view.node.title.trim() && (
-                <h1 className={styles.nodeReferenceTitle}>{view.node.title}</h1>
-              )}
-              <SlideContent
-                node={view.node}
-                filePath={filePath}
-                assetRepository={assetRepository}
-                emptyFallback={null}
-                onExpandImage={setLightboxImage}
-              />
-              <div className={styles.options}>
-                {view.visibleResponses.map((response, index) => (
-                  <ResponseOption
-                    key={response.id}
-                    response={response}
-                    index={index + 1}
-                    disabled={!response.targetNodeId && !response.actsAsExit}
-                    filePath={filePath}
-                    assetRepository={assetRepository}
-                    onChoose={() => chooseResponse(response)}
-                  />
-                ))}
-              </div>
+        {view.kind === 'decision' && !gameOverResponses && (
+          <div key={view.node.id} className={styles.card}>
+            {/* Misma referencia interna que en 'continue': gris claro. */}
+            {view.node.title.trim() && (
+              <h1 className={styles.nodeReferenceTitle}>{view.node.title}</h1>
+            )}
+            <SlideContent
+              node={view.node}
+              filePath={filePath}
+              assetRepository={assetRepository}
+              emptyFallback={null}
+              onExpandImage={setLightboxImage}
+            />
+            <div className={styles.options}>
+              {view.visibleResponses.map((response, index) => (
+                <ResponseOption
+                  key={response.id}
+                  response={response}
+                  index={index + 1}
+                  disabled={!isResponseActionable(response)}
+                  filePath={filePath}
+                  assetRepository={assetRepository}
+                  onChoose={() => chooseResponse(response)}
+                />
+              ))}
             </div>
-          )}
+          </div>
+        )}
 
         {view.kind === 'final' && (
           <div key={view.node.id} className={styles.card}>
