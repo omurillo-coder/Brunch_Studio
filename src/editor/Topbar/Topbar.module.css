@@ -234,17 +234,7 @@
   cursor: default;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .iconButton,
-  .exportButton,
-  .exportMenuItem,
-  .exportStatus,
-  .exportError,
-  .playButton {
-    transition: none;
-  }
-
-  .exportMenu {
-    animation: none;
-  }
-}
+/* Preferencia de accesibilidad "reducir movimiento": corrección de revisión
+   de código — este bloque por-módulo se sustituyó por un reset universal en
+   `src/styles/global.css` que cubre TODA la app. No hace falta un bloque
+   aquí. */

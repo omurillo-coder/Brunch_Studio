@@ -1,3 +1,4 @@
+import { GAME_OVER_HEADING } from '../domain'
 import type {
   ContentBlock,
   FinalNode,
@@ -154,7 +155,17 @@ function renderSlideSection(
   project: ProjectDocument,
   labels: Map<string, string>,
 ): string {
-  const lines = [`## ${nodeLabel(node)}`, '', describeContentBlocks(node.content) || '(sin contenido)']
+  // Pantalla de marca bespoke "Game Over" (`brandedGameOverScreen`, ver
+  // `GameOverCard` en `src/player/PlayerScreen.tsx`): ignora `node.content`
+  // por completo, así que describirla a partir de ahí (como cualquier otra
+  // diapositiva) siempre daría "(sin contenido)" — corrección de revisión
+  // de código: describe en su lugar el contenido FIJO real que ve quien
+  // juega (logo, título, ilustración), para que la revisión con IA no la
+  // reporte como una diapositiva vacía/sin terminar.
+  const contentDescription = node.brandedGameOverScreen
+    ? `Pantalla de marca fija "Game Over" (logo iLERNA + ilustración + título "${GAME_OVER_HEADING}"). El contenido de esta diapositiva en el Inspector no se muestra nunca — esta pantalla no es editable.`
+    : describeContentBlocks(node.content) || '(sin contenido)'
+  const lines = [`## ${nodeLabel(node)}`, '', contentDescription]
 
   const visitEffectsText = describeEffects(node.visitEffects, project.variables)
   if (visitEffectsText) {

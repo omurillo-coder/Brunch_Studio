@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { buildAiReviewDocument } from '../aiReviewExport'
 import { CICLOS, cicloOutputName } from '../../domain'
+import { createProject } from '../../domain/project'
+import { addGameOverPack } from '../../domain/nodePacks'
 import type {
   DecisionResponse,
   FinalNode,
@@ -263,6 +265,32 @@ describe('buildAiReviewDocument (petición de usuario: "que este archivo lo pudi
     if (slide) slide.internalNote = 'Pedir gráfico a diseño — SECRETO_INTERNO'
     const doc = buildAiReviewDocument(project)
     expect(doc).not.toContain('SECRETO_INTERNO')
+  })
+})
+
+describe('diapositiva "Game Over" bespoke (SlideNode.brandedGameOverScreen)', () => {
+  /** Corrección de revisión de código: `node.content` de esta diapositiva
+   *  siempre está vacío (la pantalla es fija, ver `addGameOverPack`), así
+   *  que describirla como cualquier otra diapositiva la reportaba como
+   *  "(sin contenido)" — un falso "diapositiva vacía/sin terminar" para
+   *  quien revisa el documento, cuando en realidad el Player muestra una
+   *  pantalla de marca completa con logo, título e ilustración. */
+  it('describe el contenido FIJO real (logo, título, ilustración) en vez de "(sin contenido)"', () => {
+    const project = addGameOverPack(createProject('Caso Game Over'), { x: 0, y: 0 })
+    const gameOverNode = project.graph.nodes.find(
+      (node) => node.type === 'slide' && node.brandedGameOverScreen,
+    )
+    if (!gameOverNode) throw new Error('setup inválido: no se creó la diapositiva Game Over')
+
+    const doc = buildAiReviewDocument(project)
+    // Título vacío por defecto (`addGameOverPack` no lo fija) -> sin
+    // segmento "— título" en la cabecera, mismo criterio que `nodeLabel`.
+    const section = sectionOf(doc, `## Diapositiva ${gameOverNode.number}`)
+
+    expect(section).not.toContain('(sin contenido)')
+    expect(section).toContain('¿Seguro que no quieres volver a intentarlo?')
+    expect(section).toContain('Reintentar')
+    expect(section).toContain('Salir')
   })
 })
 

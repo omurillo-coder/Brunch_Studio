@@ -117,6 +117,15 @@ export function validatePendingContentForExport(project: ProjectDocument): strin
   const issues: string[] = []
   for (const node of project.graph.nodes) {
     if (node.type !== 'slide') continue
+    // Pantalla de marca bespoke "Game Over" (`brandedGameOverScreen`, ver
+    // `GameOverCard` en `src/player/PlayerScreen.tsx`): ignora
+    // `node.content` por completo, así que un bloque de imagen "pendiente
+    // de subir" ahí nunca puede aparecer en el Player ni en el HTML
+    // exportado — corrección de revisión de código: bloquear la
+    // exportación por ese motivo era un falso positivo (el Inspector sigue
+    // dejando editar el bloque, pero validarlo para export no tiene
+    // sentido si nunca se pinta).
+    if (node.brandedGameOverScreen) continue
     const hasPendingImage = node.content.some(
       (block) => block.type === 'image' && !block.assetId,
     )

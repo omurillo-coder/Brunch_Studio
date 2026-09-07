@@ -45,3 +45,38 @@ button {
   outline: 2px solid var(--bs-color-focus-ring);
   outline-offset: 1px;
 }
+
+/**
+ * Preferencia de accesibilidad "reducir movimiento", a nivel de APP ENTERA
+ * (corrección de revisión de código): las animaciones/transiciones nuevas
+ * de la tarea de animaciones se habían ido desactivando módulo a módulo,
+ * enumerando a mano las clases afectadas en cada `.module.css` que las
+ * usaba (`PlayerScreen.module.css`, `Topbar.module.css`,
+ * `RichTextEditor.module.css`) — 5 de los módulos que ganaron transiciones
+ * nuevas en esa misma tarea (Inspector, LeftPanel, VariablesPanel,
+ * HomeScreen, DiagnosticsPanel) se quedaron sin ese bloque, y CUALQUIER
+ * transición futura en CUALQUIER módulo necesitaría acordarse de añadirse a
+ * la lista correcta a mano — un selector con nombre de clase de un CSS
+ * Module tampoco funcionaría aquí (el hash del módulo lo hace impredecible
+ * desde un CSS global).
+ *
+ * Este selector universal es el reset estándar (mismo patrón que usan
+ * Bootstrap y la mayoría de sistemas de diseño): reduce la duración de
+ * CUALQUIER `transition`/`animation` de la app a prácticamente cero en vez
+ * de listar selectores, así que cubre lo que ya existe y lo que se añada
+ * después sin tocar este archivo de nuevo — INCLUIDO el confeti del Final
+ * (antes exento a propósito): una ráfaga de 150 piezas animadas a pantalla
+ * completa es precisamente el tipo de movimiento a gran escala que esta
+ * preferencia de accesibilidad existe para evitar, así que aquí sí debe
+ * respetarla como el resto.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -895,8 +895,18 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
     var message = el('p', null);
     message.setAttribute('data-exit-message', '');
     message.setAttribute('role', 'status');
-    message.style.cssText =
-      'margin:0;font-size:var(--bs-font-size-sm);color:var(--bs-color-text-muted);';
+    // Corrección de revisión de código: \`.gameOverCard\`/\`.introCard\` son
+    // tarjetas de marca de colores FIJOS (fondo blanco siempre, ver sus
+    // comentarios en exportedStyles.ts), así que no pueden usar
+    // \`var(--bs-color-text-muted)\` — ese token se vuelve gris claro
+    // (\`#a1a1aa\`) en modo oscuro, y sobre el fondo blanco FIJO de estas
+    // tarjetas queda en ~2.56:1 de contraste (falla AA). Un gris oscuro
+    // fijo mantiene ~6:1 sin depender del tema del sistema operativo.
+    var isFixedBrandCard =
+      card.classList.contains('gameOverCard') || card.classList.contains('introCard');
+    message.style.cssText = isFixedBrandCard
+      ? 'margin:0;font-size:var(--bs-font-size-sm);color:#5a5a63;'
+      : 'margin:0;font-size:var(--bs-font-size-sm);color:var(--bs-color-text-muted);';
     message.textContent = EXIT_MESSAGE;
     card.appendChild(message);
   }
@@ -1170,6 +1180,13 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
     if (introBrand && introBrand.gameOverBackgroundDataUri) {
       var illustration = el('img', 'gameOverIllustration');
       illustration.src = introBrand.gameOverBackgroundDataUri;
+      // Dimensiones reales del archivo (1400x752 tras el recorte) — junto
+      // con \`width: 100%; height: auto\` del CSS, el navegador deriva un
+      // aspect-ratio implícito y reserva el hueco antes de decodificar la
+      // imagen (código review: evita que los botones superpuestos salten
+      // de sitio al cargar).
+      illustration.width = 1400;
+      illustration.height = 752;
       illustration.alt = '';
       illustration.setAttribute('aria-hidden', 'true');
       illustrationWrap.appendChild(illustration);

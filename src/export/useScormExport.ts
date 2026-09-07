@@ -6,6 +6,7 @@ import { resolveExportAssets } from './exportAssets'
 import { buildHtmlBundle } from './htmlBundle'
 import { projectNeedsGameOverAssets, resolvePlayerIntroBrandAssets } from './introBrandAssets'
 import { buildScormManifest } from './scormManifest'
+import { waitForRenderFlush } from './waitForRenderFlush'
 
 /**
  * Orquestación del flujo "Exportar SCORM" (Milestone 3, fase 2):
@@ -70,6 +71,9 @@ export function useScormExport(filePath: string): ScormExportState {
         ...validatePendingContentForExport(project),
       ]
       if (blockingIssues.length > 0) {
+        // Corrección de revisión de código: ver comentario de
+        // `waitForRenderFlush` (mismo motivo que `useHtmlExport`).
+        await waitForRenderFlush()
         setStatus('error')
         setMessage(blockingExportIssuesMessage(blockingIssues))
         return

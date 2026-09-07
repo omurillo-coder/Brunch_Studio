@@ -559,9 +559,18 @@ function GameOverCard({
           los botones se superponen al tramo de camino/suelo de la propia
           ilustración en vez de ir debajo de ella en flujo normal. */}
       <div className={styles.gameOverIllustrationWrap}>
+        {/* `width`/`height` (dimensiones reales del archivo — 1400×752 tras
+            el recorte, ver `game-over.jpg`) junto con el `width: 100%;
+            height: auto` de `.gameOverIllustration`: los navegadores
+            modernos derivan de ahí un `aspect-ratio` implícito y reservan
+            el hueco ANTES de que la imagen termine de decodificar —
+            corrección de revisión de código, evita que los botones
+            (superpuestos sobre ella) salten de sitio al cargar. */}
         <img
           className={styles.gameOverIllustration}
           src={gameOverIllustrationUrl}
+          width={1400}
+          height={752}
           alt=""
           aria-hidden="true"
         />

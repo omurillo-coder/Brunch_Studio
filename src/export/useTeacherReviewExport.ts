@@ -4,6 +4,7 @@ import { useProject } from '../store'
 import { validateIntroForExport, validatePendingContentForExport } from '../domain'
 import { resolveExportAssets } from './exportAssets'
 import { buildTeacherReviewBundle } from './teacherReviewExport'
+import { waitForRenderFlush } from './waitForRenderFlush'
 
 /**
  * Orquestación del flujo "Exportar revisión profes" — MISMO patrón que
@@ -69,6 +70,9 @@ export function useTeacherReviewExport(filePath: string): TeacherReviewExportSta
         ...validatePendingContentForExport(project),
       ]
       if (blockingIssues.length > 0) {
+        // Corrección de revisión de código: ver comentario de
+        // `waitForRenderFlush` (mismo motivo que `useHtmlExport`).
+        await waitForRenderFlush()
         setStatus('error')
         setMessage(blockingExportIssuesMessage(blockingIssues))
         return

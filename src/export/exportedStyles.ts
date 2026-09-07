@@ -980,16 +980,27 @@ button:focus-visible {
   margin: 0 auto;
 }
 
-/* Preferencia de accesibilidad "reducir movimiento": desactiva SOLO las
-   animaciones nuevas mirroreadas desde PlayerScreen.module.css — el confeti
-   (\`.confettiPiece\`, petición explícita de usuario: "muy ESPECTACULAR") se
-   deja intacto, no es parte de este alcance. */
+/* Preferencia de accesibilidad "reducir movimiento" (corrección de revisión
+   de código): antes solo desactivaba \`animation\` en 4 selectores concretos
+   y se olvidaba de \`transition\` (las de \`.gameOverButtonPrimary\`/
+   \`.gameOverButtonSecondary\`, más abajo, seguían animadas) — mismo motivo
+   por el que \`src/styles/global.css\` sustituyó su equivalente por un reset
+   universal: un selector con nombre de clase concreto es fácil de olvidar
+   actualizar cada vez que se añade una transición/animación nueva. Este
+   selector universal (mismo patrón que Bootstrap y la mayoría de sistemas
+   de diseño) cubre TODO lo que ya existe y lo que se añada después sin
+   tocar este bloque de nuevo — INCLUIDO el confeti (antes exento a
+   propósito): una ráfaga de 150 piezas animadas a pantalla completa es
+   precisamente el tipo de movimiento a gran escala que esta preferencia de
+   accesibilidad existe para evitar. */
 @media (prefers-reduced-motion: reduce) {
-  .lightboxBackdrop,
-  .card,
-  .introCard,
-  .gameOverCard {
-    animation: none;
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
 `

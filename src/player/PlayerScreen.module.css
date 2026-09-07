@@ -935,26 +935,8 @@
   }
 }
 
-/* Preferencia de accesibilidad "reducir movimiento": desactiva SOLO las
-   transiciones/animaciones nuevas de esta tarea — el confeti (`.confettiPiece`,
-   petición explícita de usuario: "muy ESPECTACULAR") se deja intacto, no es
-   parte de este alcance. */
-@media (prefers-reduced-motion: reduce) {
-  .secondaryButton,
-  .primaryButton,
-  .lightboxClose,
-  .option,
-  .neutralButton,
-  .introButton,
-  .gameOverButtonPrimary,
-  .gameOverButtonSecondary {
-    transition: none;
-  }
-
-  .lightboxBackdrop,
-  .card,
-  .introCard,
-  .gameOverCard {
-    animation: none;
-  }
-}
+/* Preferencia de accesibilidad "reducir movimiento": corrección de revisión
+   de código — este bloque por-módulo (que además dejaba el confeti
+   explícitamente exento) se sustituyó por un reset universal en
+   `src/styles/global.css` que cubre TODA la app, incluido el confeti (ver
+   comentario de ese archivo del porqué). No hace falta un bloque aquí. */

@@ -140,4 +140,18 @@ describe('validatePendingContentForExport (milestone "+1 fallo con Game Over")',
 
     expect(validatePendingContentForExport(withImage)).toEqual([])
   })
+
+  /** Corrección de revisión de código: la pantalla bespoke "Game Over"
+   *  (`brandedGameOverScreen`, ver `GameOverCard` en
+   *  `src/player/PlayerScreen.tsx`) ignora `node.content` por completo —
+   *  un bloque de imagen pendiente ahí nunca puede aparecer en ningún
+   *  runtime, así que no debe bloquear la exportación. */
+  it('un bloque de imagen pendiente en una diapositiva brandedGameOverScreen NO bloquea la exportación (esa pantalla ignora node.content)', () => {
+    const project = createProject('P')
+    const slideId = project.graph.startNodeId
+    let withPending = addImageBlock(project, slideId)
+    withPending = updateNode(withPending, slideId, { brandedGameOverScreen: true })
+
+    expect(validatePendingContentForExport(withPending)).toEqual([])
+  })
 })

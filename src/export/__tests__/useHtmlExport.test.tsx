@@ -1,4 +1,4 @@
-import { act, renderHook } from '@testing-library/react'
+import { act, renderHook, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ReactNode } from 'react'
 import { useHtmlExport } from '../useHtmlExport'
@@ -169,5 +169,45 @@ describe('useHtmlExport — bloqueo con la diapositiva de Inicio incompleta', ()
     expect(result.current.message).toBe('Experiencia exportada a HTML.')
     expect(pickExportHtmlPath).toHaveBeenCalledTimes(1)
     expect(htmlBundleWriter.writtenPaths()).toEqual(['/tmp/experiencia.html'])
+  })
+
+  /** Corrección de revisión de código: `setMessage(null)` seguido de
+   *  `setMessage(blockingExportIssuesMessage(...))` en el mismo tick
+   *  síncrono hacía que React agrupara ambas actualizaciones en un único
+   *  render — `message` nunca llegaba a pintarse como `null` de verdad
+   *  entre dos intentos de exportación bloqueados seguidos, así que
+   *  `ExportToast` (que depende de ese desmontaje real para reiniciar su
+   *  máquina de fases) podía quedarse mudo en el segundo intento. Este test
+   *  comprueba, sin llegar a `ExportToast`, que el propio hook SÍ pasa por
+   *  `message: null` de verdad antes de fijar el mensaje de bloqueo — ver
+   *  `waitForRenderFlush`. */
+  it('en un SEGUNDO intento bloqueado, el hook pasa por message: null de verdad antes de fijar el mensaje de bloqueo (para que ExportToast pueda desmontarse y remontarse)', async () => {
+    const { result } = renderUseHtmlExport({
+      pickExportHtmlPath: vi.fn(async () => '/tmp/experiencia.html'),
+      htmlBundleWriter: new MemoryHtmlBundleWriter(),
+      assetRepository: new MemoryAssetRepository(),
+    })
+
+    // Primer intento: bloqueado, deja `message` con texto (no null).
+    await act(async () => {
+      await result.current.exportHtml()
+    })
+    expect(result.current.message).toContain('El proyecto no tiene diapositiva de Inicio.')
+
+    // Segundo intento, mismo bloqueo: sin `waitForRenderFlush`, `message`
+    // pasaría directo del texto del primer intento al del segundo sin
+    // ningún render intermedio con `null` — exactamente el bug que
+    // `ExportToast` no puede detectar.
+    let exportPromise!: Promise<void>
+    act(() => {
+      exportPromise = result.current.exportHtml()
+    })
+    await waitFor(() => expect(result.current.message).toBeNull())
+
+    await act(async () => {
+      await exportPromise
+    })
+    expect(result.current.status).toBe('error')
+    expect(result.current.message).toContain('El proyecto no tiene diapositiva de Inicio.')
   })
 })

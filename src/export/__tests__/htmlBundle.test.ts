@@ -1697,6 +1697,24 @@ describe('buildHtmlBundle — milestone "+1 fallo con Game Over"', () => {
       closeSpy.mockRestore()
     })
 
+    /** Corrección de revisión de código: el aviso de salir reutilizaba el
+     *  color de texto atenuado del tema (`var(--bs-color-text-muted)`),
+     *  pensado para `.card` (adapta su color al tema); sobre el fondo BLANCO
+     *  FIJO de `.gameOverCard` ese token se vuelve casi ilegible en modo
+     *  oscuro (~2.56:1 de contraste). Ahora usa un gris oscuro fijo. */
+    it('el aviso de salir usa un color de texto FIJO (no la variable de tema) sobre la tarjeta de marca', () => {
+      const closeSpy = vi.spyOn(window, 'close').mockImplementation(() => {})
+
+      runExportedBundle(buildHtmlBundle(brandedGameOverProject(), {}))
+      clickButton('Salir')
+
+      const message = document.querySelector('#brunch-root .gameOverCard [data-exit-message]')
+      expect(message).not.toBeNull()
+      expect((message as HTMLElement).style.color).not.toContain('--bs-color-text-muted')
+
+      closeSpy.mockRestore()
+    })
+
     it('con brandedGameOverScreen pero SIN exactamente 2 respuestas visibles, cae al layout genérico (fallback, caso raro de edición manual)', () => {
       const project = brandedGameOverProject()
       const decision = project.graph.nodes.find((node) => node.id === VISIT_DECISION_ID)

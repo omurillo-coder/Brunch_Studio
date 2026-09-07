@@ -5,6 +5,7 @@ import { validateIntroForExport, validatePendingContentForExport } from '../doma
 import { resolveExportAssets } from './exportAssets'
 import { buildHtmlBundle } from './htmlBundle'
 import { projectNeedsGameOverAssets, resolvePlayerIntroBrandAssets } from './introBrandAssets'
+import { waitForRenderFlush } from './waitForRenderFlush'
 
 /**
  * Orquestación del flujo "Exportar HTML" (Milestone 3, fase 1):
@@ -71,6 +72,10 @@ export function useHtmlExport(filePath: string): HtmlExportState {
         ...validatePendingContentForExport(project),
       ]
       if (blockingIssues.length > 0) {
+        // Corrección de revisión de código: sin este `await`, React agrupa
+        // este `setMessage` con el `setMessage(null)` de arriba en un único
+        // render — ver comentario de `waitForRenderFlush`.
+        await waitForRenderFlush()
         setStatus('error')
         setMessage(blockingExportIssuesMessage(blockingIssues))
         return
