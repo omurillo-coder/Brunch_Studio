@@ -15,6 +15,7 @@ import {
 import type { ProjectDocument } from '../../../domain'
 import { serializeRichBody } from '../../richText/richTextContent'
 import { resolveConnection, toFlowEdges, toFlowNodes } from '../adapter'
+import type { FlowEdgeCache, FlowNodeCache } from '../adapter'
 import { BRUNCH_EDGE_TYPE } from '../edges/edgeTypes'
 import { IN_HANDLE_ID, OUT_HANDLE_ID, responseHandleId } from '../handles'
 
@@ -651,5 +652,139 @@ describe('resolveConnection', () => {
   it('devuelve null si falta source o target', () => {
     expect(resolveConnection({ source: null, target: 'node-b', sourceHandle: null })).toBeNull()
     expect(resolveConnection({ source: 'node-a', target: null, sourceHandle: null })).toBeNull()
+  })
+})
+
+/**
+ * `FlowNodeCache`/`FlowEdgeCache` (corrección de bug real: "clic en una
+ * arista/nodo y luego en otro nodo deja la pantalla en gris" — ver
+ * comentario de `Canvas.tsx`). Sin esta caché, `toFlowNodes`/`toFlowEdges`
+ * construían un objeto NUEVO para cada nodo/arista en CADA llamada, aunque
+ * la mayoría no hubiera cambiado de verdad; en un proyecto real de 35 nodos
+ * eso disparaba una remedición en cadena en `@xyflow/react` que terminaba en
+ * "Maximum update depth exceeded" — sin `ErrorBoundary`, eso se lleva por
+ * delante TODA la app. Estos tests verifican la propiedad que evita ese
+ * bucle (identidad estable cuando nada cambió de verdad) directamente sobre
+ * el adaptador, sin necesidad de montar `@xyflow/react` ni el lienzo entero.
+ */
+describe('toFlowNodes — FlowNodeCache (estabilidad de identidad)', () => {
+  it('con la misma caché y los mismos insumos, devuelve el MISMO objeto CanvasFlowNode entre dos llamadas', () => {
+    let project = createProject('P')
+    project = createNode(project, 'slide', { x: 200, y: 0 })
+    const cache: FlowNodeCache = new Map()
+
+    const first = toFlowNodes(project, [], cache)
+    const second = toFlowNodes(project, [], cache)
+
+    expect(first).toHaveLength(2)
+    expect(second[0]).toBe(first[0])
+    expect(second[1]).toBe(first[1])
+  })
+
+  it('al mover la selección de un nodo a otro, crea objetos NUEVOS solo para los dos afectados — un tercero sin relación conserva su referencia', () => {
+    // Con 3 nodos (ninguno conectado entre sí) y la selección moviéndose de
+    // A a B, el tercero (C) tiene los MISMOS insumos en ambas llamadas
+    // (`hasSelection` es `true` en las dos, y C nunca está ni seleccionado
+    // ni resaltado) — es el caso real que motivó esta caché: mover la
+    // selección de un nodo a otro en un proyecto de 35 nodos no debería
+    // tocar los otros 33.
+    let project = createProject('P')
+    project = createNode(project, 'slide', { x: 200, y: 0 })
+    project = createNode(project, 'slide', { x: 400, y: 0 })
+    const [nodeA, nodeB, nodeC] = project.graph.nodes.map((n) => n.id)
+    if (!nodeA || !nodeB || !nodeC) throw new Error('setup inválido')
+    const cache: FlowNodeCache = new Map()
+
+    const withASelected = toFlowNodes(project, [nodeA], cache)
+    const withBSelected = toFlowNodes(project, [nodeB], cache)
+
+    const cBefore = withASelected.find((n) => n.id === nodeC)
+    const cAfter = withBSelected.find((n) => n.id === nodeC)
+    const aAfter = withBSelected.find((n) => n.id === nodeA)
+    const bAfter = withBSelected.find((n) => n.id === nodeB)
+
+    expect(cAfter).toBe(cBefore)
+    expect(aAfter?.selected).toBe(false)
+    expect(bAfter?.selected).toBe(true)
+  })
+
+  it('regresión del bug real: isSelected cambia de false a true SIN que isHighlighted/isDimmed cambien (nodos sin arista entre sí) — el objeto igualmente se actualiza', () => {
+    // Reproduce EXACTAMENTE la condición que se coló en la primera versión
+    // de esta caché: sin selección previa, un nodo sin relación de arista
+    // con nadie tiene isHighlighted=false/isDimmed=false; al seleccionarlo,
+    // isHighlighted/isDimmed SIGUEN siendo false/false (nunca llegan a
+    // "true" en ningún punto intermedio) — si la caché solo comparara esos
+    // dos campos (como hacía una versión intermedia de este arreglo),
+    // reutilizaría por error el objeto viejo con `selected: false`.
+    let project = createProject('P')
+    project = createNode(project, 'slide', { x: 200, y: 0 })
+    const otherId = otherNodeIdOf(project, 'slide')
+    const cache: FlowNodeCache = new Map()
+
+    const before = toFlowNodes(project, [], cache)
+    const beforeOther = before.find((n) => n.id === otherId)
+    expect(beforeOther?.data.isHighlighted).toBe(false)
+    expect(beforeOther?.data.isDimmed).toBe(false)
+    expect(beforeOther?.selected).toBe(false)
+
+    const after = toFlowNodes(project, [otherId], cache)
+    const afterOther = after.find((n) => n.id === otherId)
+    // isHighlighted/isDimmed sin cambios (siguen false/false)...
+    expect(afterOther?.data.isHighlighted).toBe(false)
+    expect(afterOther?.data.isDimmed).toBe(false)
+    // ...pero `selected` SÍ cambió, y la caché no puede haberlo perdido.
+    expect(afterOther?.selected).toBe(true)
+  })
+
+  it('poda de la caché: un nodo borrado no se queda acumulado indefinidamente', () => {
+    let project = createProject('P')
+    project = createNode(project, 'slide', { x: 200, y: 0 })
+    const otherId = otherNodeIdOf(project, 'slide')
+    const cache: FlowNodeCache = new Map()
+
+    toFlowNodes(project, [], cache)
+    expect(cache.has(otherId)).toBe(true)
+
+    const startId = project.graph.startNodeId
+    const withoutOther = {
+      ...project,
+      graph: { ...project.graph, nodes: project.graph.nodes.filter((n) => n.id === startId) },
+    }
+    toFlowNodes(withoutOther, [], cache)
+
+    expect(cache.has(otherId)).toBe(false)
+  })
+})
+
+describe('toFlowEdges — FlowEdgeCache (estabilidad de identidad)', () => {
+  it('con la misma caché y los mismos insumos, devuelve el MISMO objeto CanvasFlowEdge entre dos llamadas', () => {
+    let project = createProject('P')
+    project = createNode(project, 'slide', { x: 200, y: 0 })
+    const startId = project.graph.startNodeId
+    const otherId = otherNodeIdOf(project, 'slide')
+    project = connect(project, startId, otherId)
+    const cache: FlowEdgeCache = new Map()
+
+    const first = toFlowEdges(project, [], cache)
+    const second = toFlowEdges(project, [], cache)
+
+    expect(first).toHaveLength(1)
+    expect(second[0]).toBe(first[0])
+  })
+
+  it('al cambiar la selección de forma que resalta la arista, crea un objeto NUEVO', () => {
+    let project = createProject('P')
+    project = createNode(project, 'slide', { x: 200, y: 0 })
+    const startId = project.graph.startNodeId
+    const otherId = otherNodeIdOf(project, 'slide')
+    project = connect(project, startId, otherId)
+    const cache: FlowEdgeCache = new Map()
+
+    const before = toFlowEdges(project, [], cache)
+    const after = toFlowEdges(project, [startId], cache)
+
+    expect(before[0]?.data?.isHighlighted).toBe(false)
+    expect(after[0]?.data?.isHighlighted).toBe(true)
+    expect(after[0]).not.toBe(before[0])
   })
 })

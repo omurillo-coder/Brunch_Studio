@@ -200,15 +200,42 @@ describe('Canvas — cableado con @xyflow/react (ReactFlow stub)', () => {
     expect(useProjectStore.getState().selection.selectedNodeIds).toEqual([start.id])
   })
 
-  it('onSelectionChange sincroniza `selection.selectedNodeIds` en el store', () => {
+  // Corrección de bug real (Mayús+clic sobre un SEGUNDO nodo podía perder el
+  // primero — ver el comentario de `handleSelectionChange` en `Canvas.tsx`):
+  // `onSelectionChange` ahora se IGNORA salvo mientras hay una selección por
+  // caja en curso (`onSelectionStart`…`onSelectionEnd`), porque su
+  // notificación para un clic normal puede llegar con la idea INTERNA
+  // desactualizada de `@xyflow/react` y pisar la selección correcta que
+  // `handleNodeClick` ya fijó. Este test simula por tanto el ciclo de vida
+  // completo de una caja de selección real, no solo la notificación suelta.
+  it('onSelectionChange sincroniza `selection.selectedNodeIds` en el store MIENTRAS hay una selección por caja en curso', () => {
     render(<Canvas />)
     const start = startSlide()
 
     act(() => {
+      capturedProps?.onSelectionStart?.(undefined as never)
       capturedProps?.onSelectionChange?.({
         nodes: [{ id: start.id } as never],
         edges: [],
       })
+    })
+
+    expect(useProjectStore.getState().selection.selectedNodeIds).toEqual([start.id])
+  })
+
+  // Corrección de bug real: sin `onSelectionStart` antes, una notificación
+  // suelta de `onSelectionChange` (la que podría llegar tarde y
+  // desactualizada tras un clic normal) debe IGNORARSE — nunca vaciar ni
+  // sobreescribir la selección vigente.
+  it('onSelectionChange SIN onSelectionStart previo (notificación suelta de un clic normal) se ignora', () => {
+    render(<Canvas />)
+    const start = startSlide()
+    act(() => {
+      useProjectStore.getState().selectNode(start.id)
+    })
+
+    act(() => {
+      capturedProps?.onSelectionChange?.({ nodes: [], edges: [] })
     })
 
     expect(useProjectStore.getState().selection.selectedNodeIds).toEqual([start.id])
@@ -224,7 +251,8 @@ describe('Canvas — cableado con @xyflow/react (ReactFlow stub)', () => {
   // con uno solo, solo que aquí se comprueba explícitamente que el array
   // completo (no solo el primero) llega íntegro a `selection.selectedNodeIds`,
   // como base para que el arrastre conjunto (ya cubierto más abajo) tenga
-  // varios nodos que mover.
+  // varios nodos que mover. `onSelectionStart` primero, igual que arriba:
+  // la caja de selección real siempre empieza por ahí.
   it('onSelectionChange con varios nodos sincroniza `selection.selectedNodeIds` con todos ellos', () => {
     render(<Canvas />)
     const start = startSlide()
@@ -236,6 +264,7 @@ describe('Canvas — cableado con @xyflow/react (ReactFlow stub)', () => {
     const final = otherNodeOfType('final')
 
     act(() => {
+      capturedProps?.onSelectionStart?.(undefined as never)
       capturedProps?.onSelectionChange?.({
         nodes: [{ id: start.id } as never, { id: other.id } as never, { id: final.id } as never],
         edges: [],

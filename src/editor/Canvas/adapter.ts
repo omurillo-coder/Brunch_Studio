@@ -278,6 +278,53 @@ function toNodeData(node: DomainNode, startNodeId: string): BaseCanvasNodeData {
   return base
 }
 
+/** Entrada de `FlowNodeCache`: los ÚNICOS insumos que determinan el
+ *  `CanvasFlowNode` construido para un nodo, junto con el resultado ya
+ *  construido — ver comentario de `FlowNodeCache`. */
+interface FlowNodeCacheEntry {
+  node: DomainNode
+  startNodeId: string
+  isSelected: boolean
+  isHighlighted: boolean
+  isDimmed: boolean
+  hasNoOutgoing: boolean
+  result: CanvasFlowNode
+}
+
+/**
+ * Caché de identidad de `CanvasFlowNode` por id de nodo (corrección de bug
+ * real: "clic en una arista/nodo y luego en otro nodo deja la pantalla en
+ * gris" — ver comentario de `Canvas.tsx` sobre `useMemo`). Sin esta caché,
+ * `toFlowNodes` construía un objeto `CanvasFlowNode` (y su `data`) NUEVO
+ * para los 35 nodos de un proyecto real en CADA llamada, aunque solo 1 o 2
+ * nodos cambiaran de verdad (p.ej. al mover la selección de un nodo a
+ * otro) — `@xyflow/react` interpreta un objeto nuevo con el mismo `id` como
+ * "este nodo ha cambiado", así que remedía sus 35 nodos (incluida su
+ * medición vía `ResizeObserver`) en cada clic. Con un proyecto de ese
+ * tamaño, la remedición en cadena podía retroalimentarse hasta que React
+ * cortaba el bucle con "Maximum update depth exceeded" — sin ningún
+ * `ErrorBoundary` en la app, eso desmontaba TODO el árbol de React.
+ *
+ * Cachear por STRING/JSON sería más simple pero mucho más caro (habría que
+ * serializar cada nodo entero en cada llamada, precisamente el coste que se
+ * quiere evitar); en su lugar se cachean los INSUMOS que de verdad
+ * determinan el resultado — la referencia del nodo de dominio (immer
+ * garantiza que un nodo SIN cambios reales conserva la MISMA referencia
+ * entre actualizaciones del store, así que `===` basta) y los 4 booleanos
+ * derivados de la selección (`isSelected`/`isHighlighted`/`isDimmed`/
+ * `hasNoOutgoing`) — y se reutiliza el `CanvasFlowNode` ya construido si
+ * ninguno cambió. Se poda al final de cada `toFlowNodes` para no acumular
+ * indefinidamente nodos ya borrados.
+ *
+ * Instanciada por el LLAMADOR (`Canvas.tsx`, con un `useRef`) y pasada aquí
+ * — nunca a nivel de módulo: así queda ligada al ciclo de vida de un único
+ * lienzo montado (un proyecto abierto) en vez de acumular entradas de
+ * proyectos ya cerrados durante toda la sesión de la app. Opcional (`?`)
+ * para que las pruebas existentes que llaman `toFlowNodes(project, ids)`
+ * sin caché seguido funcionando igual, sin estabilización (siempre puro).
+ */
+export type FlowNodeCache = Map<string, FlowNodeCacheEntry>
+
 /**
  * Mapea los nodos de dominio a nodos de `@xyflow/react`.
  *
@@ -289,36 +336,77 @@ function toNodeData(node: DomainNode, startNodeId: string): BaseCanvasNodeData {
  * `LeftPanel`) — como el lienzo es "controlado" (no usa `onNodesChange`),
  * sin este campo el resaltado de selección no sobreviviría a un re-render
  * no relacionado.
+ *
+ * `cache` (opcional): ver `FlowNodeCache` — de dársele, un nodo cuyos
+ * insumos no cambiaron reutiliza el MISMO objeto `CanvasFlowNode` de la
+ * llamada anterior en vez de uno nuevo.
  */
 export function toFlowNodes(
   project: ProjectDocument,
   selectedNodeIds: readonly string[],
+  cache?: FlowNodeCache,
 ): CanvasFlowNode[] {
   const selected = new Set(selectedNodeIds)
   const edges = deriveEdges(project)
   const nodesWithOutgoing = nodeIdsWithOutgoingEdge(edges)
   const highlightedTargets = highlightedTargetNodeIds(edges, selected)
   const hasSelection = selected.size > 0
+  const startNodeId = project.graph.startNodeId
 
-  return project.graph.nodes.map((node) => {
+  const result = project.graph.nodes.map((node) => {
     const isSelected = selected.has(node.id)
     const isHighlighted = !isSelected && highlightedTargets.has(node.id)
-    return {
+    const hasNoOutgoing =
+      (node.type === 'slide' || node.type === 'intro') && !nodesWithOutgoing.has(node.id)
+    const isDimmed = hasSelection && !isSelected && !isHighlighted
+
+    const cached = cache?.get(node.id)
+    if (
+      cached &&
+      cached.node === node &&
+      cached.startNodeId === startNodeId &&
+      cached.isSelected === isSelected &&
+      cached.isHighlighted === isHighlighted &&
+      cached.isDimmed === isDimmed &&
+      cached.hasNoOutgoing === hasNoOutgoing
+    ) {
+      return cached.result
+    }
+
+    const flowNode: CanvasFlowNode = {
       id: node.id,
       type: node.type,
       position: node.position,
       selected: isSelected,
       data: {
-        ...toNodeData(node, project.graph.startNodeId),
-        hasNoOutgoing:
-          (node.type === 'slide' || node.type === 'intro') && !nodesWithOutgoing.has(node.id),
+        ...toNodeData(node, startNodeId),
+        hasNoOutgoing,
         isHighlighted,
-        isDimmed: hasSelection && !isSelected && !isHighlighted,
+        isDimmed,
       },
       initialWidth: INITIAL_NODE_WIDTH,
       initialHeight: INITIAL_NODE_HEIGHT,
     }
+    cache?.set(node.id, {
+      node,
+      startNodeId,
+      isSelected,
+      isHighlighted,
+      isDimmed,
+      hasNoOutgoing,
+      result: flowNode,
+    })
+    return flowNode
   })
+
+  if (cache) {
+    const currentIds = new Set(project.graph.nodes.map((node) => node.id))
+    for (const id of cache.keys()) {
+      if (!currentIds.has(id)) cache.delete(id)
+    }
+  }
+
+  return result
 }
 
 /**
@@ -391,35 +479,106 @@ export interface CanvasEdgeData extends Record<string, unknown> {
  * carril calculado por `computeEdgeLanes` y el resaltado derivado de
  * `selectedNodeIds` (punto 4).
  */
+/** Entrada de `FlowEdgeCache`: a diferencia de `FlowNodeCacheEntry`,
+ *  `deriveEdges` (dominio) construye un objeto `Edge` NUEVO en cada llamada
+ *  incluso para aristas sin cambios (no hay una referencia de dominio
+ *  estable que comparar por `===`, ver su comentario) — así que aquí se
+ *  cachean los VALORES ya calculados (todos primitivos, comparables con
+ *  `===`) en vez de una referencia. */
+interface FlowEdgeCacheEntry {
+  source: string
+  target: string
+  sourceHandleId: string
+  targetHandleId: string
+  isElse: boolean
+  laneIndex: number
+  laneSize: number
+  isHighlighted: boolean
+  isDimmed: boolean
+  result: CanvasFlowEdge
+}
+
+/** Ver `FlowNodeCache`: misma corrección de bug, mismo criterio de ciclo de
+ *  vida (instanciada por `Canvas.tsx` con `useRef`, nunca a nivel de
+ *  módulo), aplicada aquí a `toFlowEdges` por consistencia — el bug
+ *  reportado se reprodujo con clics que solo tocaban nodos, así que esta
+ *  caché es refuerzo/consistencia, no el arreglo que lo resuelve por sí
+ *  sola (ver `FlowNodeCache` para ese). */
+export type FlowEdgeCache = Map<string, FlowEdgeCacheEntry>
+
 export function toFlowEdges(
   project: ProjectDocument,
   selectedNodeIds: readonly string[] = [],
+  cache?: FlowEdgeCache,
 ): CanvasFlowEdge[] {
   const edges = deriveEdges(project)
   const lanes = computeEdgeLanes(edges)
   const selected = new Set(selectedNodeIds)
   const hasSelection = selected.size > 0
 
-  return edges.map((edge) => {
+  const result = edges.map((edge) => {
     const lane = lanes.get(edge.id) ?? { laneIndex: 0, laneSize: 1 }
     const isHighlighted = selected.has(edge.source)
+    const isDimmed = hasSelection && !isHighlighted
+    const isElse = edge.kind === 'else'
+    const sourceHandleId = edge.sourceHandle ? responseHandleId(edge.sourceHandle) : OUT_HANDLE_ID
+    const targetHandleId = IN_HANDLE_ID
+
+    const cached = cache?.get(edge.id)
+    if (
+      cached &&
+      cached.source === edge.source &&
+      cached.target === edge.target &&
+      cached.sourceHandleId === sourceHandleId &&
+      cached.targetHandleId === targetHandleId &&
+      cached.isElse === isElse &&
+      cached.laneIndex === lane.laneIndex &&
+      cached.laneSize === lane.laneSize &&
+      cached.isHighlighted === isHighlighted &&
+      cached.isDimmed === isDimmed
+    ) {
+      return cached.result
+    }
+
     const data: CanvasEdgeData = {
       laneIndex: lane.laneIndex,
       laneSize: lane.laneSize,
       isHighlighted,
-      isDimmed: hasSelection && !isHighlighted,
-      isElse: edge.kind === 'else',
+      isDimmed,
+      isElse,
     }
-    return {
+    const flowEdge: CanvasFlowEdge = {
       id: edge.id,
       source: edge.source,
       target: edge.target,
-      sourceHandle: edge.sourceHandle ? responseHandleId(edge.sourceHandle) : OUT_HANDLE_ID,
-      targetHandle: IN_HANDLE_ID,
+      sourceHandle: sourceHandleId,
+      targetHandle: targetHandleId,
       type: BRUNCH_EDGE_TYPE,
       data,
     }
+    cache?.set(edge.id, {
+      source: edge.source,
+      target: edge.target,
+      sourceHandleId,
+      targetHandleId,
+      isElse,
+      laneIndex: lane.laneIndex,
+      laneSize: lane.laneSize,
+      isHighlighted,
+      isDimmed,
+      result: flowEdge,
+    })
+    return flowEdge
   })
+
+  if (cache) {
+    const currentIds = new Set(edges.map((edge) => edge.id))
+    for (const id of cache.keys()) {
+      if (!currentIds.has(id)) cache.delete(id)
+    }
+  }
+
+  return result
 }
 
 /** Argumentos resueltos para `store.connect` a partir de un `onConnect`. */

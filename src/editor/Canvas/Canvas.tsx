@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Background,
   BackgroundVariant,
@@ -24,7 +24,7 @@ import {
   useSelectedNodeIds,
 } from '../../store'
 import type { NodeType } from '../../domain'
-import type { CanvasFlowEdge, CanvasFlowNode } from './adapter'
+import type { CanvasFlowEdge, CanvasFlowNode, FlowEdgeCache, FlowNodeCache } from './adapter'
 import { resolveConnection, toFlowEdges, toFlowNodes } from './adapter'
 import { resolveEmptyPaneDrop } from './handles'
 import { computeAutoLayout } from './layout/autoLayout'
@@ -134,8 +134,44 @@ export function Canvas() {
   // copiar/pegar de texto normal del navegador dentro de un campo editable.
   useCanvasClipboard()
 
-  const nodes = toFlowNodes(project, selectedNodeIds)
-  const edges = toFlowEdges(project, selectedNodeIds)
+  // Bug real reportado por el usuario ("clic en una arista/nodo y luego en
+  // otro nodo deja la pantalla en gris, como si se hubiera cerrado el
+  // proyecto"), reproducido de verdad con un proyecto real de 35 nodos/56
+  // aristas (bastan varios clics normales sobre nodos distintos, sin tocar
+  // ninguna arista) — un simple `useMemo` por `[project, selectedNodeIds]`
+  // NO bastaba, porque esas dependencias SÍ cambian en cada clic real (cada
+  // clic selecciona un nodo distinto): la causa de fondo está DENTRO de
+  // `toFlowNodes`/`toFlowEdges` (ver `FlowNodeCache`/`FlowEdgeCache` en
+  // `adapter.ts`), que construían un objeto `CanvasFlowNode`/`CanvasFlowEdge`
+  // NUEVO para los 35/56 nodos y aristas en CADA llamada, aunque solo 1 o 2
+  // cambiaran de verdad. `<ReactFlow>` interpreta un objeto nuevo con el
+  // mismo `id` como "este nodo ha cambiado" y vuelve a medirlo (incluida su
+  // medición vía `ResizeObserver`) — con 35 nodos remedidos en cada clic, esa
+  // remedición podía retroalimentarse (de hecho el navegador llegó a avisar
+  // con "ResizeObserver loop completed with undelivered notifications" justo
+  // antes del cuelgue) hasta que React cortaba el bucle con "Maximum update
+  // depth exceeded". Sin ningún `ErrorBoundary` en la app, ese error NO
+  // capturado desmonta TODO el árbol de React, dejando solo el gris de fondo
+  // de `<body>` — de ahí la sensación de "se ha cerrado el proyecto".
+  //
+  // El arreglo real vive en `adapter.ts` (una caché por nodo/arista que
+  // reutiliza el objeto anterior cuando sus insumos no cambiaron de verdad);
+  // aquí solo hace falta darle a esa caché un ciclo de vida — un `useRef`
+  // ligado a ESTE lienzo montado, para que no acumule nodos de un proyecto ya
+  // cerrado ni se comparta entre dos lienzos — y el `useMemo` exterior sigue
+  // haciendo falta para que `nodes`/`edges` también sean el MISMO array
+  // (no solo los mismos elementos dentro) en renders que no tocan ni
+  // `project` ni `selectedNodeIds`.
+  const nodeCacheRef = useRef<FlowNodeCache>(new Map())
+  const edgeCacheRef = useRef<FlowEdgeCache>(new Map())
+  const nodes = useMemo(
+    () => toFlowNodes(project, selectedNodeIds, nodeCacheRef.current),
+    [project, selectedNodeIds],
+  )
+  const edges = useMemo(
+    () => toFlowEdges(project, selectedNodeIds, edgeCacheRef.current),
+    [project, selectedNodeIds],
+  )
 
   // Petición de usuario: "cuando se inicie un proyecto, los nodos
   // aparezcan en la parte central de la pantalla, no arriba a la
@@ -388,8 +424,37 @@ export function Canvas() {
   // `selected` que `toFlowNodes` calcula a partir del store cierra el
   // círculo (ver comentario en `adapter.ts`) sin que exista una segunda
   // fuente de verdad: sigue derivándose de `selection` en cada render.
+  //
+  // Corrección de bug real (encontrado verificando el arreglo del cuelgue de
+  // "Maximum update depth exceeded" de más abajo): `onSelectionChange` NO es
+  // fiable para el clic directo sobre un nodo, y el comentario de
+  // `handleNodeClick` de abajo ya explica por qué — `nodeLookup` interno de
+  // `@xyflow/react` solo se entera de un clic tras el SIGUIENTE `set()` que
+  // se dispare, así que en un Mayús+clic sobre un SEGUNDO nodo, la propia
+  // libraría procesa ese clic con su idea INTERNA (aún desactualizada, sin
+  // conocer el `selectNode` que este componente ya aplicó directamente al
+  // store) de qué había seleccionado antes — y puede notificar "[el segundo
+  // nodo]" en vez de "[el primero, el segundo]", PISANDO la selección
+  // correcta que `handleNodeClick` acababa de fijar. El comentario anterior
+  // de este archivo asumía que ambos caminos eran "idempotentes, sin
+  // riesgo" — comprobado en la práctica que NO lo son para Mayús+clic.
+  //
+  // El único gesto que de verdad necesita `onSelectionChange` es la
+  // selección por caja (arrastrar), que no pasa por `handleNodeClick` en
+  // absoluto — así que esta notificación se aplica SOLO mientras esa caja
+  // está activa (`onSelectionStart`/`onSelectionEnd` más abajo marcan
+  // exactamente esa ventana), ignorando cualquier notificación tardía de un
+  // clic normal que `handleNodeClick` ya resolvió por su cuenta.
+  const boxSelectingRef = useRef(false)
+  const handleSelectionStart = useCallback(() => {
+    boxSelectingRef.current = true
+  }, [])
+  const handleSelectionEnd = useCallback(() => {
+    boxSelectingRef.current = false
+  }, [])
   const handleSelectionChange: OnSelectionChangeFunc<CanvasFlowNode, CanvasFlowEdge> = useCallback(
     ({ nodes: selectedNodes }) => {
+      if (!boxSelectingRef.current) return
       setSelection(selectedNodes.map((node) => node.id))
     },
     [setSelection],
@@ -431,11 +496,13 @@ export function Canvas() {
   // directamente aquí — replicando el mismo criterio "clic simple
   // reemplaza, Mayús+clic añade/quita" que ya usa `@xyflow/react`
   // internamente (`event.shiftKey`, coherente con `multiSelectionKeyCode`
-  // fijado a `"Shift"` más abajo). `onSelectionChange` se mantiene además
-  // para la selección por caja; si en algún gesto ambos acabaran
-  // disparándose para el mismo resultado, `setSelection`/`selectNode` son
-  // ambos idempotentes con el mismo array, así que no hay riesgo de dejar
-  // un estado inconsistente.
+  // fijado a `"Shift"` más abajo). `onSelectionChange` se ignora ahora
+  // mientras no hay una selección por caja en curso — ver el comentario de
+  // `handleSelectionChange`, más abajo: la notificación tardía e
+  // internamente desactualizada de un clic normal NO es "idempotente" con
+  // lo que `handleNodeClick` ya fijó (bug real encontrado en la práctica
+  // con Mayús+clic sobre un segundo nodo), así que confiar en ella para
+  // clics normales podía pisar una selección múltiple correcta.
   const handleNodeClick: NodeMouseHandler<CanvasFlowNode> = useCallback(
     (event, node) => {
       selectNode(node.id, { additive: event.shiftKey })
@@ -595,6 +662,8 @@ export function Canvas() {
         onNodeDrag={handleNodeDrag}
         onNodeDragStop={handleNodeDragStop}
         onSelectionChange={handleSelectionChange}
+        onSelectionStart={handleSelectionStart}
+        onSelectionEnd={handleSelectionEnd}
         onNodeClick={handleNodeClick}
         onPaneClick={handlePaneClick}
         onConnect={handleConnect}
