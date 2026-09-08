@@ -62,10 +62,12 @@ function imageSizeClassName(size: ImageSize | undefined): string | undefined {
  * `<button>` que la abre en `Lightbox` (más abajo) al pulsarla — quien
  * llama decide si pasarlo o no: `ContentBlockView` solo lo pasa cuando
  * `block.expandable !== false` (petición de usuario: "un botón... para
- * hacer no ampliable la imagen"); `ResponseOption` nunca lo pasa (la
- * imagen de una respuesta vive dentro de un `<button>` que ya elige esa
- * respuesta al pulsarla — un segundo botón anidado no es HTML válido, y
- * además "pulsar en cualquier parte del cuadro" ya cubre la imagen).
+ * hacer no ampliable la imagen"). Única llamante desde la petición de
+ * usuario "quitar lo de poder poner una imagen como respuesta": antes
+ * también la usaba `ResponseOption`, que nunca pasaba `onExpand` (la imagen
+ * de una respuesta vivía dentro de un `<button>` que ya elegía esa
+ * respuesta al pulsarla, y un segundo botón anidado no es HTML válido) —
+ * ver el comentario de `ResponseOption` para el porqué de haberla quitado.
  */
 function PlayerImage({
   assetId,
@@ -303,52 +305,53 @@ function SlideContent({
 }
 
 /**
- * Una opción de una diapositiva con respuestas: el botón de elegirla (texto
- * + su imagen adjunta, si tiene, con una flecha sutil siempre pegada al
- * canto derecho y centrada verticalmente) más su audio adjunto, si tiene.
+ * Una opción de una diapositiva con respuestas: el botón de elegirla (texto,
+ * con una flecha sutil siempre pegada al canto derecho y centrada
+ * verticalmente) más su audio adjunto, si tiene.
+ *
+ * Petición de usuario ("quitar lo de poder poner una imagen como
+ * respuesta... queda raro"): esta tarjeta ya NO admite imagen — el
+ * `MediaAttachment` de imagen se quitó del Inspector (ver su comentario) y
+ * esta vista deja de pintar `response.imageAssetId` aunque un proyecto
+ * antiguo lo tuviera guardado (el campo sigue existiendo en el dominio por
+ * compatibilidad, simplemente ya no se lee aquí). El AUDIO sigue
+ * pintándose, FUERA del `<button>`, en `.optionMedia` — `<audio controls>`
+ * SÍ es contenido interactivo, no puede anidarse dentro de otro elemento
+ * interactivo (accesibilidad), así que reproducirlo nunca podría "contar
+ * como elegir la respuesta" de todos modos.
  *
  * Petición de usuario: "que funcione para responder la respuesta cuando
  * haces clic en cualquier parte del cuadro de respuesta" — el `<button>`
- * ahora envuelve TEXTO + IMAGEN (la imagen no es interactiva, así que puede
- * anidarse sin problema dentro de un elemento interactivo). El AUDIO sigue
- * FUERA del `<button>`, en `.optionMedia` — única excepción deliberada:
- * `<audio controls>` SÍ es contenido interactivo, no puede anidarse dentro
- * de otro elemento interactivo (accesibilidad), así que reproducirlo nunca
- * podría "contar como elegir la respuesta" de todos modos.
+ * envuelve todo el texto.
  *
  * Petición de usuario: sin el punto de siempre a la izquierda — en su
- * lugar, una flecha "→" sutil, SIEMPRE presente (con o sin imagen), fija al
- * canto derecho y centrada verticalmente respecto a TODA la tarjeta (no
- * solo la línea de texto), para invitar visualmente a "pulsa aquí para
- * continuar" en cualquier respuesta.
+ * lugar, una flecha "→" sutil, SIEMPRE presente, fija al canto derecho y
+ * centrada verticalmente respecto a TODA la tarjeta (no solo la línea de
+ * texto), para invitar visualmente a "pulsa aquí para continuar" en
+ * cualquier respuesta.
  *
  * Petición de usuario: el texto de repuesto "Opción sin texto configurado"
  * (para una respuesta sin texto) YA NO se muestra si la respuesta tiene
- * imagen o audio — antes aparecía SIEMPRE que el texto estuviera vacío,
- * aunque hubiera una imagen que ya "hablara por sí sola"; ahora solo se
- * muestra cuando la respuesta no tiene NINGÚN contenido (ni texto ni
- * imagen ni audio), para que el botón nunca quede completamente vacío.
- *
- * `index` es la posición 1-based de la opción, usada solo para el texto
- * alternativo de su imagen (donde antes se usaba la letra).
+ * audio — antes aparecía SIEMPRE que el texto estuviera vacío, aunque
+ * hubiera un audio que ya "hablara por sí solo"; ahora solo se muestra
+ * cuando la respuesta no tiene NINGÚN contenido (ni texto ni audio), para
+ * que el botón nunca quede completamente vacío.
  */
 function ResponseOption({
   response,
-  index,
   disabled,
   filePath,
   assetRepository,
   onChoose,
 }: {
   response: DecisionResponse
-  index: number
   disabled: boolean
   filePath: string
   assetRepository: AssetRepository
   onChoose: () => void
 }) {
   const trimmedText = response.text.trim()
-  const hasMedia = Boolean(response.imageAssetId || response.audioAssetId)
+  const hasMedia = Boolean(response.audioAssetId)
   const showText = trimmedText !== '' || !hasMedia
 
   return (
@@ -361,15 +364,6 @@ function ResponseOption({
       >
         <span className={styles.optionContent}>
           {showText && <span>{trimmedText || 'Opción sin texto configurado'}</span>}
-          {response.imageAssetId && (
-            <PlayerImage
-              key={response.imageAssetId}
-              assetId={response.imageAssetId}
-              filePath={filePath}
-              assetRepository={assetRepository}
-              alt={`Imagen de la respuesta ${index}`}
-            />
-          )}
         </span>
         <span className={styles.optionArrow} aria-hidden="true">
           →
@@ -1014,11 +1008,10 @@ export function PlayerScreen({ filePath }: PlayerScreenProps) {
               onExpandImage={setLightboxImage}
             />
             <div className={styles.options}>
-              {view.visibleResponses.map((response, index) => (
+              {view.visibleResponses.map((response) => (
                 <ResponseOption
                   key={response.id}
                   response={response}
-                  index={index + 1}
                   disabled={!isResponseActionable(response)}
                   filePath={filePath}
                   assetRepository={assetRepository}

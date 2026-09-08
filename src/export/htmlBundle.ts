@@ -64,7 +64,6 @@ interface ExportedTexts {
   retry: string
   deadEnd: string
   nodeImageAlt: string
-  responseImageAlt: string
   /** Textos fijos de la portada de marca iLERNA (ver `buildIntroCard` en
    *  `exportedPlayerScript.ts` y comentario de `playerIntroTexts.ts`, fuente
    *  única compartida con `IntroCard` en `PlayerScreen.tsx`). */
@@ -93,7 +92,6 @@ const EXPORTED_TEXTS: ExportedTexts = {
   retry: 'Reintentar',
   deadEnd: 'Esta parte de la experiencia no tiene una continuación configurada.',
   nodeImageAlt: 'Imagen de esta pantalla',
-  responseImageAlt: 'Imagen de la respuesta ',
   introHeading: INTRO_HEADING,
   introSubtitlePrefix: INTRO_SUBTITLE_PREFIX,
   introSubtitleAccent: INTRO_SUBTITLE_ACCENT,

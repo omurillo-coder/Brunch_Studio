@@ -18,8 +18,9 @@ import styles from './NodeCard.module.css'
  * Rediseño minimalista, petición de usuario ("que en las pantallas se vea
  * bastante lo que hay dentro"): una `slide` con imagen en su primer bloque de
  * contenido pinta esa imagen como miniatura a todo el ancho (`Thumbnail`,
- * franja superior de la tarjeta), y un icono discreto si además tiene audio/
- * vídeo (`MediaBadges`, junto a `PinBadge` en `Header`) — sin romper el
+ * justo debajo de `Header` — referencia/D-número primero, imagen después), y
+ * un icono discreto si además tiene audio/vídeo (`MediaBadges`, junto a
+ * `PinBadge` en `Header`) — sin romper el
  * criterio de arriba: sigue sin pintarse el `body`/contenido completo, solo
  * un vistazo de qué tipo de material trae la diapositiva.
  *
@@ -278,16 +279,17 @@ function BodyPreview({ data }: { data: CanvasNodeData }) {
 }
 
 /**
- * Miniatura de imagen (rediseño minimalista, petición de usuario: "franja
- * superior ancha", "que en las pantallas se vea bastante lo que hay
- * dentro") — franja a todo el ancho de la tarjeta, PRIMERO en el DOM (antes
- * de cualquier cabecera/insignia, ver `SlideNodeView`), resuelta de forma
- * perezosa por `useNodeThumbnail` a partir de `data.previewImageAssetId`
- * (`adapter.ts`). Sin nada que pintar mientras se resuelve (no hay
- * esqueleto/placeholder): la tarjeta simplemente crece cuando la imagen
- * llega, en vez de reservar un hueco fijo para una imagen que podría no
- * cargar nunca (assets pendientes de subir, o un fallo de lectura, ver
- * comentario de `useNodeThumbnail`).
+ * Miniatura de imagen (rediseño minimalista, petición de usuario: "que en
+ * las pantallas se vea bastante lo que hay dentro") — franja a todo el ancho
+ * de la tarjeta, JUSTO DESPUÉS de `Header` (petición de usuario: "arriba del
+ * todo... la referencia oculta y la D-número, luego la imagen", ver
+ * `SlideNodeView`), resuelta de forma perezosa por `useNodeThumbnail` a
+ * partir de `data.previewImageAssetId` (`adapter.ts` — siempre la PRIMERA
+ * imagen que se haya subido a esa diapositiva, nunca todas). Sin nada que
+ * pintar mientras se resuelve (no hay esqueleto/placeholder): la tarjeta
+ * simplemente crece cuando la imagen llega, en vez de reservar un hueco fijo
+ * para una imagen que podría no cargar nunca (assets pendientes de subir, o
+ * un fallo de lectura, ver comentario de `useNodeThumbnail`).
  */
 function Thumbnail({ data }: { data: CanvasNodeData }) {
   const dataUri = useNodeThumbnail(data.previewImageAssetId)
@@ -416,9 +418,9 @@ export function SlideNodeView({ data }: NodeProps<CanvasFlowNode>) {
     <div className={cardClassName(data)}>
       <NoOutgoingBadge data={data} />
       <InHandle />
-      <Thumbnail data={data} />
       <SlideBadgeHeader data={data} />
       <Header data={data} />
+      <Thumbnail data={data} />
       <BodyPreview data={data} />
       {responses.length > 0 ? (
         <div className={styles.body}>

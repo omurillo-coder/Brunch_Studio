@@ -66,6 +66,17 @@ export function collectReferencedAssetIds(project: ProjectDocument): string[] {
       }
     }
     for (const response of node.responses) {
+      // `response.imageAssetId` YA NO se pinta en ningún sitio (Inspector,
+      // "Probar" ni exportación — petición de usuario "quitar lo de poder
+      // poner una imagen como respuesta", ver `ResponseOption` en
+      // `PlayerScreen.tsx`), pero SIGUE recogiéndose aquí a propósito: esta
+      // misma lista alimenta `keepAssetIds` del `gcOrphanAssets` del
+      // autoguardado (`useAutosave.ts`) — dejar de recogerlo borraría de
+      // verdad los bytes de la imagen de un proyecto antiguo que ya tuviera
+      // una en la siguiente vez que se guardase, aunque el campo siguiera
+      // ahí apuntando a un asset ya inexistente. El coste (unos KB de más,
+      // nunca mostrados, en la exportación de ese proyecto concreto) es
+      // preferible a un borrado de datos silencioso.
       push(response.imageAssetId)
       push(response.audioAssetId)
     }

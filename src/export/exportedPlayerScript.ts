@@ -942,14 +942,17 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
   }
 
   /** Traducción literal de \`ResponseOption\` (\`src/player/PlayerScreen.tsx\`)
-   *  — ver su comentario para la semántica completa de las tres peticiones
-   *  de usuario que cubre: sin punto a la izquierda (flecha "→" fija al
-   *  canto derecho, centrada respecto a TODA la tarjeta vía \`.optionArrow\`
-   *  en exportedStyles.ts), imagen DENTRO del \`<button>\` (audio fuera, única
-   *  excepción — no es contenido interactivo válido anidado en otro), y el
-   *  texto de repuesto \`texts.emptyResponse\` SOLO cuando no hay texto NI
-   *  imagen NI audio. */
-  function buildOption(response, index, card) {
+   *  — ver su comentario para la semántica completa: sin punto a la
+   *  izquierda (flecha "→" fija al canto derecho, centrada respecto a TODA
+   *  la tarjeta vía \`.optionArrow\` en exportedStyles.ts), el audio adjunto
+   *  FUERA del \`<button>\` (no es contenido interactivo válido anidado en
+   *  otro), y el texto de repuesto \`texts.emptyResponse\` SOLO cuando no hay
+   *  texto NI audio. Ya NO pinta ninguna imagen de la respuesta (petición de
+   *  usuario "quitar lo de poder poner una imagen como respuesta"), aunque
+   *  \`response.imageAssetId\` exista en un proyecto antiguo — de ahí que este
+   *  parámetro ya no necesite el índice 1-based que antes solo usaba para el
+   *  texto alternativo de esa imagen. */
+  function buildOption(response, card) {
     var wrapper = el('div', 'option');
 
     var button = el('button', 'optionButton');
@@ -964,18 +967,11 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
 
     var content = el('span', 'optionContent');
     var trimmedText = trimmed(response.text);
-    var hasMedia = Boolean(response.imageAssetId || response.audioAssetId);
+    var hasMedia = Boolean(response.audioAssetId);
     if (trimmedText || !hasMedia) {
       var label = el('span', null);
       label.textContent = trimmedText || texts.emptyResponse;
       content.appendChild(label);
-    }
-    var imageUri = response.imageAssetId ? assetUris[response.imageAssetId] : null;
-    if (imageUri) {
-      var image = el('img', 'media');
-      image.src = imageUri;
-      image.alt = texts.responseImageAlt + index;
-      content.appendChild(image);
     }
     button.appendChild(content);
 
@@ -1346,7 +1342,7 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
       var options = el('div', 'options');
       var visibleResponses = view.visibleResponses || [];
       for (var i = 0; i < visibleResponses.length; i += 1) {
-        options.appendChild(buildOption(visibleResponses[i], i + 1, card));
+        options.appendChild(buildOption(visibleResponses[i], card));
       }
       card.appendChild(options);
       return card;

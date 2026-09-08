@@ -456,89 +456,6 @@ describe('PlayerScreen: imagen/audio adjuntos', () => {
     })
   })
 
-  it('la imagen de una respuesta se muestra junto a la opción, con un alt sin letras', async () => {
-    const assetRepository = new MemoryAssetRepository()
-    const imageId = await importFakeAsset(assetRepository, '/tmp/foto-b.png', [7, 8, 9], 'image/png')
-
-    const startId = startNodeId()
-    act(() => {
-      useProjectStore.getState().updateNode(startId, { title: '¿Qué eliges?' })
-      useProjectStore.getState().createNode('final', { x: 200, y: 0 })
-    })
-    const finalId = otherNodeIdOf('final')
-    const responseAId = addResponseTo(startId)
-    act(() => {
-      useProjectStore
-        .getState()
-        .updateResponse(startId, responseAId, {
-          text: 'Opción con imagen',
-          imageAssetId: imageId,
-        })
-      useProjectStore.getState().connect(startId, finalId, responseAId)
-    })
-
-    renderPlayer({ assetRepository })
-
-    expect(screen.getByText('Opción con imagen')).toBeInTheDocument()
-    await waitFor(() => {
-      const img = screen.getByAltText('Imagen de la respuesta 1') as HTMLImageElement
-      expect(img.getAttribute('src')).toContain('data:image/png;base64,')
-    })
-  })
-
-  it('la imagen de una respuesta es descendiente del contenedor de ESA respuesta (.option), no un hermano suelto después de él', async () => {
-    // Bug reportado: la imagen de una respuesta se percibía "a continuación"
-    // de la opción en vez de "dentro" de ella. La causa era puramente visual
-    // (el borde de tarjeta vivía en `.optionButton`, no en `.option` — ver
-    // `PlayerScreen.module.css`), pero este test fija además el contrato de
-    // ESTRUCTURA que ese arreglo visual da por hecho: la imagen debe colgar
-    // del mismo `.option` que el botón de ESA respuesta concreta, nunca
-    // aparecer como hijo directo de `.options` (la lista completa) ni de
-    // ningún otro `.option`.
-    const assetRepository = new MemoryAssetRepository()
-    const imageId = await importFakeAsset(assetRepository, '/tmp/foto-c.png', [1, 2], 'image/png')
-
-    const startId = startNodeId()
-    act(() => {
-      useProjectStore.getState().updateNode(startId, { title: '¿Qué eliges?' })
-      useProjectStore.getState().createNode('final', { x: 200, y: 0 })
-    })
-    const finalId = otherNodeIdOf('final')
-    const responseAId = addResponseTo(startId)
-    const responseBId = addResponseTo(startId)
-    act(() => {
-      useProjectStore
-        .getState()
-        .updateResponse(startId, responseAId, { text: 'Opción sin imagen' })
-      useProjectStore
-        .getState()
-        .updateResponse(startId, responseBId, { text: 'Opción con imagen', imageAssetId: imageId })
-      useProjectStore.getState().connect(startId, finalId, responseAId)
-      useProjectStore.getState().connect(startId, finalId, responseBId)
-    })
-
-    const { container } = renderPlayer({ assetRepository })
-
-    const img = await waitFor(() => screen.getByAltText('Imagen de la respuesta 2'))
-
-    // Descendiente de SU `.option` (el contenedor de esa respuesta concreta).
-    const optionContainer = img.closest(`.${styles.option}`)
-    expect(optionContainer).not.toBeNull()
-
-    // Ese mismo `.option` contiene también el botón de ESA respuesta (no de
-    // otra): el texto y la imagen de una respuesta comparten un único
-    // contenedor.
-    const buttonInSameOption = optionContainer!.querySelector(`.${styles.optionButton}`)
-    expect(buttonInSameOption?.textContent).toContain('Opción con imagen')
-
-    // NO es un hijo directo de `.options` (la lista completa de opciones):
-    // sigue anidada dentro de su propio `.option`, no colgada suelta después
-    // de la lista entera.
-    const optionsList = container.querySelector(`.${styles.options}`)
-    expect(optionsList?.contains(img)).toBe(true)
-    expect([...(optionsList?.children ?? [])]).not.toContain(img)
-  })
-
   it('un fallo al cargar un asset no rompe el resto de la pantalla', async () => {
     const failingAssetRepository: AppServices['assetRepository'] = {
       importAsset: async () => {
@@ -809,33 +726,6 @@ describe('PlayerScreen: imágenes ampliables + tamaño (petición de usuario)', 
           ?.classList.contains(styles.mediaNormal ?? ''),
       ).toBe(true)
     })
-  })
-
-  it('la imagen de una respuesta nunca es ampliable (no hay lightbox al pulsarla, solo elige la respuesta)', async () => {
-    const assetRepository = new MemoryAssetRepository()
-    const imageId = await importFakeAsset(assetRepository, '/tmp/h.png', [11], 'image/png')
-
-    const startId = startNodeId()
-    const responseId = addResponseTo(startId)
-    act(() => {
-      useProjectStore.getState().createNode('final', { x: 200, y: 0 })
-    })
-    const finalId = otherNodeIdOf('final')
-    act(() => {
-      useProjectStore.getState().connect(startId, finalId, responseId)
-      useProjectStore.getState().updateResponse(startId, responseId, { imageAssetId: imageId })
-    })
-
-    const { container } = renderPlayer({ assetRepository })
-
-    const image = await screen.findByAltText('Imagen de la respuesta 1')
-    // La imagen vive DENTRO del botón de la propia opción (petición de
-    // usuario: "responder... cuando haces clic en cualquier parte del
-    // cuadro"), pero sin el wrapper `.expandableImage` propio del lightbox.
-    expect(image.closest(`.${styles.expandableImage}`)).toBeNull()
-
-    fireEvent.click(image)
-    expect(container.querySelector(`.${styles.lightboxBackdrop}`)).not.toBeInTheDocument()
   })
 })
 

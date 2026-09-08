@@ -537,38 +537,14 @@ describe('buildHtmlBundle — comportamiento del HTML generado (jsdom)', () => {
     for (const option of options) {
       expect(stripTrailingArrow(option.textContent)).not.toMatch(/^[ABCD][).\s]/)
     }
-    // Petición de usuario ("clic en cualquier parte del cuadro de
-    // respuesta"): la imagen de la respuesta ahora va DENTRO del <button>
-    // (no es contenido interactivo, a diferencia del audio, que sigue
-    // fuera de él, ver .optionMedia).
-    expect(card.querySelector('.optionButton img')).not.toBeNull()
+    // Petición de usuario ("quitar lo de poder poner una imagen como
+    // respuesta... queda raro"): aunque esta respuesta tiene `imageAssetId`
+    // en el fixture (`sampleProject`, deliberadamente — para comprobar que
+    // un proyecto antiguo con ese campo no la pinta igualmente), no aparece
+    // ninguna imagen en ninguna opción. El audio sigue pintándose, fuera del
+    // `<button>` (ver `.optionMedia`).
+    expect(card.querySelector('.optionButton img')).toBeNull()
     expect(card.querySelector('.optionMedia img')).toBeNull()
-  })
-
-  it('la imagen de una respuesta es descendiente del .option de ESA respuesta, no un hermano suelto después de él', () => {
-    // Traducción del mismo contrato de estructura que fija
-    // `PlayerScreen.test.tsx` para la app: la imagen vive DENTRO del
-    // <button> de la propia respuesta (ver test de arriba), así que por
-    // construcción ya es descendiente del mismo `.option` que agrupa
-    // visualmente esa respuesta — este test fija ese contrato de estructura
-    // explícitamente, nunca como hijo directo de `.options` (la lista
-    // completa).
-    runExportedBundle(buildHtmlBundle(sampleProject(), sampleAssets))
-    clickButton('Empezar el caso')
-
-    const card = currentCard()
-    const img = card.querySelector('img')
-    if (!img) throw new Error('No se encontró ninguna imagen de respuesta.')
-
-    const optionContainer = img.closest('.option')
-    expect(optionContainer).not.toBeNull()
-    expect(optionContainer?.querySelector('.optionButton')?.textContent).toContain(
-      'Avisar al responsable',
-    )
-
-    const optionsList = card.querySelector('.options')
-    expect(optionsList?.contains(img)).toBe(true)
-    expect([...(optionsList?.children ?? [])]).not.toContain(img)
   })
 
   it('acumula la puntuación de la respuesta elegida y la muestra en el Final', () => {
@@ -946,17 +922,6 @@ describe('buildHtmlBundle — imágenes ampliables + tamaño (petición de usuar
     expect(images.map((img) => img.classList.contains('mediaNormal'))).toEqual([false, false, true])
   })
 
-  it('la imagen de una respuesta nunca es ampliable (no hay botón "ampliar" ni lightbox)', () => {
-    runExportedBundle(buildHtmlBundle(sampleProject(), sampleAssets))
-    clickButton('Empezar el caso')
-
-    const responseImage = currentCard().querySelector<HTMLImageElement>('.optionButton img')
-    expect(responseImage).not.toBeNull()
-    expect(responseImage?.closest('.expandableImage')).toBeNull()
-
-    responseImage?.click()
-    expect(document.querySelector('.lightboxBackdrop')).toBeNull()
-  })
 })
 
 // ---------------------------------------------------------------------------

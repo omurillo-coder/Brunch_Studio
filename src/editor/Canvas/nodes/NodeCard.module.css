@@ -242,18 +242,20 @@
   cursor: default;
 }
 
-/* Miniatura de imagen (rediseño minimalista, petición de usuario: "franja
-   superior ancha"; `Thumbnail` en `nodeTypes.tsx`) — SIEMPRE el primer hijo
-   de `.card` en el DOM, franja a todo su ancho. `.card` no tiene
-   `overflow: hidden` (`.warningBadge` depende de que se pueda salir del
-   borde, ver su comentario) así que el redondeo de las esquinas SUPERIORES
-   se fija aquí mismo, en vez de recortar con `overflow` en el contenedor. */
+/* Miniatura de imagen (rediseño minimalista; `Thumbnail` en `nodeTypes.tsx`)
+   — petición de usuario: va DESPUÉS de `.header` (referencia/D-número
+   primero, imagen debajo), nunca antes. Franja a todo el ancho de la
+   tarjeta, sin redondear ninguna esquina: al ir sandwiched entre `.header` y
+   `.bodyPreview`/la lista de respuestas en el caso normal, no toca ningún
+   borde de `.card` — solo en el caso raro de una diapositiva con imagen y
+   SIN nada más (ni texto ni respuestas) queda pegada al borde inferior sin
+   redondear, aceptado como imprecisión cosmética menor antes que redondear
+   sistemáticamente y dejar un hueco visible del fondo de la tarjeta en las
+   esquinas cuando SÍ hay contenido debajo (el caso común). */
 .thumbnail {
   width: 100%;
   height: 64px;
   overflow: hidden;
-  border-top-left-radius: var(--bs-radius-md);
-  border-top-right-radius: var(--bs-radius-md);
 }
 
 .thumbnailImage {

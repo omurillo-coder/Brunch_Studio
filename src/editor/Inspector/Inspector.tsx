@@ -467,6 +467,19 @@ function MediaAttachment({
  * protección real (el undo ya cubre el arrepentimiento).
  */
 
+/** Icono discreto por tipo de bloque (petición de usuario: "que se vea algo
+ *  más la diferencia de bloques entre texto, imagen, audio, vídeo") — mismo
+ *  criterio "emoji + texto, sin librería de iconos" que `PinBadge`/
+ *  `MediaBadges` del lienzo (`nodeTypes.tsx`): un vistazo a la forma del
+ *  icono ya distingue el tipo de bloque en la lista, sin depender solo de
+ *  leer la etiqueta de texto ("Texto 1", "Imagen 2"...). */
+const CONTENT_BLOCK_TYPE_ICON: Record<ContentBlock['type'], string> = {
+  text: '📝',
+  image: '🖼️',
+  audio: '🔊',
+  video: '🎬',
+}
+
 /** Añade un bloque nuevo al FINAL de `content` — criterio elegido (frente a
  *  "en la posición del bloque enfocado"): más predecible y sin necesidad de
  *  rastrear qué bloque tiene el foco en cada momento; el usuario siempre
@@ -503,7 +516,7 @@ function ContentBlockRow({
     <div className={styles.contentBlockRow}>
       <div className={styles.contentBlockHeader}>
         <span id={labelId} className={styles.contentBlockLabel}>
-          {typeLabel} {position}
+          <span aria-hidden="true">{CONTENT_BLOCK_TYPE_ICON[block.type]}</span> {typeLabel} {position}
         </span>
         <div className={styles.contentBlockControls}>
           <button
@@ -2043,33 +2056,27 @@ function ResponseRow({
           onKeyDown={handlePointsKeyDown}
         />
       </div>
+      {/* Petición de usuario ("quitar lo de poder poner una imagen como
+          respuesta... queda raro"): ya no hay `MediaAttachment` de imagen
+          aquí, solo audio. `response.imageAssetId` sigue existiendo en el
+          esquema de dominio (`DecisionResponseSchema`) por compatibilidad —
+          un proyecto antiguo que ya tuviera una imagen en una respuesta no
+          pierde ese dato, simplemente deja de poder añadirse/editarse desde
+          aquí y deja de pintarse tanto en "Probar" (`PlayerScreen.tsx`) como
+          en la exportación (`exportedPlayerScript.ts`), ver sus
+          comentarios. */}
       <div className={styles.responseMediaRow}>
-        <div>
-          <span className={styles.label}>Imagen</span>
-          <MediaAttachment
-            kind="image"
-            assetId={response.imageAssetId}
-            filePath={filePath}
-            onAttach={(assetId) =>
-              updateResponse(slideNodeId, response.id, { imageAssetId: assetId })
-            }
-            onRemove={() => updateResponse(slideNodeId, response.id, { imageAssetId: null })}
-            contextLabel={responseContextLabel}
-          />
-        </div>
-        <div>
-          <span className={styles.label}>Audio</span>
-          <MediaAttachment
-            kind="audio"
-            assetId={response.audioAssetId}
-            filePath={filePath}
-            onAttach={(assetId) =>
-              updateResponse(slideNodeId, response.id, { audioAssetId: assetId })
-            }
-            onRemove={() => updateResponse(slideNodeId, response.id, { audioAssetId: null })}
-            contextLabel={responseContextLabel}
-          />
-        </div>
+        <span className={styles.label}>Audio</span>
+        <MediaAttachment
+          kind="audio"
+          assetId={response.audioAssetId}
+          filePath={filePath}
+          onAttach={(assetId) =>
+            updateResponse(slideNodeId, response.id, { audioAssetId: assetId })
+          }
+          onRemove={() => updateResponse(slideNodeId, response.id, { audioAssetId: null })}
+          contextLabel={responseContextLabel}
+        />
       </div>
       <ResponseVariablesSection slideNodeId={slideNodeId} response={response} variables={variables} />
     </div>
@@ -2627,7 +2634,7 @@ function NodeFields({
   // su cabecera propia en el lienzo (`IntroHeader`/`FinalHeader`,
   // `nodeTypes.tsx`) en vez de por este campo de texto libre.
   const referenceField = (
-    <div>
+    <div className={styles.referenceField}>
       <label className={styles.label} htmlFor="inspector-node-title">
         Ref. oculta
       </label>
@@ -2665,18 +2672,27 @@ function NodeFields({
       {node.type === 'slide' ? (
         /* Tarea 4 (reorganización del Inspector): Color + Ref. oculta +
            Contenido (bloques) + Nota interna agrupados en un bloque
-           diferenciado ("sobre esta diapositiva en sí"), con Color arriba
-           del todo — antes que "Ref. oculta" — y el orden relativo de
-           Ref. oculta/Contenido/Nota interna intacto respecto al de siempre.
-           El resto de la sección (destino/respuestas/enrutado condicional/
-           conexiones) queda FUERA de este bloque, ver más abajo — mismo
-           contenedor con borde/fondo sutil (`.metaGroup`,
-           `Inspector.module.css`) que ya usa el resto de la app para
-           agrupar visualmente (p.ej. `VariablesPanel`). */
+           diferenciado ("sobre esta diapositiva en sí"), Contenido/Nota
+           interna en el mismo orden relativo de siempre. El resto de la
+           sección (destino/respuestas/enrutado condicional/conexiones)
+           queda FUERA de este bloque, ver más abajo — mismo contenedor con
+           borde/fondo sutil (`.metaGroup`, `Inspector.module.css`) que ya
+           usa el resto de la app para agrupar visualmente (p.ej.
+           `VariablesPanel`).
+
+           Petición de usuario ("la referencia oculta y el color pueden ir
+           en la misma línea", "mira de compactar las cosas"): Ref. oculta +
+           Color ya NO son dos bloques apilados — comparten una fila
+           (`.metaFieldsRow`), Ref. oculta a la izquierda (ocupa el espacio
+           sobrante) y Color a la derecha (se ajusta a su contenido, sus
+           pastillas envuelven en 2 filas en vez de 1 — ver
+           `.colorSection`/`.colorSwatch` en `Inspector.module.css`). */
         <div className={styles.metaGroup}>
           {nodeKindLabel}
-          <SlideColorSection node={node} />
-          {referenceField}
+          <div className={styles.metaFieldsRow}>
+            {referenceField}
+            <SlideColorSection node={node} />
+          </div>
           <ContentBlocksSection node={node} filePath={filePath} />
           <InternalNoteField node={node} />
         </div>

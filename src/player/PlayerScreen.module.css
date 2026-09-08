@@ -378,8 +378,11 @@
   cursor: default;
 }
 
-/* Envuelve texto + imagen (si la hay) en columna, ocupando el espacio
-   sobrante entre el borde izquierdo y la flecha. */
+/* Envuelve el texto de la opción, ocupando el espacio sobrante entre el
+   borde izquierdo y la flecha. Ya no envuelve ninguna imagen (petición de
+   usuario "quitar lo de poder poner una imagen como respuesta", ver
+   `ResponseOption` en `PlayerScreen.tsx`) — de ahí que ya no haga falta
+   ninguna regla de tamaño máximo aquí para `.media`. */
 .optionContent {
   display: flex;
   flex-direction: column;
@@ -389,19 +392,14 @@
   min-width: 0;
 }
 
-.optionContent .media {
-  max-height: 180px;
-}
-
 /* Petición de usuario: "a la derecha quiero que aparezca siempre una
    flecha sutil que va hacia la derecha... para hacer de modo que llame a
    hacer clic" -- sustituye al antiguo punto a la izquierda. Fija al canto
    derecho y centrada verticalmente RESPECTO A TODA LA TARJETA (no solo la
    línea de texto): `position: absolute` + `top: 50%` + `translateY(-50%)`
    sobre `.optionButton` (su ancestro `position: relative`), así que se
-   mantiene en el mismo sitio tenga la opción una línea de texto corta, un
-   texto largo que envuelva, o una imagen debajo -- nunca se desplaza con el
-   contenido. */
+   mantiene en el mismo sitio tenga la opción una línea de texto corta o un
+   texto largo que envuelva -- nunca se desplaza con el contenido. */
 .optionArrow {
   position: absolute;
   right: var(--bs-space-3);

@@ -121,9 +121,11 @@ describe('Inspector', () => {
     // de siempre (`RichTextEditor`, fase 4 Milestone 2): un `<div
     // contenteditable>`, no un `<textarea>` con `.value` — se comprueba el
     // texto renderizado. Con un único bloque de texto (el caso sembrado por
-    // `createProject`), se etiqueta "Texto 1".
+    // `createProject`), se etiqueta "Texto 1" (con el icono de tipo delante,
+    // ver `CONTENT_BLOCK_TYPE_ICON` en `Inspector.tsx` — de ahí la `RegExp`
+    // en vez de una cadena exacta).
     await waitFor(() => {
-      expect(screen.getByLabelText('Texto 1')).toHaveTextContent('Hola')
+      expect(screen.getByLabelText(/Texto 1$/)).toHaveTextContent('Hola')
     })
   })
 
@@ -752,7 +754,7 @@ describe('Inspector — editor de bloques de contenido de una diapositiva (miles
     fireEvent.click(screen.getByRole('button', { name: '+ Texto' }))
 
     expect(slideNode(id).content).toMatchObject([{ type: 'text', body: '' }])
-    expect(screen.getByLabelText('Texto 1')).toBeInTheDocument()
+    expect(screen.getByLabelText(/Texto 1$/)).toBeInTheDocument()
   })
 
   it('"+ Imagen" añade un bloque de imagen a content y muestra su vista previa', async () => {
@@ -916,6 +918,34 @@ describe('Inspector — editor de bloques de contenido de una diapositiva (miles
     fireEvent.click(await screen.findByRole('button', { name: 'Quitar bloque 1' }))
 
     expect(slideNode(id).content).toEqual([])
+  })
+
+  it('petición de usuario ("que se vea algo más la diferencia de bloques entre texto, imagen, audio, vídeo"): cada tipo de bloque lleva su propio icono en la etiqueta', async () => {
+    const id = createEmptySlide()
+    act(() => {
+      useProjectStore.getState().selectNode(id)
+    })
+    const assetRepository = setupAssetRepository()
+    const pickImportAssetPath = vi
+      .fn()
+      .mockResolvedValueOnce('/tmp/foto.png')
+      .mockResolvedValueOnce('/tmp/audio.mp3')
+      .mockResolvedValueOnce('/tmp/clip.mp4')
+
+    renderInspectorWithServices({ assetRepository, pickImportAssetPath })
+
+    fireEvent.click(screen.getByRole('button', { name: '+ Imagen' }))
+    await waitFor(() => expect(slideNode(id).content).toHaveLength(1))
+    fireEvent.click(screen.getByRole('button', { name: '+ Audio' }))
+    await waitFor(() => expect(slideNode(id).content).toHaveLength(2))
+    fireEvent.click(screen.getByRole('button', { name: '+ Vídeo' }))
+    await waitFor(() => expect(slideNode(id).content).toHaveLength(3))
+
+    const labels = document.querySelectorAll(`.${CSS.escape(styles.contentBlockLabel as string)}`)
+    expect(labels).toHaveLength(3)
+    expect(labels[0]?.textContent).toContain('🖼️')
+    expect(labels[1]?.textContent).toContain('🔊')
+    expect(labels[2]?.textContent).toContain('🎬')
   })
 
   it('los botones ↑/↓ reordenan los bloques; en los extremos quedan deshabilitados', async () => {
@@ -1151,41 +1181,61 @@ describe('Inspector — puntuación por respuesta (fase 3, Milestone 2)', () => 
 })
 
 describe('Inspector — adjuntos de imagen/audio por respuesta (fase 3, Milestone 2)', () => {
-  it('adjuntar/quitar imagen y audio en la respuesta A no afecta a la respuesta B ni al nodo', async () => {
+  it('adjuntar/quitar audio en la respuesta A no afecta a la respuesta B ni al nodo', async () => {
     const decisionId = createSlideWithTwoResponses()
     act(() => {
       useProjectStore.getState().selectNode(decisionId)
     })
     const assetRepository = new MemoryAssetRepository()
-    assetRepository.registerSourceFile('/tmp/foto.png', new Uint8Array([1, 2, 3]), 'image/png')
-    const pickImportAssetPath = vi.fn().mockResolvedValue('/tmp/foto.png')
+    assetRepository.registerSourceFile('/tmp/audio.mp3', new Uint8Array([1, 2, 3]), 'audio/mpeg')
+    const pickImportAssetPath = vi.fn().mockResolvedValue('/tmp/audio.mp3')
 
     renderInspectorWithServices({ assetRepository, pickImportAssetPath })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Adjuntar imagen de la respuesta 1' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Adjuntar audio de la respuesta 1' }))
 
     await waitFor(() => {
       const responseA = slideNode(decisionId).responses.find((r) => r.letter === 'A')
-      expect(responseA?.imageAssetId).toBeDefined()
+      expect(responseA?.audioAssetId).toBeDefined()
     })
 
     const node = slideNode(decisionId)
     const responseB = node.responses.find((r) => r.letter === 'B')
-    expect(responseB?.imageAssetId).toBeUndefined()
-    // El adjunto de imagen de una respuesta es independiente de los bloques
+    expect(responseB?.audioAssetId).toBeUndefined()
+    // El adjunto de audio de una respuesta es independiente de los bloques
     // de contenido de la diapositiva (`SlideNode.content`): no crea ningún
-    // bloque de imagen.
-    expect(node.content.some((block) => block.type === 'image')).toBe(false)
+    // bloque de audio.
+    expect(node.content.some((block) => block.type === 'audio')).toBe(false)
 
     fireEvent.click(
-      await screen.findByRole('button', { name: 'Quitar imagen de la respuesta 1' }),
+      await screen.findByRole('button', { name: 'Quitar audio de la respuesta 1' }),
     )
 
     expect(
-      slideNode(decisionId).responses.find((r) => r.letter === 'A')?.imageAssetId,
+      slideNode(decisionId).responses.find((r) => r.letter === 'A')?.audioAssetId,
     ).toBeUndefined()
     expect(
-      screen.getByRole('button', { name: 'Adjuntar imagen de la respuesta 1' }),
+      screen.getByRole('button', { name: 'Adjuntar audio de la respuesta 1' }),
+    ).toBeInTheDocument()
+  })
+
+  it('petición de usuario ("quitar lo de poder poner una imagen como respuesta... queda raro"): ya no hay ningún botón para adjuntar imagen en una respuesta', () => {
+    const decisionId = createSlideWithTwoResponses()
+    act(() => {
+      useProjectStore.getState().selectNode(decisionId)
+    })
+
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    expect(
+      screen.queryByRole('button', { name: 'Adjuntar imagen de la respuesta 1' }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Adjuntar imagen de la respuesta 2' }),
+    ).not.toBeInTheDocument()
+    // El audio, en cambio, sigue disponible.
+    expect(
+      screen.getByRole('button', { name: 'Adjuntar audio de la respuesta 1' }),
     ).toBeInTheDocument()
   })
 })
@@ -1207,7 +1257,7 @@ describe('Inspector — editor de texto enriquecido de un bloque de texto (fase 
 
       render(<Inspector filePath={TEST_FILE_PATH} />)
 
-      const contentField = await screen.findByLabelText('Texto 1')
+      const contentField = await screen.findByLabelText(/Texto 1$/)
       await waitFor(() => {
         expect(contentField).toHaveTextContent('Texto plano histórico')
       })
@@ -1310,8 +1360,8 @@ describe('Inspector — editor de texto enriquecido de un bloque de texto (fase 
 
     // Dos bloques de texto, cada uno con su propio editor y su propia barra
     // de herramientas — se distinguen por etiqueta ("Texto 1"/"Texto 2").
-    expect(screen.getByLabelText('Texto 1')).toBeInTheDocument()
-    expect(screen.getByLabelText('Texto 2')).toBeInTheDocument()
+    expect(screen.getByLabelText(/Texto 1$/)).toBeInTheDocument()
+    expect(screen.getByLabelText(/Texto 2$/)).toBeInTheDocument()
 
     const editors = document.querySelectorAll('[contenteditable="true"]')
     expect(editors).toHaveLength(2)
@@ -2380,8 +2430,8 @@ describe('Inspector — color de una diapositiva (paleta cerrada)', () => {
   })
 })
 
-describe('Inspector — reorganización del Inspector (Tarea 4): Color arriba del todo, agrupado con Ref. oculta/Contenido/Nota interna', () => {
-  it('para una diapositiva `slide`, "Color" aparece ANTES que "Ref. oculta" en el DOM', () => {
+describe('Inspector — reorganización del Inspector (Tarea 4): Color y Ref. oculta agrupados con Contenido/Nota interna', () => {
+  it('petición de usuario ("la referencia oculta y el color pueden ir en la misma línea"): para una diapositiva `slide`, "Ref. oculta" aparece ANTES que "Color" en el DOM, compartiendo fila (.metaFieldsRow)', () => {
     const id = startNodeId()
     act(() => {
       useProjectStore.getState().selectNode(id)
@@ -2390,9 +2440,15 @@ describe('Inspector — reorganización del Inspector (Tarea 4): Color arriba de
 
     const colorLabel = screen.getByText('Color')
     const referenceLabel = screen.getByText('Ref. oculta')
-    // DOCUMENT_POSITION_FOLLOWING (4): colorLabel precede a referenceLabel.
+    // DOCUMENT_POSITION_FOLLOWING (4): referenceLabel precede a colorLabel.
     // eslint-disable-next-line no-bitwise
-    expect(colorLabel.compareDocumentPosition(referenceLabel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(referenceLabel.compareDocumentPosition(colorLabel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+
+    // Ambos comparten la misma fila (`.metaFieldsRow`, ver
+    // `Inspector.module.css`): no son dos bloques apilados sueltos.
+    const row = referenceLabel.closest(`.${CSS.escape(styles.metaFieldsRow as string)}`)
+    expect(row).not.toBeNull()
+    expect(within(row as HTMLElement).getByText('Color')).toBeInTheDocument()
     expect(container).toBeTruthy()
   })
 
