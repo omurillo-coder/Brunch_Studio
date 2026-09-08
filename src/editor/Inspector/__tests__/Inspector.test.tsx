@@ -331,7 +331,7 @@ describe('Inspector — modo "de continuar" de una diapositiva', () => {
     // Modo decisión: los campos de continuar se ocultan...
     expect(screen.queryByLabelText('Destino de continuar')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Texto del botón de continuar')).not.toBeInTheDocument()
-    expect(screen.getByLabelText('Texto de la respuesta 1')).toBeInTheDocument()
+    expect(screen.getByLabelText('Respuesta 1')).toBeInTheDocument()
     // ...pero el destino de continuar sigue guardado (dormido) en el documento.
     expect(slideNode(startNodeId()).targetNodeId).toBe(finalId)
 
@@ -365,9 +365,9 @@ describe('Inspector — respuestas de una diapositiva', () => {
     })
     render(<Inspector filePath={TEST_FILE_PATH} />)
 
-    expect(screen.getByLabelText('Texto de la respuesta 1')).toHaveValue('')
-    expect(screen.getByLabelText('Texto de la respuesta 2')).toHaveValue('')
-    expect(screen.queryByLabelText('Texto de la respuesta 3')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Respuesta 1')).toHaveValue('')
+    expect(screen.getByLabelText('Respuesta 2')).toHaveValue('')
+    expect(screen.queryByLabelText('Respuesta 3')).not.toBeInTheDocument()
   })
 
   it('editar el texto de una respuesta y hacer blur produce exactamente una llamada efectiva', () => {
@@ -378,7 +378,7 @@ describe('Inspector — respuestas de una diapositiva', () => {
     render(<Inspector filePath={TEST_FILE_PATH} />)
 
     const historyBefore = useProjectStore.getState().history.past.length
-    const responseInput = screen.getByLabelText('Texto de la respuesta 1')
+    const responseInput = screen.getByLabelText('Respuesta 1')
 
     fireEvent.change(responseInput, { target: { value: 'S' } })
     fireEvent.change(responseInput, { target: { value: 'Sí' } })
@@ -426,11 +426,11 @@ describe('Inspector — respuestas de una diapositiva', () => {
     })
     render(<Inspector filePath={TEST_FILE_PATH} />)
 
-    expect(screen.getByLabelText('Texto de la respuesta 2')).toBeInTheDocument()
+    expect(screen.getByLabelText('Respuesta 2')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Eliminar respuesta 2' }))
 
-    expect(screen.queryByLabelText('Texto de la respuesta 2')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Respuesta 2')).not.toBeInTheDocument()
     expect(slideNode(decisionId).responses.some((r) => r.letter === 'B')).toBe(false)
   })
 
@@ -700,7 +700,7 @@ describe('Inspector — orden de las respuestas (petición de usuario: interrupt
     expect(responses.map((r) => r.letter).sort()).toEqual(['A', 'B'])
     // Las filas del Inspector reflejan el nuevo orden: el texto de la
     // "respuesta 1" ahora es el de B, no el de A.
-    expect(screen.getByLabelText('Texto de la respuesta 1')).toBeInTheDocument()
+    expect(screen.getByLabelText('Respuesta 1')).toBeInTheDocument()
   })
 
   it('con "Random", NO aparecen los botones Subir/Bajar', () => {
@@ -2048,7 +2048,7 @@ describe('Inspector — botón "+ Añadir respuesta" en el flujo del listado (ta
 
     fireEvent.click(screen.getByRole('button', { name: '+ Añadir respuesta' }))
 
-    expect(screen.getByLabelText('Texto de la respuesta 3')).toBeInTheDocument()
+    expect(screen.getByLabelText('Respuesta 3')).toBeInTheDocument()
     const responsesList = document.querySelector(`.${styles.responsesList}`) as HTMLElement
     const children = [...responsesList.children]
     const lastTwo = children.slice(-2)
@@ -2583,7 +2583,7 @@ describe('Inspector — campos "por rellenar" en blanco, no en gris (petición d
     })
     render(<Inspector filePath={TEST_FILE_PATH} />)
 
-    const textarea = screen.getByLabelText('Texto de la respuesta 1')
+    const textarea = screen.getByLabelText('Respuesta 1')
     expect(textarea.className).toContain(styles.fieldEmpty)
 
     fireEvent.change(textarea, { target: { value: 'Opción correcta' } })
@@ -2650,7 +2650,7 @@ describe('Inspector — campos "por rellenar" en blanco, no en gris (petición d
       // Dos respuestas -> dos botones "+ Añadir condición" (uno por
       // respuesta): se acota a la fila de la respuesta 1.
       const responseRow = screen
-        .getByLabelText('Texto de la respuesta 1')
+        .getByLabelText('Respuesta 1')
         .closest(`.${CSS.escape(styles.responseRow as string)}`)
       if (!responseRow) throw new Error('setup inválido: no se encontró la fila de la respuesta 1')
       fireEvent.click(within(responseRow as HTMLElement).getByRole('button', { name: '+ Añadir condición' }))

@@ -412,6 +412,24 @@
   overflow: hidden;
 }
 
+/* Petición de usuario ("quiero que esté la imagen algo más separado del
+   texto"): `.bodyPreview` normalmente no necesita relleno superior (pegada
+   a `.header`, que ya la separa con su propio borde inferior) — pero justo
+   DESPUÉS de `.thumbnail` (sin borde ni relleno propios, una imagen a
+   sangre) quedaba pegada al canto inferior de la imagen, sin ningún aire.
+   Combinador de hermano adyacente (no un `margin-bottom` en `.thumbnail`,
+   ni un `padding-top` fijo en la regla de arriba): así solo afecta al caso
+   "imagen seguida de texto", sin tocar el caso, mucho más común, de
+   `.bodyPreview` justo después de `.header` sin ninguna miniatura.
+   Deliberadamente DESPUÉS de la regla de arriba en el archivo (no junto a
+   `.thumbnail`): un test (`NodeCard.textContrast.test.ts`) localiza la
+   regla `.bodyPreview` con una expresión regular que se queda con la
+   PRIMERA coincidencia de ese texto en el archivo — ponerla antes rompía
+   ese test al "robarle" el emparejamiento. */
+.thumbnail + .bodyPreview {
+  padding-top: var(--bs-space-2);
+}
+
 .body {
   padding: var(--bs-space-2) var(--bs-space-3);
 }

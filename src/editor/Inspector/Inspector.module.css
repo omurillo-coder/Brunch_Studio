@@ -121,6 +121,22 @@
   letter-spacing: 0.04em;
 }
 
+/* Petición de usuario ("pon solo Respuesta N y algo más grande, para
+   diferenciarlo de las otras respuestas"): etiqueta del campo de texto de
+   una respuesta (`ResponseRow`, `Inspector.tsx`) — a diferencia de `.label`
+   (diminuta, mayúsculas, tono apagado, pensada para un campo cualquiera),
+   esta hace de titular corto de la tarjeta de esa respuesta: más grande,
+   en mayúsculas normales (no versalitas) y con el color de texto normal
+   (no atenuado), para que se note de un vistazo dónde empieza cada
+   respuesta al desplazarse por una diapositiva con varias. */
+.responseTextLabel {
+  display: block;
+  margin-bottom: var(--bs-space-1);
+  font-size: var(--bs-font-size-md);
+  font-weight: 700;
+  color: var(--bs-color-text);
+}
+
 /* Kicker "Diapositiva · D3" (petición de usuario: "que el tipo de nodo
    aparezca arriba de la referencia oculta") — mismo tamaño/mayúsculas que
    `.label`, pero en el color de acento y con más peso, para que se lea
@@ -473,19 +489,34 @@
   gap: var(--bs-space-3);
 }
 
+/* Petición de usuario ("en lugar de eliminar en las respuestas pon una
+   'X'"): botón de icono compacto, mismo estilo sobrio ya establecido para
+   este mismo gesto en `.dismissButton` de `DiagnosticsPanel.module.css`
+   (borde fino, fondo neutro, texto atenuado, borde rojo al pasar el ratón)
+   — antes era un enlace de texto subrayado "Eliminar". El nombre accesible
+   (`aria-label`, `Inspector.tsx`) sigue siendo el texto completo
+   "Eliminar respuesta N": el glifo compacto es solo la superficie visual. */
 .removeResponseButton {
+  flex-shrink: 0;
+  width: 1.5rem;
+  height: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   padding: 0;
-  border: none;
-  background: none;
+  border: 1px solid var(--bs-color-border);
+  border-radius: var(--bs-radius-sm);
+  background: var(--bs-color-bg);
   color: var(--bs-color-text-muted);
-  font-size: var(--bs-font-size-xs);
+  font-size: var(--bs-font-size-sm);
+  line-height: 1;
   cursor: pointer;
-  text-decoration: underline;
-  transition: color 0.15s ease;
+  transition: border-color 0.15s ease, color 0.15s ease;
 }
 
 .removeResponseButton:hover {
-  color: var(--bs-color-text);
+  border-color: var(--bs-color-danger);
+  color: var(--bs-color-danger);
 }
 
 .responseMediaRow {

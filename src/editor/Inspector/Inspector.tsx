@@ -1825,9 +1825,17 @@ function IntroSection({ node, allNodes }: { node: IntroNode; allNodes: Node[] })
  *
  * `index` es la posición 1-based de la respuesta en el orden mostrado, y se
  * usa solo para desambiguar las etiquetas visibles y los nombres accesibles
- * ("Texto de la respuesta 2"). Deliberadamente NO se usa la letra
- * (A/B/C/D): sigue existiendo en el dominio como criterio de orden, pero no
- * se muestra nunca al usuario.
+ * ("Destino de la respuesta 2", "Eliminar respuesta 2"...). Deliberadamente
+ * NO se usa la letra (A/B/C/D): sigue existiendo en el dominio como criterio
+ * de orden, pero no se muestra nunca al usuario.
+ *
+ * Petición de usuario ("pon solo Respuesta N y algo más grande, para
+ * diferenciarlo de las otras respuestas"): la etiqueta del propio texto de
+ * la respuesta (`.responseTextLabel`, antes "Texto de la respuesta N" con
+ * el mismo tamaño diminuto que cualquier otra `<label>` del panel) hace
+ * ahora de titular corto de toda la tarjeta de esa respuesta — más grande
+ * que `.label`, para que se note de un vistazo dónde empieza cada
+ * respuesta al desplazarse por una diapositiva con varias.
  *
  * Se monta con `key={response.id}` desde `ResponsesSection` por el mismo
  * motivo que `NodeFields` se monta con `key={node.id}`: el estado local de
@@ -1988,12 +1996,12 @@ function ResponseRow({
           onClick={() => removeResponse(slideNodeId, response.id)}
           aria-label={`Eliminar respuesta ${index}`}
         >
-          Eliminar
+          <span aria-hidden="true">×</span>
         </button>
       </div>
       <div>
-        <label className={styles.label} htmlFor={textFieldId}>
-          Texto de la respuesta {index}
+        <label className={styles.responseTextLabel} htmlFor={textFieldId}>
+          Respuesta {index}
         </label>
         <textarea
           id={textFieldId}
