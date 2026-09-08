@@ -233,7 +233,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 10px;
+  font-size: var(--bs-font-size-2xs);
   font-weight: 700;
   line-height: 1;
   background: var(--bs-color-warning);
@@ -278,7 +278,7 @@
   color: var(--bs-color-text-muted);
   background: var(--bs-color-bg);
   border-radius: var(--bs-radius-sm);
-  padding: 1px 6px;
+  padding: var(--bs-chip-padding);
 }
 
 /* Insignia "+1 FALLO"/"GAME OVER" (milestone "+1 fallo con Game Over",
@@ -384,10 +384,12 @@
 }
 
 /* Icono de pin discreto (tarea 6): nota interna con contenido. Tamaño
-   pequeño para no competir visualmente con el título. */
+   pequeño para no competir visualmente con el título. Limpieza de tokens
+   (petición de usuario): `11px` literal era un duplicado exacto de
+   `--bs-font-size-xs` — mismo valor, sin el token. */
 .pinBadge {
   flex: 0 0 auto;
-  font-size: 11px;
+  font-size: var(--bs-font-size-xs);
   line-height: 1;
   cursor: default;
 }
@@ -400,10 +402,13 @@
    `--bs-color-card-text` sobre cualquiera de las 9 tarjetas con fondo de
    color propio — ESTE era el elemento realmente ilegible del bug reportado
    por el usuario (se pinta directamente sobre el color de la tarjeta, sin
-   ningún fondo propio, a diferencia de `.type`). */
+   ningún fondo propio, a diferencia de `.type`). Limpieza de tokens
+   (petición de usuario): `10.5px` literal (medio píxel por debajo de
+   `.warningBadge`, sin ningún motivo de diseño para diferir) pasa a
+   `--bs-font-size-2xs`, el mismo escalón ya usado ahí. */
 .bodyPreview {
   padding: 0 var(--bs-space-3) var(--bs-space-2);
-  font-size: 10.5px;
+  font-size: var(--bs-font-size-2xs);
   line-height: 1.35;
   color: var(--bs-card-text-faint);
   display: -webkit-box;

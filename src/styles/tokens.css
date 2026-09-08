@@ -144,12 +144,26 @@
   --bs-color-card-text: var(--bs-color-text);
 
   /* Espaciado */
+  /* Limpieza de tokens (petición de usuario): por debajo de `--bs-space-1`
+     (4px), un único valor — 2px, el gap entre filas apretadas de una lista
+     (menús desplegables, lista de diapositivas del panel izquierdo,
+     conexiones del Inspector...) — repetido igual en 6 módulos CSS sueltos
+     sin ningún token. */
+  --bs-space-0-5: 2px;
   --bs-space-1: 4px;
   --bs-space-2: 8px;
   --bs-space-3: 12px;
   --bs-space-4: 16px;
   --bs-space-5: 24px;
   --bs-space-6: 32px;
+  /* Limpieza de tokens (petición de usuario): relleno de la insignia
+     "D{número}" — repetido, IDÉNTICO, en tres módulos CSS sueltos
+     (`NodeCard.module.css` .type, `LeftPanel.module.css` .nodeType,
+     `VariablesPanel.module.css` .typeBadge) sin ningún token, porque
+     ninguno de los dos valores (1px, 6px) encaja en la escala de arriba.
+     Aparte (no una escala nueva): es el único sitio de la app con este
+     relleno tan ajustado. */
+  --bs-chip-padding: 1px 6px;
 
   /* Radios */
   --bs-radius-sm: 4px;
@@ -158,6 +172,12 @@
 
   /* Tipografía */
   --bs-font-sans: -apple-system, 'Segoe UI', Roboto, system-ui, sans-serif;
+  /* Limpieza de tokens (petición de usuario): un par de textos MUY
+     pequeños del lienzo (insignia de aviso de 15px de diámetro, vista
+     previa de contenido de una tarjeta) usaban dos números mágicos
+     casi idénticos (10px/10.5px) por debajo de `--bs-font-size-xs`, sin
+     ningún token — se consolidan en este único escalón compartido. */
+  --bs-font-size-2xs: 10px;
   --bs-font-size-xs: 11px;
   --bs-font-size-sm: 12.5px;
   --bs-font-size-md: 13.5px;

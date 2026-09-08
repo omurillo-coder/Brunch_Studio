@@ -405,9 +405,18 @@
   background: var(--bs-color-surface);
 }
 
+/* Limpieza de tokens (petición de usuario "vamos a por el punto 1"):
+   `color: #fff` fijo daba solo 2.66:1 de contraste sobre
+   `--bs-color-accent` (falla WCAG AA, que exige 4.5:1 para texto de este
+   tamaño) — el mismo bug real de contraste ya corregido en otro sitio de
+   la app para este mismo acento (ver "Tarea 'Contraste de texto'" en
+   `NodeCard.module.css`). `--bs-color-accent-contrast` es justo el tono
+   (oscuro, no blanco — ver su comentario en `tokens.css`) ya elegido para
+   contrastar con `--bs-color-accent`: da 5.67:1 en claro, AA de sobra, y
+   se adapta solo en oscuro (ambos tokens cambian juntos). */
 .responseOrderButtonActive {
   background: var(--bs-color-accent);
-  color: #fff;
+  color: var(--bs-color-accent-contrast);
 }
 
 .addResponseButton {
@@ -736,7 +745,7 @@
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--bs-space-0-5);
 }
 
 .connectionItem {

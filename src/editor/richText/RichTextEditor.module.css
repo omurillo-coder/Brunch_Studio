@@ -85,7 +85,7 @@
   min-width: 140px;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--bs-space-0-5);
   padding: var(--bs-space-1);
   background: var(--bs-color-surface);
   border: 1px solid var(--bs-color-border);

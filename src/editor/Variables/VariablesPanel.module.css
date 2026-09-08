@@ -152,7 +152,7 @@
   color: var(--bs-color-text-muted);
   background: var(--bs-color-bg);
   border-radius: var(--bs-radius-sm);
-  padding: 1px 6px;
+  padding: var(--bs-chip-padding);
 }
 
 .emptyState {

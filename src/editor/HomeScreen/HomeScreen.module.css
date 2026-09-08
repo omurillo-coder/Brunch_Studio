@@ -122,7 +122,7 @@ button:disabled {
 .templateOption {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--bs-space-0-5);
   padding: var(--bs-space-2);
   border: 1px solid var(--bs-color-border);
   border-radius: var(--bs-radius-sm);
