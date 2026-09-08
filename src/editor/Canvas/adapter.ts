@@ -9,6 +9,7 @@ import type {
   NodeType,
   ProjectDocument,
   SlideColor,
+  SlideNode,
 } from '../../domain'
 import { extractPlainText, parseRichBody } from '../richText/richTextContent'
 import { IN_HANDLE_ID, OUT_HANDLE_ID, parseResponseHandleId, responseHandleId } from './handles'
@@ -88,6 +89,38 @@ interface BaseCanvasNodeData {
    * `undefined` si el nodo todavía no tiene contenido.
    */
   bodyPreview?: string
+  /**
+   * Rediseño minimalista, petición de usuario ("que en las pantallas se vea
+   * bastante lo que hay dentro"): `assetId` del PRIMER bloque `type: 'image'`
+   * con `assetId` definido en `content` (`imagePreviewAssetIdFor` más abajo).
+   * Solo presente en nodos `slide` — `intro`/`final` no tienen `content`. Un
+   * bloque de imagen "pendiente de subir" (sin `assetId`, ver su comentario
+   * en `schemas.ts`) NO cuenta como candidato; si el primero es así, se sigue
+   * buscando en los siguientes bloques de imagen. `undefined` = sin ninguna
+   * imagen resuelta en el contenido — la tarjeta no pinta ninguna miniatura
+   * (`Thumbnail` en `nodeTypes.tsx`).
+   *
+   * Deliberadamente solo el `assetId` (un string, comparable por valor) y NO
+   * los bytes/`dataUri` de la imagen: resolverlos es asíncrono (una llamada a
+   * `assetRepository.getAsset`) y esta función es pura y síncrona (la propia
+   * `FlowNodeCache` de más abajo lo exige, ver su comentario) — la resolución
+   * real vive en el propio componente de la tarjeta (`useNodeThumbnail`,
+   * `nodes/useNodeThumbnail.ts`), con su propia caché por `assetId` para no
+   * repetir la petición si varios nodos comparten la misma imagen.
+   */
+  previewImageAssetId?: string
+  /** `true` si `content` tiene al menos un bloque `type: 'audio'`, `false`
+   *  si no — pinta un icono discreto en la cabecera (`MediaBadges`,
+   *  `nodeTypes.tsx`). No hay ninguna miniatura de audio (no tiene sentido,
+   *  es solo un icono de "hay audio aquí"), así que basta un booleano, no un
+   *  `assetId`. Opcional (`?`) solo porque `intro`/`final` no tienen
+   *  `content` y por tanto nunca fijan este campo — para una `slide` sí es
+   *  siempre un booleano real, nunca `undefined` (a diferencia de
+   *  `previewImageAssetId`, que si puede quedar `undefined` en una
+   *  `slide`). */
+  hasAudioContent?: boolean
+  /** Mismo criterio que `hasAudioContent`, para bloques `type: 'video'`. */
+  hasVideoContent?: boolean
 }
 
 /** Datos que lleva cada nodo de `@xyflow/react` en su campo `data`. */
@@ -156,9 +189,18 @@ function sortByLetter(responses: DecisionResponse[]): DecisionResponse[] {
  * `layout/autoLayout.ts` calcule el espaciado del auto-layout con el mismo
  * tamaño de tarjeta que asume el resto del lienzo, en vez de duplicar estos
  * valores como un segundo número mágico que pudiera desincronizarse.
+ *
+ * `INITIAL_NODE_HEIGHT` sube de 60 a 108 con la miniatura de imagen del
+ * rediseño minimalista (`Thumbnail`, `nodes/nodeTypes.tsx`): la franja de
+ * imagen (64px, `.thumbnail` en `NodeCard.module.css`) más la cabecera ya
+ * supera de sobra el valor anterior, pensado solo para "cabecera sola". Sigue
+ * siendo una aproximación (una diapositiva CON respuestas y SIN imagen mide
+ * distinto, en cualquiera de los dos sentidos) — el propio auto-layout ya
+ * asume ese margen de holgura, ver `RANK_SEPARATION`/`NODE_SEPARATION` en
+ * `layout/autoLayout.ts`.
  */
 export const INITIAL_NODE_WIDTH = 180
-export const INITIAL_NODE_HEIGHT = 60
+export const INITIAL_NODE_HEIGHT = 108
 
 export type CanvasFlowNode = XyNode<CanvasNodeData>
 export type CanvasFlowEdge = XyEdge<CanvasEdgeData>
@@ -256,6 +298,22 @@ function introSummaryFor(node: IntroNode): string {
   return '(pendiente de completar)'
 }
 
+/**
+ * Rediseño minimalista, petición de usuario ("que en las pantallas se vea
+ * bastante lo que hay dentro"): `assetId` del primer bloque `type: 'image'`
+ * de `content` que ya tenga imagen (`assetId` definido) — un bloque
+ * "pendiente de subir" (ver comentario de `ContentBlockSchema` en
+ * `schemas.ts`) se salta en vez de cortar la búsqueda, por si hay otro bloque
+ * de imagen más abajo con material real. `undefined` si ninguno la tiene
+ * todavía.
+ */
+function imagePreviewAssetIdFor(node: SlideNode): string | undefined {
+  for (const block of node.content) {
+    if (block.type === 'image' && block.assetId) return block.assetId
+  }
+  return undefined
+}
+
 function toNodeData(node: DomainNode, startNodeId: string): BaseCanvasNodeData {
   const trimmedNote = node.internalNote?.trim()
   const base: BaseCanvasNodeData = {
@@ -274,6 +332,9 @@ function toNodeData(node: DomainNode, startNodeId: string): BaseCanvasNodeData {
     }))
     base.color = node.color
     base.canvasBadge = node.canvasBadge
+    base.previewImageAssetId = imagePreviewAssetIdFor(node)
+    base.hasAudioContent = node.content.some((block) => block.type === 'audio')
+    base.hasVideoContent = node.content.some((block) => block.type === 'video')
   }
   return base
 }

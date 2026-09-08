@@ -24,12 +24,15 @@ import {
   useSelectedNodeIds,
 } from '../../store'
 import type { NodeType } from '../../domain'
+import { useAppServices } from '../../app/AppServicesContext'
 import type { CanvasFlowEdge, CanvasFlowNode, FlowEdgeCache, FlowNodeCache } from './adapter'
 import { resolveConnection, toFlowEdges, toFlowNodes } from './adapter'
 import { resolveEmptyPaneDrop } from './handles'
 import { computeAutoLayout } from './layout/autoLayout'
 import { nodeTypes } from './nodes/nodeTypes'
 import { edgeTypes } from './edges/edgeTypes'
+import { CanvasAssetProvider } from './nodes/CanvasAssetContext'
+import type { CanvasAssetContextValue } from './nodes/CanvasAssetContext'
 import { ConnectionMenu } from './ConnectionMenu'
 import { useCanvasClipboard } from './useCanvasClipboard'
 import styles from './Canvas.module.css'
@@ -79,9 +82,14 @@ function pointFromConnectEndEvent(event: MouseEvent | TouchEvent): { x: number; 
  * Tamaño asumido de un nodo cuando `@xyflow/react` todavía no lo ha medido
  * (p.ej. un `focusNode` disparado en el mismo tick que el montaje inicial).
  * Solo afecta al cálculo de centrado; no a layout ni a datos de dominio.
+ * Mismos valores que `INITIAL_NODE_WIDTH`/`INITIAL_NODE_HEIGHT` de
+ * `adapter.ts` (misma aproximación, ver su comentario), sin importarlos de
+ * ahí: esta constante ya declaraba explícitamente no depender de layout ni de
+ * dominio antes de esta pasada, y no hay motivo para acoplar ambos usos por
+ * una coincidencia de valores.
  */
 const FALLBACK_NODE_WIDTH = 180
-const FALLBACK_NODE_HEIGHT = 60
+const FALLBACK_NODE_HEIGHT = 108
 
 /**
  * Ventana de confirmación del borrado con Supr/Backspace (ver
@@ -106,11 +114,25 @@ const DELETE_CONFIRM_WINDOW_MS = 3000
  * patrón concreto (posición durante el arrastre, selección, conexión,
  * viewport).
  */
-export function Canvas() {
+export interface CanvasProps {
+  /**
+   * Ruta del `.brunch` abierto, para que la miniatura de imagen de una
+   * tarjeta (`Thumbnail`, `nodes/nodeTypes.tsx`) pueda resolver sus bytes
+   * (`CanvasAssetContext`). Opcional: `undefined` en las suites de test que
+   * montan `<Canvas />` sin ella (ninguna de ellas ejercita miniaturas) —
+   * sin `filePath`, `useNodeThumbnail` no intenta ningún `getAsset` y las
+   * tarjetas simplemente no pintan ninguna miniatura, degradando con
+   * gracia en vez de fallar.
+   */
+  filePath?: string
+}
+
+export function Canvas({ filePath }: CanvasProps) {
   const project = useProject()
   const selectedNodeIds = useSelectedNodeIds()
   const focusRequestNodeId = useFocusRequestNodeId()
   const contextMenu = useContextMenu()
+  const { assetRepository } = useAppServices()
 
   const connect = useProjectStore((state) => state.connect)
   const deleteNode = useProjectStore((state) => state.deleteNode)
@@ -171,6 +193,29 @@ export function Canvas() {
   const edges = useMemo(
     () => toFlowEdges(project, selectedNodeIds, edgeCacheRef.current),
     [project, selectedNodeIds],
+  )
+
+  // Rediseño minimalista, petición de usuario ("que en las pantallas se vea
+  // bastante lo que hay dentro"): caché de miniaturas por `assetId`
+  // (`CanvasAssetContext`), MISMO criterio de ciclo de vida que
+  // `nodeCacheRef`/`edgeCacheRef` de arriba — un `useRef` ligado a este
+  // lienzo montado, nunca a nivel de módulo (ver comentario de
+  // `CanvasAssetContext.tsx`). `assetContextValue` se memoiza para que las
+  // decenas de tarjetas del lienzo no vean una referencia de contexto nueva
+  // (y por tanto un efecto de `useNodeThumbnail` reejecutándose sin motivo)
+  // en cada render de `Canvas` que no cambie ni `filePath` ni
+  // `assetRepository` — ambos, en la práctica, estables durante toda la
+  // vida de un proyecto abierto.
+  const thumbnailCacheRef = useRef<Map<string, string>>(new Map())
+  const thumbnailInFlightRef = useRef<Map<string, Promise<void>>>(new Map())
+  const assetContextValue = useMemo<CanvasAssetContextValue>(
+    () => ({
+      filePath,
+      assetRepository,
+      cache: thumbnailCacheRef.current,
+      inFlight: thumbnailInFlightRef.current,
+    }),
+    [filePath, assetRepository],
   )
 
   // Petición de usuario: "cuando se inicie un proyecto, los nodos
@@ -650,52 +695,59 @@ export function Canvas() {
 
   return (
     <div className={styles.canvas} ref={wrapperRef}>
-      <ReactFlow
-        className={styles.flow}
-        nodes={nodes}
-        edges={edges}
-        nodeTypes={nodeTypes}
-        edgeTypes={edgeTypes}
-        defaultViewport={project.editor.viewport}
-        onInit={handleInit}
-        onNodeDragStart={handleNodeDragStart}
-        onNodeDrag={handleNodeDrag}
-        onNodeDragStop={handleNodeDragStop}
-        onSelectionChange={handleSelectionChange}
-        onSelectionStart={handleSelectionStart}
-        onSelectionEnd={handleSelectionEnd}
-        onNodeClick={handleNodeClick}
-        onPaneClick={handlePaneClick}
-        onConnect={handleConnect}
-        onConnectEnd={handleConnectEnd}
-        onMoveEnd={handleMoveEnd}
-        onBeforeDelete={handleBeforeDelete}
-        onNodesDelete={handleNodesDelete}
-        deleteKeyCode={['Backspace', 'Delete']}
-        // Por defecto, `@xyflow/react` usa Meta/Ctrl (según plataforma) para
-        // ir añadiendo nodos a la selección con clic — pero Mayús+arrastrar
-        // ya es, por defecto también, el gesto para la caja de selección
-        // (`selectionKeyCode`, sin tocar). Se fija Mayús aquí TAMBIÉN para
-        // el clic individual: ambos gestos (clic y arrastre) conviven sin
-        // conflicto porque se distinguen por dónde se origina el gesto (un
-        // nodo vs. el lienzo vacío), no por qué tecla se usa — y así el
-        // usuario solo necesita recordar una tecla para "seleccionar varias
-        // diapositivas", sea con clic o con arrastre.
-        multiSelectionKeyCode="Shift"
-        minZoom={0.1}
-        maxZoom={2}
-      >
-        <Background variant={BackgroundVariant.Dots} gap={24} size={1.5} color="var(--bs-color-canvas-dot)" />
-        <Controls showInteractive={false}>
-          <ControlButton
-            onClick={handleAutoLayout}
-            title={AUTO_LAYOUT_LABEL}
-            aria-label={AUTO_LAYOUT_LABEL}
-          >
-            <AutoLayoutIcon />
-          </ControlButton>
-        </Controls>
-      </ReactFlow>
+      {/* Rediseño minimalista: el contexto de miniaturas solo hace falta
+          dentro de `<ReactFlow>` (lo consumen los componentes de nodo
+          personalizados, ver `nodes/nodeTypes.tsx`) — el menú de conexión y
+          el aviso de borrado, fuera de él, no lo necesitan. */}
+      <CanvasAssetProvider value={assetContextValue}>
+        <ReactFlow
+          className={styles.flow}
+          nodes={nodes}
+          edges={edges}
+          nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
+          defaultViewport={project.editor.viewport}
+          onInit={handleInit}
+          onNodeDragStart={handleNodeDragStart}
+          onNodeDrag={handleNodeDrag}
+          onNodeDragStop={handleNodeDragStop}
+          onSelectionChange={handleSelectionChange}
+          onSelectionStart={handleSelectionStart}
+          onSelectionEnd={handleSelectionEnd}
+          onNodeClick={handleNodeClick}
+          onPaneClick={handlePaneClick}
+          onConnect={handleConnect}
+          onConnectEnd={handleConnectEnd}
+          onMoveEnd={handleMoveEnd}
+          onBeforeDelete={handleBeforeDelete}
+          onNodesDelete={handleNodesDelete}
+          deleteKeyCode={['Backspace', 'Delete']}
+          // Por defecto, `@xyflow/react` usa Meta/Ctrl (según plataforma)
+          // para ir añadiendo nodos a la selección con clic — pero
+          // Mayús+arrastrar ya es, por defecto también, el gesto para la
+          // caja de selección (`selectionKeyCode`, sin tocar). Se fija
+          // Mayús aquí TAMBIÉN para el clic individual: ambos gestos (clic
+          // y arrastre) conviven sin conflicto porque se distinguen por
+          // dónde se origina el gesto (un nodo vs. el lienzo vacío), no por
+          // qué tecla se usa — y así el usuario solo necesita recordar una
+          // tecla para "seleccionar varias diapositivas", sea con clic o
+          // con arrastre.
+          multiSelectionKeyCode="Shift"
+          minZoom={0.1}
+          maxZoom={2}
+        >
+          <Background variant={BackgroundVariant.Dots} gap={24} size={1.5} color="var(--bs-color-canvas-dot)" />
+          <Controls showInteractive={false}>
+            <ControlButton
+              onClick={handleAutoLayout}
+              title={AUTO_LAYOUT_LABEL}
+              aria-label={AUTO_LAYOUT_LABEL}
+            >
+              <AutoLayoutIcon />
+            </ControlButton>
+          </Controls>
+        </ReactFlow>
+      </CanvasAssetProvider>
       {contextMenu.open && contextMenu.position && (
         <ConnectionMenu
           position={contextMenu.position}

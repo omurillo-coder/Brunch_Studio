@@ -4,6 +4,7 @@ import { MAX_RESPONSES } from '../../../domain'
 import type { NodeType, SlideColor } from '../../../domain'
 import type { CanvasFlowNode, CanvasNodeData, CanvasResponseSummary } from '../adapter'
 import { IN_HANDLE_ID, OUT_HANDLE_ID, responseHandleId } from '../handles'
+import { useNodeThumbnail } from './useNodeThumbnail'
 import styles from './NodeCard.module.css'
 
 /**
@@ -14,6 +15,15 @@ import styles from './NodeCard.module.css'
  * siendo legible con decenas de nodos; el contenido completo se edita en el
  * inspector.
  *
+ * Rediseño minimalista, petición de usuario ("que en las pantallas se vea
+ * bastante lo que hay dentro"): una `slide` con imagen en su primer bloque de
+ * contenido pinta esa imagen como miniatura a todo el ancho (`Thumbnail`,
+ * franja superior de la tarjeta), y un icono discreto si además tiene audio/
+ * vídeo (`MediaBadges`, junto a `PinBadge` en `Header`) — sin romper el
+ * criterio de arriba: sigue sin pintarse el `body`/contenido completo, solo
+ * un vistazo de qué tipo de material trae la diapositiva.
+ *
+
  * Tarea "Numeración corta": la antigua etiqueta traducida de tipo
  * (`NODE_TYPE_LABEL`, "Inicio"/"Diapositiva"/"Final") ya NO se pinta en la
  * cabecera de la tarjeta — la sustituye `shortNodeLabel` ("D" + `number`)
@@ -196,6 +206,35 @@ function PinBadge({ data }: { data: CanvasNodeData }) {
 }
 
 /**
+ * Iconos discretos de "hay audio/vídeo aquí" (rediseño minimalista, petición
+ * de usuario "que en las pantallas se vea bastante lo que hay dentro") —
+ * mismo criterio que `PinBadge` (icono + `title` nativo como único texto
+ * accesible, sin popover propio), reutilizando su misma clase de tamaño
+ * (`.pinBadge`: no hay nada que distinga visualmente a un "icono pequeño de
+ * cabecera" de otro, así que no hace falta una clase CSS nueva solo para
+ * este). No hay miniatura de audio/vídeo (no tendría sentido, a diferencia de
+ * `Thumbnail` más abajo): solo un aviso de que ese contenido existe, para
+ * verlo sin abrir el Inspector.
+ */
+function MediaBadges({ data }: { data: CanvasNodeData }) {
+  if (!data.hasAudioContent && !data.hasVideoContent) return null
+  return (
+    <>
+      {data.hasAudioContent && (
+        <span className={styles.pinBadge} title="Contiene audio" aria-label="Contiene audio">
+          🔊
+        </span>
+      )}
+      {data.hasVideoContent && (
+        <span className={styles.pinBadge} title="Contiene vídeo" aria-label="Contiene vídeo">
+          🎬
+        </span>
+      )}
+    </>
+  )
+}
+
+/**
  * Cabecera de una `slide`, EXCLUSIVA de este tipo desde la petición de
  * usuario "el Final como el Inicio" (antes también servía para `final`,
  * ver `FinalHeader` más abajo para su reemplazo). Título/Ref. oculta + código
@@ -223,6 +262,7 @@ function Header({ data }: { data: CanvasNodeData }) {
           {START_NODE_LABEL}
         </span>
       )}
+      <MediaBadges data={data} />
       <PinBadge data={data} />
     </div>
   )
@@ -235,6 +275,28 @@ function Header({ data }: { data: CanvasNodeData }) {
 function BodyPreview({ data }: { data: CanvasNodeData }) {
   if (!data.bodyPreview) return null
   return <div className={styles.bodyPreview}>{data.bodyPreview}</div>
+}
+
+/**
+ * Miniatura de imagen (rediseño minimalista, petición de usuario: "franja
+ * superior ancha", "que en las pantallas se vea bastante lo que hay
+ * dentro") — franja a todo el ancho de la tarjeta, PRIMERO en el DOM (antes
+ * de cualquier cabecera/insignia, ver `SlideNodeView`), resuelta de forma
+ * perezosa por `useNodeThumbnail` a partir de `data.previewImageAssetId`
+ * (`adapter.ts`). Sin nada que pintar mientras se resuelve (no hay
+ * esqueleto/placeholder): la tarjeta simplemente crece cuando la imagen
+ * llega, en vez de reservar un hueco fijo para una imagen que podría no
+ * cargar nunca (assets pendientes de subir, o un fallo de lectura, ver
+ * comentario de `useNodeThumbnail`).
+ */
+function Thumbnail({ data }: { data: CanvasNodeData }) {
+  const dataUri = useNodeThumbnail(data.previewImageAssetId)
+  if (!dataUri) return null
+  return (
+    <div className={styles.thumbnail}>
+      <img className={styles.thumbnailImage} src={dataUri} alt="" />
+    </div>
+  )
 }
 
 /**
@@ -354,6 +416,7 @@ export function SlideNodeView({ data }: NodeProps<CanvasFlowNode>) {
     <div className={cardClassName(data)}>
       <NoOutgoingBadge data={data} />
       <InHandle />
+      <Thumbnail data={data} />
       <SlideBadgeHeader data={data} />
       <Header data={data} />
       <BodyPreview data={data} />

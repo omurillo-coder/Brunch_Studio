@@ -133,7 +133,7 @@ export function EditorScreen({ filePath, onCloseProject }: EditorScreenProps) {
       <div className={styles.body}>
         {leftPanelVisible && <LeftPanel />}
         <div className={styles.canvasArea}>
-          <Canvas />
+          <Canvas filePath={filePath} />
           <DiagnosticsPanel />
         </div>
         {variablesPanelVisible ? (

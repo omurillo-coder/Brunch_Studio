@@ -242,6 +242,27 @@
   cursor: default;
 }
 
+/* Miniatura de imagen (rediseño minimalista, petición de usuario: "franja
+   superior ancha"; `Thumbnail` en `nodeTypes.tsx`) — SIEMPRE el primer hijo
+   de `.card` en el DOM, franja a todo su ancho. `.card` no tiene
+   `overflow: hidden` (`.warningBadge` depende de que se pueda salir del
+   borde, ver su comentario) así que el redondeo de las esquinas SUPERIORES
+   se fija aquí mismo, en vez de recortar con `overflow` en el contenedor. */
+.thumbnail {
+  width: 100%;
+  height: 64px;
+  overflow: hidden;
+  border-top-left-radius: var(--bs-radius-md);
+  border-top-right-radius: var(--bs-radius-md);
+}
+
+.thumbnailImage {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 .header {
   display: flex;
   align-items: center;

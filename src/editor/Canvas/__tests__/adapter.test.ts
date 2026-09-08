@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
+  addAudioBlock,
   addImageBlock,
   addResponse,
   addTextBlock,
+  addVideoBlock,
   asignaturaWorkspaceName,
   CICLOS,
   connect,
@@ -350,6 +352,75 @@ describe('toFlowNodes — internalNote (tarea 6) y bodyPreview (tarea 8)', () =>
 
     const flowNodes = toFlowNodes(project, [])
     expect(flowNodes.find((n) => n.id === finalId)?.data.bodyPreview).toBe('Fin del recorrido')
+  })
+})
+
+describe('toFlowNodes — previewImageAssetId/hasAudioContent/hasVideoContent (rediseño minimalista, "que se vea bastante lo que hay dentro")', () => {
+  it('previewImageAssetId es undefined si la diapositiva no tiene ningún bloque de imagen', () => {
+    const project = createProject('P')
+    const flowNodes = toFlowNodes(project, [])
+    expect(flowNodes[0]?.data.previewImageAssetId).toBeUndefined()
+  })
+
+  it('previewImageAssetId toma el assetId del primer bloque de imagen CON assetId', () => {
+    let project = createProject('P')
+    const startId = project.graph.startNodeId
+    const assetId = crypto.randomUUID()
+    project = addImageBlock(project, startId, assetId)
+
+    const flowNodes = toFlowNodes(project, [])
+    expect(flowNodes[0]?.data.previewImageAssetId).toBe(assetId)
+  })
+
+  it('un bloque de imagen "pendiente de subir" (sin assetId) se salta — sigue buscando en los siguientes', () => {
+    let project = createProject('P')
+    const startId = project.graph.startNodeId
+    const realAssetId = crypto.randomUUID()
+    // Bloque pendiente primero (sin assetId, ver `addImageBlock`), luego uno
+    // con material real: el pendiente no debe "ganar" con un `undefined`.
+    project = addImageBlock(project, startId)
+    project = addImageBlock(project, startId, realAssetId)
+
+    const flowNodes = toFlowNodes(project, [])
+    expect(flowNodes[0]?.data.previewImageAssetId).toBe(realAssetId)
+  })
+
+  it('previewImageAssetId sigue undefined si TODOS los bloques de imagen están pendientes de subir', () => {
+    let project = createProject('P')
+    const startId = project.graph.startNodeId
+    project = addImageBlock(project, startId)
+
+    const flowNodes = toFlowNodes(project, [])
+    expect(flowNodes[0]?.data.previewImageAssetId).toBeUndefined()
+  })
+
+  it('hasAudioContent/hasVideoContent reflejan si `content` tiene algún bloque de ese tipo', () => {
+    let project = createProject('P')
+    const startId = project.graph.startNodeId
+    project = addAudioBlock(project, startId, crypto.randomUUID())
+
+    let flowNodes = toFlowNodes(project, [])
+    expect(flowNodes[0]?.data.hasAudioContent).toBe(true)
+    // `.some()` sobre `content` (ver `toNodeData`) siempre devuelve un
+    // booleano real, nunca `undefined`, para una `slide` — a diferencia de
+    // `previewImageAssetId` (un `string | undefined`, sin "false" posible).
+    expect(flowNodes[0]?.data.hasVideoContent).toBe(false)
+
+    project = addVideoBlock(project, startId, crypto.randomUUID())
+    flowNodes = toFlowNodes(project, [])
+    expect(flowNodes[0]?.data.hasAudioContent).toBe(true)
+    expect(flowNodes[0]?.data.hasVideoContent).toBe(true)
+  })
+
+  it('un `final` (sin `content`) nunca lleva estos tres campos', () => {
+    let project = createNode(createProject('P'), 'final', { x: 0, y: 0 })
+    const finalId = otherNodeIdOf(project, 'final')
+
+    const flowNodes = toFlowNodes(project, [])
+    const finalData = flowNodes.find((n) => n.id === finalId)?.data
+    expect(finalData?.previewImageAssetId).toBeUndefined()
+    expect(finalData?.hasAudioContent).toBeUndefined()
+    expect(finalData?.hasVideoContent).toBeUndefined()
   })
 })
 
