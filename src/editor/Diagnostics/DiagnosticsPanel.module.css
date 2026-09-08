@@ -144,10 +144,18 @@
   gap: var(--bs-space-1);
 }
 
+/* Reutilizada tanto para el `<button>` "ir al nodo" (bucles/opciones sin
+   vincular/la mayoría de estructura del recorrido) como, sin `cursor` de
+   puntero real ni acción al pulsar, para el `<p>` no interactivo de un
+   aviso de estructura SIN nodo concreto al que ir (`MISSING_START`/
+   `NO_REACHABLE_FINAL`, ver `StructureIssueRow`) — `margin: 0` es
+   necesario para ese segundo caso (un `<p>` tiene margen vertical por
+   defecto del navegador; un `<button>` no, así que no le cambia nada). */
 .issueRow {
   display: block;
   flex: 1;
   min-width: 0;
+  margin: 0;
   text-align: left;
   padding: var(--bs-space-2);
   border: none;

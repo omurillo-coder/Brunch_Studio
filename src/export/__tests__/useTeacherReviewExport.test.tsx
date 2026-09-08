@@ -6,7 +6,7 @@ import { AppServicesProvider } from '../../app/AppServicesContext'
 import type { AppServices } from '../../app/AppServices'
 import { MemoryAssetRepository, MemoryHtmlBundleWriter } from '../../persistence'
 import { useProjectStore } from '../../store'
-import { resetProjectStore } from '../../store/testHelpers'
+import { resetProjectStore, seedReachableFinal } from '../../store/testHelpers'
 import { CICLOS } from '../../domain'
 
 /**
@@ -36,7 +36,8 @@ function renderUseTeacherReviewExport(services: Partial<AppServices> = {}) {
   return renderHook(() => useTeacherReviewExport(TEST_FILE_PATH), { wrapper })
 }
 
-/** Mismo criterio que `seedCompleteIntro` en `useHtmlExport.test.tsx`. */
+/** Mismo criterio que `seedCompleteIntro` en `useHtmlExport.test.tsx`: completa
+ *  la portada Y conecta un Final (`seedReachableFinal`). */
 function seedCompleteIntro(): void {
   act(() => {
     useProjectStore.getState().createNode('intro', { x: -300, y: 0 })
@@ -54,6 +55,9 @@ function seedCompleteIntro(): void {
       asignaturaId: asignatura.id,
       caseName: 'Caso de prueba',
     })
+  })
+  act(() => {
+    seedReachableFinal()
   })
 }
 

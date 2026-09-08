@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useAppServices } from '../app/AppServicesContext'
 import { useProject } from '../store'
-import { validateIntroForExport, validatePendingContentForExport } from '../domain'
+import { validateGraphForExport, validateIntroForExport, validatePendingContentForExport } from '../domain'
 import { resolveExportAssets } from './exportAssets'
 import { buildTeacherReviewBundle } from './teacherReviewExport'
 import { waitForRenderFlush } from './waitForRenderFlush'
@@ -46,9 +46,10 @@ function incompleteAssetsMessage(failedCount: number): string {
 }
 
 /** Mismo criterio que `useHtmlExport`/`useScormExport`: une los textos de
- *  `validateIntroForExport`/`validatePendingContentForExport` en una sola
- *  línea legible, reutilizando el mismo campo `message`/`status: 'error'`
- *  que `Topbar.tsx` ya pinta sin ningún cambio. */
+ *  `validateIntroForExport`/`validatePendingContentForExport`/
+ *  `validateGraphForExport` en una sola línea legible, reutilizando el
+ *  mismo campo `message`/`status: 'error'` que `Topbar.tsx` ya pinta sin
+ *  ningún cambio. */
 function blockingExportIssuesMessage(issues: string[]): string {
   return `No se puede exportar: ${issues.join('; ')}.`
 }
@@ -68,6 +69,7 @@ export function useTeacherReviewExport(filePath: string): TeacherReviewExportSta
       const blockingIssues = [
         ...validateIntroForExport(project),
         ...validatePendingContentForExport(project),
+        ...validateGraphForExport(project),
       ]
       if (blockingIssues.length > 0) {
         // Corrección de revisión de código: ver comentario de

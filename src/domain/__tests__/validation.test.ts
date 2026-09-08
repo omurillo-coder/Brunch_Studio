@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { createNode, createProject, updateNode } from '../project'
 import { connect } from '../graph'
 import { addResponse } from '../responses'
-import { validateProject } from '../validation'
+import { validateGraphForExport, validateProject, validationIssueId } from '../validation'
 import type { ProjectDocument } from '../schemas'
 
 function otherNodeIdOf(project: ProjectDocument, type: 'slide' | 'final'): string {
@@ -141,5 +141,80 @@ describe('validateProject', () => {
       issues.some((issue) => issue.code === 'UNREACHABLE_NODE' && issue.nodeId === finalNo.id),
     ).toBe(false)
     expect(issues).toEqual([])
+  })
+})
+
+describe('validationIssueId', () => {
+  it('es estable para el MISMO aviso, e independiente de otros campos que no formen parte de la identidad', () => {
+    const issue = validateProject(createProject('P')).find((i) => i.code === 'SLIDE_WITHOUT_TARGET')
+    if (!issue) throw new Error('setup inválido')
+    expect(validationIssueId(issue)).toBe(validationIssueId({ ...issue }))
+  })
+
+  it('distingue dos avisos del MISMO código sobre nodos distintos', () => {
+    let project = createNode(createProject('P'), 'final', { x: 100, y: 0 })
+    const finalId = otherNodeIdOf(project, 'final')
+    project = connect(project, project.graph.startNodeId, finalId)
+    // Dos diapositivas nuevas, ninguna conectada — dos `UNREACHABLE_NODE`
+    // distintos.
+    project = createNode(project, 'slide', { x: 300, y: 300 })
+    project = createNode(project, 'slide', { x: 300, y: 400 })
+
+    const issues = validateProject(project).filter((issue) => issue.code === 'UNREACHABLE_NODE')
+    expect(issues).toHaveLength(2)
+    const ids = issues.map(validationIssueId)
+    expect(new Set(ids).size).toBe(2)
+  })
+
+  it('un código sin nodeId/responseId (NO_REACHABLE_FINAL) sigue produciendo un id no vacío', () => {
+    let project = createProject('P')
+    project = createNode(project, 'slide', { x: 100, y: 0 })
+    project = connect(project, project.graph.startNodeId, otherNodeIdOf(project, 'slide'))
+
+    const issue = validateProject(project).find((i) => i.code === 'NO_REACHABLE_FINAL')
+    if (!issue) throw new Error('setup inválido')
+    expect(validationIssueId(issue)).toBe('validation:NO_REACHABLE_FINAL::')
+  })
+})
+
+describe('validateGraphForExport', () => {
+  it('un grafo válido no bloquea la exportación', () => {
+    expect(validateGraphForExport(buildValidProject())).toEqual([])
+  })
+
+  it('traduce SLIDE_WITHOUT_TARGET a un texto legible con el número de diapositiva (D{número}), nunca el id interno', () => {
+    const project = createProject('P')
+    const startNumber = project.graph.nodes[0]?.number
+    const messages = validateGraphForExport(project)
+    expect(messages.some((message) => message.includes(`D${startNumber}`))).toBe(true)
+    // Nunca el UUID interno del nodo, a diferencia de `issue.message` (ver
+    // comentario de `validateGraphForExport`).
+    expect(messages.join(' ')).not.toContain(project.graph.startNodeId)
+  })
+
+  it('traduce UNREACHABLE_NODE a texto legible con el número de la diapositiva huérfana', () => {
+    let project = createNode(createProject('P'), 'final', { x: 100, y: 0 })
+    const finalId = otherNodeIdOf(project, 'final')
+    project = connect(project, project.graph.startNodeId, finalId)
+    project = createNode(project, 'slide', { x: 300, y: 300 })
+    const orphan = project.graph.nodes[project.graph.nodes.length - 1]
+    if (!orphan) throw new Error('setup inválido')
+
+    const messages = validateGraphForExport(project)
+    expect(messages.some((message) => message.includes(`D${orphan.number}`))).toBe(true)
+  })
+
+  it('sin ningún Final en absoluto, avisa de que el recorrido no puede terminar', () => {
+    let project = createProject('P')
+    project = createNode(project, 'slide', { x: 100, y: 0 })
+    project = connect(project, project.graph.startNodeId, otherNodeIdOf(project, 'slide'))
+
+    const messages = validateGraphForExport(project)
+    expect(messages.some((message) => /no puede terminar/.test(message))).toBe(true)
+  })
+
+  it('devuelve tantos mensajes como avisos, en el mismo orden que validateProject', () => {
+    const project = createProject('P')
+    expect(validateGraphForExport(project)).toHaveLength(validateProject(project).length)
   })
 })

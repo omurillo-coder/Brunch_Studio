@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useAppServices } from '../app/AppServicesContext'
 import { useProject } from '../store'
-import { validateIntroForExport, validatePendingContentForExport } from '../domain'
+import { validateGraphForExport, validateIntroForExport, validatePendingContentForExport } from '../domain'
 import { resolveExportAssets } from './exportAssets'
 import { buildHtmlBundle } from './htmlBundle'
 import {
@@ -47,12 +47,14 @@ function incompleteAssetsMessage(failedCount: number): string {
 /**
  * Mensaje de bloqueo cuando el proyecto no está listo para exportar: une en
  * una sola línea legible los textos que devuelven `validateIntroForExport`
- * (portada incompleta) y `validatePendingContentForExport` (bloques de
- * imagen "pendientes de subir", milestone "+1 fallo con Game Over"), uno por
- * cada problema encontrado. Reutiliza el MISMO campo `message` que ya usa
- * este hook para el resto de errores (`status: 'error'`) — `Topbar.tsx` ya lo
- * pinta con `role="alert"` sin ningún cambio, así que no hace falta ningún
- * mecanismo nuevo.
+ * (portada incompleta), `validatePendingContentForExport` (bloques de
+ * imagen "pendientes de subir", milestone "+1 fallo con Game Over") y
+ * `validateGraphForExport` (rama inalcanzable, ningún Final alcanzable,
+ * destino sin conectar — ver su comentario en `src/domain/validation.ts`),
+ * uno por cada problema encontrado. Reutiliza el MISMO campo `message` que
+ * ya usa este hook para el resto de errores (`status: 'error'`) —
+ * `Topbar.tsx` ya lo pinta con `role="alert"` sin ningún cambio, así que no
+ * hace falta ningún mecanismo nuevo.
  */
 function blockingExportIssuesMessage(issues: string[]): string {
   return `No se puede exportar: ${issues.join('; ')}.`
@@ -69,11 +71,15 @@ export function useHtmlExport(filePath: string): HtmlExportState {
     setMessage(null)
     try {
       // Bloquea ANTES de abrir el selector de guardado (y de leer assets o
-      // generar nada): una portada incompleta, o un bloque de imagen
-      // pendiente de subir, no debe llegar a producir ningún archivo.
+      // generar nada): una portada incompleta, un bloque de imagen
+      // pendiente de subir, o un grafo roto (rama inalcanzable, ningún
+      // Final alcanzable, destino sin conectar — `validateGraphForExport`,
+      // petición de usuario "conecta validateProject al bloqueo de
+      // exportación") no debe llegar a producir ningún archivo.
       const blockingIssues = [
         ...validateIntroForExport(project),
         ...validatePendingContentForExport(project),
+        ...validateGraphForExport(project),
       ]
       if (blockingIssues.length > 0) {
         // Corrección de revisión de código: sin este `await`, React agrupa

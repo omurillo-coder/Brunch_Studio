@@ -6,7 +6,7 @@ import { AppServicesProvider } from '../../app/AppServicesContext'
 import type { AppServices } from '../../app/AppServices'
 import { MemoryAssetRepository, MemoryHtmlBundleWriter } from '../../persistence'
 import { useProjectStore } from '../../store'
-import { resetProjectStore } from '../../store/testHelpers'
+import { resetProjectStore, seedReachableFinal } from '../../store/testHelpers'
 import { CICLOS } from '../../domain'
 
 /**
@@ -47,8 +47,12 @@ function renderUseHtmlExport(services: Partial<AppServices> = {}) {
 }
 
 /** Añade una portada (`intro`) completa —ciclo, asignatura coherente con ese
- *  ciclo y nombre de caso— al proyecto del store. Mismo criterio que
- *  `seedCompleteIntro` en `src/editor/Topbar/__tests__/Topbar.test.tsx`. */
+ *  ciclo y nombre de caso— al proyecto del store, y la conecta a un Final
+ *  (`seedReachableFinal`, `src/store/testHelpers.ts`) — desde que
+ *  `validateGraphForExport` bloquea también la exportación, no basta con
+ *  completar la portada: el grafo en sí debe tener un Final alcanzable.
+ *  Mismo criterio que `seedCompleteIntro` en
+ *  `src/editor/Topbar/__tests__/Topbar.test.tsx`. */
 function seedCompleteIntro(): void {
   act(() => {
     useProjectStore.getState().createNode('intro', { x: -300, y: 0 })
@@ -66,6 +70,12 @@ function seedCompleteIntro(): void {
       asignaturaId: asignatura.id,
       caseName: 'Caso de prueba',
     })
+  })
+  // El nodo `intro` recién creado pasa a ser `startNodeId` (ver
+  // `IntroNodeSchema`): esto tiene que ir DESPUÉS de crearlo, para conectar
+  // el Final al inicio real y no al que hubiera antes.
+  act(() => {
+    seedReachableFinal()
   })
 }
 
@@ -149,6 +159,47 @@ describe('useHtmlExport — bloqueo con la diapositiva de Inicio incompleta', ()
 
     expect(result.current.status).toBe('error')
     expect(result.current.message).toContain('La asignatura elegida no pertenece al ciclo elegido')
+  })
+
+  it('petición de usuario ("conecta validateProject al bloqueo de exportación"): con la portada completa pero SIN ningún Final alcanzable, bloquea sin abrir el selector de guardado', async () => {
+    // Portada completa a mano (sin `seedCompleteIntro`, que además conecta
+    // un Final vía `seedReachableFinal` — justo lo que este test necesita
+    // NO tener): un `intro` con ciclo/asignatura/caseName válidos, pero sin
+    // ningún destino conectado, así que el proyecto sigue sin ningún Final
+    // alcanzable.
+    act(() => {
+      useProjectStore.getState().createNode('intro', { x: -300, y: 0 })
+    })
+    const introId = useProjectStore
+      .getState()
+      .project.graph.nodes.find((node) => node.type === 'intro')?.id
+    if (!introId) throw new Error('setup inválido')
+    const ciclo = CICLOS[0]!
+    const asignatura = ciclo.asignaturas[0]!
+    act(() => {
+      useProjectStore.getState().updateNode(introId, {
+        cicloId: ciclo.id,
+        asignaturaId: asignatura.id,
+        caseName: 'Caso de prueba',
+      })
+    })
+
+    const pickExportHtmlPath = vi.fn(async () => '/tmp/experiencia.html')
+    const htmlBundleWriter = new MemoryHtmlBundleWriter()
+    const { result } = renderUseHtmlExport({
+      pickExportHtmlPath,
+      htmlBundleWriter,
+      assetRepository: new MemoryAssetRepository(),
+    })
+
+    await act(async () => {
+      await result.current.exportHtml()
+    })
+
+    expect(result.current.status).toBe('error')
+    expect(result.current.message).toContain('el recorrido no puede terminar')
+    expect(pickExportHtmlPath).not.toHaveBeenCalled()
+    expect(htmlBundleWriter.writtenPaths()).toEqual([])
   })
 
   it('con la portada completa, exporta con normalidad (pide ruta, genera y escribe)', async () => {

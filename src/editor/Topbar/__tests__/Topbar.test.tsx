@@ -11,7 +11,7 @@ import {
   MemoryTextDocumentWriter,
 } from '../../../persistence'
 import { useProjectStore } from '../../../store'
-import { resetProjectStore } from '../../../store/testHelpers'
+import { resetProjectStore, seedReachableFinal } from '../../../store/testHelpers'
 import { CICLOS } from '../../../domain'
 import { BUNDLE_ELEMENT_ID } from '../../../export/exportedPlayerScript'
 
@@ -70,15 +70,18 @@ beforeEach(() => {
 /**
  * Añade una diapositiva de Inicio (nodo `intro`, milestone "Diapositiva de
  * Inicio") completa —ciclo, asignatura coherente con ese ciclo y nombre de
- * caso— al proyecto del store. Necesaria en los tests de "Exportar HTML"/
- * "Exportar SCORM" de más abajo desde que ambos hooks bloquean la
- * exportación con `validateIntroForExport` (`src/domain/introValidation.ts`,
- * fase 3 del milestone): el proyecto "de fábrica" de `resetProjectStore`
- * (creado con la función de bajo nivel `createProject`, ver su comentario en
- * `src/domain/project.ts`) NO nace con ningún nodo `intro`, así que sin esto
+ * caso— al proyecto del store, y conecta un Final a ese nuevo inicio
+ * (`seedReachableFinal`, `src/store/testHelpers.ts`). Necesaria en los
+ * tests de "Exportar HTML"/"Exportar SCORM" de más abajo desde que esos
+ * hooks bloquean la exportación con `validateIntroForExport`
+ * (`src/domain/introValidation.ts`, fase 3 del milestone) Y
+ * `validateGraphForExport` (`src/domain/validation.ts`): el proyecto "de
+ * fábrica" de `resetProjectStore` (creado con la función de bajo nivel
+ * `createProject`, ver su comentario en `src/domain/project.ts`) NO nace
+ * con ningún nodo `intro` ni con ningún Final alcanzable, así que sin esto
  * la exportación quedaría siempre bloqueada y estos tests —que verifican la
  * mecánica de exportar (pedir ruta, generar, escribir), no la validación de
- * la portada— dejarían de poder probarla.
+ * la portada ni del grafo— dejarían de poder probarla.
  */
 function seedCompleteIntro(): void {
   act(() => {
@@ -97,6 +100,9 @@ function seedCompleteIntro(): void {
       asignaturaId: asignatura.id,
       caseName: 'Caso de prueba',
     })
+  })
+  act(() => {
+    seedReachableFinal()
   })
 }
 

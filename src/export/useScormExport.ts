@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useAppServices } from '../app/AppServicesContext'
 import { useProject } from '../store'
-import { validateIntroForExport, validatePendingContentForExport } from '../domain'
+import { validateGraphForExport, validateIntroForExport, validatePendingContentForExport } from '../domain'
 import { resolveExportAssets } from './exportAssets'
 import { buildHtmlBundle } from './htmlBundle'
 import {
@@ -51,7 +51,8 @@ function incompleteAssetsMessage(failedCount: number): string {
 
 /** Mismo criterio que `useHtmlExport`: une los textos de
  *  `validateIntroForExport`/`validatePendingContentForExport`
- *  (`src/domain/introValidation.ts`) en una sola línea legible, reutilizando
+ *  (`src/domain/introValidation.ts`) y `validateGraphForExport`
+ *  (`src/domain/validation.ts`) en una sola línea legible, reutilizando
  *  el campo `message`/`status: 'error'` que `Topbar.tsx` ya pinta sin ningún
  *  cambio. */
 function blockingExportIssuesMessage(issues: string[]): string {
@@ -73,6 +74,7 @@ export function useScormExport(filePath: string): ScormExportState {
       const blockingIssues = [
         ...validateIntroForExport(project),
         ...validatePendingContentForExport(project),
+        ...validateGraphForExport(project),
       ]
       if (blockingIssues.length > 0) {
         // Corrección de revisión de código: ver comentario de

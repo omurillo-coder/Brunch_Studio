@@ -1,5 +1,5 @@
 import { deriveEdges } from './graph'
-import type { ProjectDocument } from './schemas'
+import type { Node as DomainNode, ProjectDocument } from './schemas'
 
 /**
  * Reglas de validación del grafo, revisadas tras el rediseño del modelo de
@@ -131,4 +131,60 @@ export function validateProject(project: ProjectDocument): ValidationIssue[] {
   }
 
   return issues
+}
+
+/**
+ * Identificador ESTABLE de un `ValidationIssue`, mismo criterio que
+ * `cycleIssueId`/`unlinkedResponseIssueId`/`spellingIssueId` de
+ * `src/domain/diagnostics.ts` (que no se toca aquí: `validateProject`, a
+ * diferencia de esas tres, no tenía hasta ahora ningún consumidor de UI que
+ * necesitara descartar avisos individualmente — ver `DiagnosticsPanel.tsx`).
+ * `code` solo no basta (puede haber varios `UNREACHABLE_NODE` a la vez);
+ * `nodeId`/`responseId` completan la identidad cuando existen, cadena vacía
+ * si no (p.ej. `NO_REACHABLE_FINAL` no tiene ninguno de los dos — un único
+ * aviso de ese tipo posible por proyecto de todos modos).
+ */
+export function validationIssueId(issue: ValidationIssue): string {
+  return `validation:${issue.code}:${issue.nodeId ?? ''}:${issue.responseId ?? ''}`
+}
+
+/**
+ * Petición de usuario ("conecta `validateProject` al bloqueo de
+ * exportación"): traduce cada `ValidationIssue` a un texto legible para
+ * quien exporta, con el mismo criterio de referencia por NÚMERO
+ * ("D{número}") que ya usa `validatePendingContentForExport`
+ * (`src/domain/introValidation.ts`) — nunca el `id` interno (UUID) que sí
+ * lleva `issue.message` (pensado para depurar, no para enseñarlo a un
+ * diseñador instruccional sin conocimientos técnicos).
+ *
+ * Antes de esta función, `validateProject` no bloqueaba ninguna
+ * exportación (HTML/SCORM/revisión profes): un proyecto con una rama
+ * inalcanzable, sin ningún Final alcanzable, o con una diapositiva "de
+ * continuar" sin destino, se exportaba igual, sin ningún aviso — el
+ * alumnado se topaba con el recorrido roto ya en el paquete publicado. Se
+ * añade a las validaciones de bloqueo existentes (`useHtmlExport.ts`/
+ * `useScormExport.ts`/`useTeacherReviewExport.ts`), nunca las sustituye.
+ */
+export function validateGraphForExport(project: ProjectDocument): string[] {
+  const nodeById = new Map<string, DomainNode>(project.graph.nodes.map((node) => [node.id, node]))
+
+  function slideRef(nodeId: string | undefined): string {
+    const node = nodeId ? nodeById.get(nodeId) : undefined
+    return node ? `D${node.number}` : 'una diapositiva'
+  }
+
+  return validateProject(project).map((issue) => {
+    switch (issue.code) {
+      case 'MISSING_START':
+        return 'El proyecto no tiene una diapositiva de inicio válida.'
+      case 'SLIDE_WITHOUT_TARGET':
+        return `La diapositiva ${slideRef(issue.nodeId)} no tiene respuestas ni destino de continuar conectado.`
+      case 'RESPONSE_WITHOUT_TARGET':
+        return `Una respuesta de la diapositiva ${slideRef(issue.nodeId)} no tiene destino conectado.`
+      case 'UNREACHABLE_NODE':
+        return `La diapositiva ${slideRef(issue.nodeId)} no es alcanzable desde el inicio.`
+      case 'NO_REACHABLE_FINAL':
+        return 'Ningún Final es alcanzable desde el inicio: el recorrido no puede terminar.'
+    }
+  })
 }

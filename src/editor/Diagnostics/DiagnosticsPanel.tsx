@@ -7,16 +7,25 @@ import {
   detectUnlinkedResponses,
   spellingIssueId,
   unlinkedResponseIssueId,
+  validateProject,
+  validationIssueId,
 } from '../../domain'
-import type { CycleIssue, Node, SpellingIssue, UnlinkedResponseIssue } from '../../domain'
+import type {
+  CycleIssue,
+  Node,
+  SpellingIssue,
+  UnlinkedResponseIssue,
+  ValidationIssue,
+} from '../../domain'
 import { useDismissedDiagnosticIds, useProject, useProjectStore } from '../../store'
 import styles from './DiagnosticsPanel.module.css'
 
 /**
  * "Rinconcito de avisos" del lienzo: insignia flotante discreta con el
- * recuento total de avisos (ortografía + bucles + opciones sin vincular,
- * ver `src/domain/diagnostics.ts`), que se expande a una lista agrupada por
- * tipo al hacer clic. Completamente oculta cuando no hay ningún aviso — no
+ * recuento total de avisos (ortografía + bucles + opciones sin vincular +
+ * estructura del recorrido, ver `src/domain/diagnostics.ts`/
+ * `src/domain/validation.ts`), que se expande a una lista agrupada por tipo
+ * al hacer clic. Completamente oculta cuando no hay ningún aviso — no
  * genera ruido visual en el caso normal (proyecto sin problemas).
  *
  * Montado desde `EditorScreen.tsx`, superpuesto al lienzo (ver su CSS: el
@@ -25,10 +34,24 @@ import styles from './DiagnosticsPanel.module.css'
  * deliberadamente lejos de los controles de abajo a la izquierda del
  * lienzo, `Controls`/auto-layout, ver `Canvas.module.css`).
  *
+ * Grupo "Estructura del recorrido" (petición de usuario — fricción de UX
+ * detectada: `validateProject` existía en el dominio desde hacía tiempo,
+ * pero ningún consumidor lo llamaba; un nodo inalcanzable, un recorrido sin
+ * ningún Final alcanzable, o una diapositiva "de continuar" sin destino,
+ * pasaban desapercibidos hasta que un alumno se topaba con ellos en la
+ * experiencia ya exportada): usa `validateProject` (`src/domain/
+ * validation.ts`), EXCLUYENDO `RESPONSE_WITHOUT_TARGET` — ese código
+ * concreto ya se muestra, con mejor detalle (el texto de la respuesta) y
+ * mismo criterio de exclusión de `actsAsExit`, en el grupo "Opciones sin
+ * vincular" de aquí abajo (`detectUnlinkedResponses`); mostrarlo también
+ * aquí sería el mismo aviso duplicado dos veces. Mismo criterio síncrono y
+ * barato que bucles/opciones sin vincular (no como ortografía).
+ *
  * Coste de cada comprobación — deliberadamente asimétrico:
- * - Bucles/opciones sin vincular: cálculo síncrono barato sobre el grafo
- *   (`detectCycles`/`detectUnlinkedResponses`), recalculado con `useMemo`
- *   en cada cambio de `project` sin ningún problema de rendimiento.
+ * - Bucles/opciones sin vincular/estructura del recorrido: cálculo síncrono
+ *   barato sobre el grafo (`detectCycles`/`detectUnlinkedResponses`/
+ *   `validateProject`), recalculado con `useMemo` en cada cambio de
+ *   `project` sin ningún problema de rendimiento.
  * - Ortografía (`checkSpelling`): async y costosa (carga de diccionario +
  *   recorrido de todo el texto del proyecto, ver `src/domain/
  *   spellingDictionary.ts`). Un efecto de montaje (`useEffect`, deps `[]`)
@@ -51,7 +74,9 @@ import styles from './DiagnosticsPanel.module.css'
  * pasa por el historial de undo/redo, se reinicia con `loadProject`, ver su
  * comentario en `src/store/types.ts`), identificado por un id ESTABLE por
  * tipo de aviso (`cycleIssueId`/`unlinkedResponseIssueId`/`spellingIssueId`
- * de `src/domain/diagnostics.ts`): si el problema real se soluciona y luego
+ * de `src/domain/diagnostics.ts`, `validationIssueId` de `src/domain/
+ * validation.ts` para "Estructura del recorrido"): si el problema real se
+ * soluciona y luego
  * se reintroduce EXACTAMENTE igual más tarde, sigue apareciendo descartado
  * (mismo id) — comportamiento aceptado, sin lógica de expiración. El
  * contador de la insignia flotante (`total`) refleja solo los avisos NO
@@ -95,10 +120,17 @@ export function DiagnosticsPanel() {
 
   const allCycles = useMemo(() => detectCycles(project), [project])
   const allUnlinkedResponses = useMemo(() => detectUnlinkedResponses(project), [project])
+  // `RESPONSE_WITHOUT_TARGET` se excluye aquí: ya se muestra, con mejor
+  // detalle, en "Opciones sin vincular" (`allUnlinkedResponses` arriba) —
+  // ver el comentario de cabecera de este componente.
+  const allStructureIssues = useMemo(
+    () => validateProject(project).filter((issue) => issue.code !== 'RESPONSE_WITHOUT_TARGET'),
+    [project],
+  )
   // Los avisos DESCARTADOS se filtran de la lista/contador aquí, en un único
   // punto (en vez de repetir el filtro en cada grupo) — `cycles`/
-  // `unlinkedResponses`/`spellingIssues` (más abajo) ya son "los avisos que
-  // de verdad se muestran".
+  // `unlinkedResponses`/`structureIssues`/`spellingIssues` (más abajo) ya
+  // son "los avisos que de verdad se muestran".
   const cycles = useMemo(
     () => allCycles.filter((cycle) => !dismissedSet.has(cycleIssueId(cycle))),
     [allCycles, dismissedSet],
@@ -106,6 +138,10 @@ export function DiagnosticsPanel() {
   const unlinkedResponses = useMemo(
     () => allUnlinkedResponses.filter((issue) => !dismissedSet.has(unlinkedResponseIssueId(issue))),
     [allUnlinkedResponses, dismissedSet],
+  )
+  const structureIssues = useMemo(
+    () => allStructureIssues.filter((issue) => !dismissedSet.has(validationIssueId(issue))),
+    [allStructureIssues, dismissedSet],
   )
 
   // Depende de `project`: así el botón "Revisar ortografía" de la lista
@@ -148,7 +184,8 @@ export function DiagnosticsPanel() {
   const spellingIssues = allSpellingIssues.filter(
     (issue) => !dismissedSet.has(spellingIssueId(issue)),
   )
-  const total = cycles.length + unlinkedResponses.length + spellingIssues.length
+  const total =
+    cycles.length + unlinkedResponses.length + structureIssues.length + spellingIssues.length
   const dismissedCount = dismissedIds.length
 
   function goToNode(nodeId: string): void {
@@ -198,6 +235,21 @@ export function DiagnosticsPanel() {
             {unlinkedResponses.map((issue) => (
               <UnlinkedResponseRow
                 key={unlinkedResponseIssueId(issue)}
+                issue={issue}
+                nodeById={nodeById}
+                onSelect={goToNode}
+              />
+            ))}
+          </DiagnosticsGroup>
+
+          <DiagnosticsGroup
+            title="Estructura del recorrido"
+            empty="Sin problemas de estructura"
+            items={structureIssues.length}
+          >
+            {structureIssues.map((issue) => (
+              <StructureIssueRow
+                key={validationIssueId(issue)}
                 issue={issue}
                 nodeById={nodeById}
                 onSelect={goToNode}
@@ -341,6 +393,67 @@ function UnlinkedResponseRow({
         {text}
       </button>
       <DismissButton diagnosticId={unlinkedResponseIssueId(issue)} label={text} />
+    </div>
+  )
+}
+
+/**
+ * Texto legible por `ValidationIssue.code` (grupo "Estructura del
+ * recorrido") — NUNCA `issue.message` (`src/domain/validation.ts`), que usa
+ * el `id` interno del nodo (UUID): aquí, igual que `CycleRow`/
+ * `UnlinkedResponseRow`, se usa `nodeLabel` (número + Ref. oculta) para que
+ * la persona que diseña el caso pueda identificar la diapositiva sin
+ * conocimientos técnicos. `MISSING_START`/`NO_REACHABLE_FINAL` no tienen
+ * ningún `nodeId` concreto que señalar (son propiedades del PROYECTO
+ * entero, no de una diapositiva) — `label` queda `null` en ese caso.
+ */
+function structureIssueText(issue: ValidationIssue, nodeById: Map<string, Node>): string {
+  const label = issue.nodeId ? nodeLabel(nodeById.get(issue.nodeId)) : null
+  switch (issue.code) {
+    case 'MISSING_START':
+      return 'El proyecto no tiene una diapositiva de inicio válida'
+    case 'SLIDE_WITHOUT_TARGET':
+      return `${label}: no tiene destino de continuar conectado`
+    case 'RESPONSE_WITHOUT_TARGET':
+      // No debería llegar aquí (se excluye antes de listar, ver
+      // `allStructureIssues`) — mensaje de repuesto solo por si acaso.
+      return `${label}: una respuesta no tiene destino conectado`
+    case 'UNREACHABLE_NODE':
+      return `${label}: no es alcanzable desde el inicio`
+    case 'NO_REACHABLE_FINAL':
+      return 'Ningún Final es alcanzable desde el inicio: el recorrido no puede terminar'
+  }
+}
+
+/**
+ * Fila de un aviso de "Estructura del recorrido" (`validateProject`,
+ * `src/domain/validation.ts`). A diferencia de `CycleRow`/
+ * `UnlinkedResponseRow`, no todos estos avisos tienen un nodo concreto al
+ * que llevar (`MISSING_START`/`NO_REACHABLE_FINAL` son del proyecto
+ * entero) — sin `nodeId`, la fila se pinta como texto no interactivo (sigue
+ * pudiendo descartarse, pero no hay ningún sitio al que "ir").
+ */
+function StructureIssueRow({
+  issue,
+  nodeById,
+  onSelect,
+}: {
+  issue: ValidationIssue
+  nodeById: Map<string, Node>
+  onSelect: (nodeId: string) => void
+}) {
+  const text = structureIssueText(issue, nodeById)
+  const nodeId = issue.nodeId
+  return (
+    <div className={styles.issueRowWrapper}>
+      {nodeId ? (
+        <button type="button" className={styles.issueRow} onClick={() => onSelect(nodeId)}>
+          {text}
+        </button>
+      ) : (
+        <p className={styles.issueRow}>{text}</p>
+      )}
+      <DismissButton diagnosticId={validationIssueId(issue)} label={text} />
     </div>
   )
 }
