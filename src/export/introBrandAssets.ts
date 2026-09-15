@@ -27,7 +27,8 @@ import logoUrl from '../assets/playerIntro/ilerna-logo.png?url'
 import backgroundUrl from '../assets/playerIntro/fondo-inicio.jpg?url'
 import gameOverBackgroundUrl from '../assets/playerIntro/game-over.jpg?url'
 import finalAlternateBackgroundUrl from '../assets/playerIntro/final-alt.jpg?url'
-import finalSuccessBackgroundUrl from '../assets/playerIntro/final-success.svg?url'
+import finalSuccessFigureUrl from '../assets/playerIntro/final-success-figure.svg?url'
+import finalSuccessStarUrl from '../assets/playerIntro/final-success-star.svg?url'
 import fontRegularUrl from '../assets/playerIntro/fonts/FSMillbank-Regular.otf?url'
 import fontBoldUrl from '../assets/playerIntro/fonts/FSMillbank-Bold.otf?url'
 import type { FinalNode, ProjectDocument } from '../domain'
@@ -64,18 +65,31 @@ export function projectNeedsFinalAlternateAssets(project: ProjectDocument): bool
 export interface PlayerIntroBrandAssets {
   logoDataUri: string
   backgroundDataUri: string
-  /** Ilustración del Final "Perfecto" (sin fallos, `usedAlternate === false`
-   *  — ver `FinalSuccessCard`/`buildFinalSuccessCard`) — mismo criterio que
-   *  `backgroundDataUri` (portada iLERNA): NO es opcional, se resuelve
-   *  siempre. A diferencia del Final "con fallos"/"Game Over" (packs
-   *  OPT-IN que un proyecto puede no usar nunca), el contenido POR DEFECTO
-   *  de un Final es el camino normal de cualquier proyecto — no tiene
-   *  sentido condicionarlo a un `projectNeeds...`, todo proyecto exportado
-   *  llega a un Final tarde o temprano. Formato SVG (a diferencia del resto,
-   *  JPG): la ilustración entregada ya es vectorial, y al ser una figura
-   *  de trazo simple se beneficia de quedar nítida a cualquier tamaño sin
-   *  aumentar mucho el peso frente a un JPG equivalente. */
-  finalSuccessBackgroundDataUri: string
+  /** Ilustración del Final "Perfecto"/"Final TOP" (sin fallos,
+   *  `usedAlternate === false` — ver `FinalSuccessCard`/`buildFinalSuccessCard`)
+   *  — mismo criterio que `backgroundDataUri` (portada iLERNA): NO es
+   *  opcional, se resuelve siempre. A diferencia del Final "con fallos"/
+   *  "Game Over" (packs OPT-IN que un proyecto puede no usar nunca), el
+   *  contenido POR DEFECTO de un Final es el camino normal de cualquier
+   *  proyecto — no tiene sentido condicionarlo a un `projectNeeds...`, todo
+   *  proyecto exportado llega a un Final tarde o temprano. Formato SVG (a
+   *  diferencia del resto, JPG): la ilustración entregada ya es vectorial,
+   *  y al ser una figura de trazo simple se beneficia de quedar nítida a
+   *  cualquier tamaño sin aumentar mucho el peso frente a un JPG
+   *  equivalente.
+   *
+   *  Dos assets, no uno (petición de usuario: "la estrella... que se mueva
+   *  suavemente de arriba a abajo"): el SVG original traía la estrella
+   *  dibujada dentro del mismo trazo que la figura, así que animarla sola
+   *  con CSS exigía separarla en su propio archivo — `finalSuccessFigureDataUri`
+   *  (la figura, sin la estrella) queda fija de fondo; `finalSuccessStarDataUri`
+   *  (solo la estrella, recortada a su propio bounding box) se pinta como
+   *  `<img>` aparte encima, posicionado con los mismos porcentajes que
+   *  ocupaba dentro del arte original (ver `FinalSuccessCard`), para poder
+   *  aplicarle su propia animación de flotación sin mover el resto del
+   *  dibujo. */
+  finalSuccessFigureDataUri: string
+  finalSuccessStarDataUri: string
   /** Ilustración de fondo de la pantalla bespoke "Game Over"
    *  (`brandedGameOverScreen`, ver `GameOverCard` en
    *  `src/player/PlayerScreen.tsx` y `buildGameOverCard` en
@@ -154,7 +168,8 @@ export async function resolvePlayerIntroBrandAssets(
   const [
     logoDataUri,
     backgroundDataUri,
-    finalSuccessBackgroundDataUri,
+    finalSuccessFigureDataUri,
+    finalSuccessStarDataUri,
     gameOverBackgroundDataUri,
     finalAlternateBackgroundDataUri,
     fontRegularDataUri,
@@ -162,7 +177,8 @@ export async function resolvePlayerIntroBrandAssets(
   ] = await Promise.all([
     resolveDataUri(logoUrl, 'image/png', 'el logo'),
     resolveDataUri(backgroundUrl, 'image/jpeg', 'la ilustración de fondo'),
-    resolveDataUri(finalSuccessBackgroundUrl, 'image/svg+xml', 'la ilustración del Final "Perfecto"'),
+    resolveDataUri(finalSuccessFigureUrl, 'image/svg+xml', 'la ilustración del Final "Perfecto"'),
+    resolveDataUri(finalSuccessStarUrl, 'image/svg+xml', 'la estrella del Final "Perfecto"'),
     needs.gameOver
       ? resolveDataUri(gameOverBackgroundUrl, 'image/jpeg', 'la ilustración de Game Over')
       : Promise.resolve(undefined),
@@ -175,7 +191,8 @@ export async function resolvePlayerIntroBrandAssets(
   return {
     logoDataUri,
     backgroundDataUri,
-    finalSuccessBackgroundDataUri,
+    finalSuccessFigureDataUri,
+    finalSuccessStarDataUri,
     gameOverBackgroundDataUri,
     finalAlternateBackgroundDataUri,
     fontRegularDataUri,

@@ -99,11 +99,12 @@ describe('resolvePlayerIntroBrandAssets', () => {
     expect(assets.finalAlternateBackgroundDataUri).toBeUndefined()
     expect(assets.logoDataUri).toMatch(/^data:image\/png;base64,/)
     expect(assets.backgroundDataUri).toMatch(/^data:image\/jpeg;base64,/)
-    expect(assets.finalSuccessBackgroundDataUri).toMatch(/^data:image\/svg\+xml;base64,/)
-    // Los 5 assets que SIEMPRE hacen falta (logo, fondo, ilustración del
-    // Final "Perfecto", 2 tipografías) — ni uno más: ninguna ilustración
+    expect(assets.finalSuccessFigureDataUri).toMatch(/^data:image\/svg\+xml;base64,/)
+    expect(assets.finalSuccessStarDataUri).toMatch(/^data:image\/svg\+xml;base64,/)
+    // Los 6 assets que SIEMPRE hacen falta (logo, fondo, figura + estrella
+    // del Final "Perfecto", 2 tipografías) — ni uno más: ninguna ilustración
     // OPCIONAL debe generar una petición de red de más cuando no se necesita.
-    expect(fetchMock).toHaveBeenCalledTimes(5)
+    expect(fetchMock).toHaveBeenCalledTimes(6)
   })
 
   it('needs.gameOver=true: SÍ resuelve la ilustración de Game Over como data: URI (y solo esa)', async () => {
@@ -113,7 +114,7 @@ describe('resolvePlayerIntroBrandAssets', () => {
 
     expect(assets.gameOverBackgroundDataUri).toMatch(/^data:image\/jpeg;base64,/)
     expect(assets.finalAlternateBackgroundDataUri).toBeUndefined()
-    expect(fetchMock).toHaveBeenCalledTimes(6)
+    expect(fetchMock).toHaveBeenCalledTimes(7)
   })
 
   it('needs.finalAlternate=true: SÍ resuelve la ilustración del Final "con fallos" como data: URI (y solo esa)', async () => {
@@ -123,7 +124,7 @@ describe('resolvePlayerIntroBrandAssets', () => {
 
     expect(assets.finalAlternateBackgroundDataUri).toMatch(/^data:image\/jpeg;base64,/)
     expect(assets.gameOverBackgroundDataUri).toBeUndefined()
-    expect(fetchMock).toHaveBeenCalledTimes(6)
+    expect(fetchMock).toHaveBeenCalledTimes(7)
   })
 
   it('needs={true,true}: resuelve las DOS ilustraciones opcionales', async () => {
@@ -133,6 +134,6 @@ describe('resolvePlayerIntroBrandAssets', () => {
 
     expect(assets.gameOverBackgroundDataUri).toMatch(/^data:image\/jpeg;base64,/)
     expect(assets.finalAlternateBackgroundDataUri).toMatch(/^data:image\/jpeg;base64,/)
-    expect(fetchMock).toHaveBeenCalledTimes(7)
+    expect(fetchMock).toHaveBeenCalledTimes(8)
   })
 })

@@ -310,16 +310,17 @@ body {
    Final "con fallos" (petición de usuario) — traducción literal de la misma
    sección de \`src/player/PlayerScreen.module.css\`. Construida por
    \`buildFinalAlternateCard\` en \`exportedPlayerScript.ts\`. El
-   \`background-image\` de \`.finalAlternateIllustration\` NO está aquí, por el
-   mismo motivo que \`.introIllustration\`: es un \`data:\` URI que solo se
-   conoce en tiempo de exportación, y además OPCIONAL (solo si el proyecto
-   tiene algún Final con contenido alternativo) — lo inyecta
-   \`injectIntroBrandStyles\` en \`exportedPlayerScript.ts\`.
+   \`background-image\` de \`.finalAlternateIllustrationImage\` NO está aquí,
+   por el mismo motivo que \`.introIllustration\`: es un \`data:\` URI que
+   solo se conoce en tiempo de exportación, y además OPCIONAL (solo si el
+   proyecto tiene algún Final con contenido alternativo) — lo inyecta
+   \`injectIntroBrandStyles\` en \`exportedPlayerScript.ts\`. \`max-width\`
+   860px (petición de usuario: "no hace falta que sea tan ancha").
    --------------------------------------------------------------------- */
 .finalAlternateCard {
   position: relative;
   width: 100%;
-  max-width: 920px;
+  max-width: 860px;
   min-height: 440px;
   display: flex;
   flex-direction: column;
@@ -404,13 +405,28 @@ body {
   border-color: var(--bs-color-accent-hover);
 }
 
+/* Ilustración CENTRADA en el hueco blanco a la derecha del texto (petición
+   de usuario: "no tan pegada al margen derecho... que quede en la parte
+   central blanca") — caja acotada al ancho restante tras
+   \`.finalAlternateContent\` (\`left: 54%\`), centrada con flexbox. */
 .finalAlternateIllustration {
   position: absolute;
-  inset: 0;
+  top: 0;
+  bottom: 0;
+  left: 54%;
+  right: 0;
   z-index: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.finalAlternateIllustrationImage {
+  width: 100%;
+  height: 78%;
   background-repeat: no-repeat;
-  background-position: right center;
-  background-size: auto 82%;
+  background-position: center;
+  background-size: contain;
 }
 
 @media (max-width: 640px) {
@@ -428,19 +444,17 @@ body {
    Final "Perfecto" (contenido por defecto, sin fallos, petición de usuario
    con mockup "¡Impresionante!" entregado) — traducción literal de la misma
    sección de \`src/player/PlayerScreen.module.css\`. Construida por
-   \`buildFinalSuccessCard\` en \`exportedPlayerScript.ts\`. El
-   \`background-image\` de \`.finalSuccessIllustration\` NO está aquí, por el
-   mismo motivo que \`.introIllustration\`: es un \`data:\` URI que solo se
-   conoce en tiempo de exportación — a diferencia del Final "con fallos",
-   este asset es INCONDICIONAL (todo proyecto exportado llega a un Final por
-   defecto tarde o temprano), lo inyecta igualmente
-   \`injectIntroBrandStyles\` en \`exportedPlayerScript.ts\`, junto a
-   \`.introIllustration\`.
+   \`buildFinalSuccessCard\` en \`exportedPlayerScript.ts\`. Los \`src\` de
+   \`.finalSuccessFigure\`/\`.finalSuccessStar\` NO están aquí, por el mismo
+   motivo que el logo: son \`data:\` URI que solo se conocen en tiempo de
+   exportación, y \`buildFinalSuccessCard\` los fija directamente sobre cada
+   \`<img>\`. \`max-width\` 860px (petición de usuario: "no hace falta que sea
+   tan ancha").
    --------------------------------------------------------------------- */
 .finalSuccessCard {
   position: relative;
   width: 100%;
-  max-width: 920px;
+  max-width: 860px;
   min-height: 440px;
   display: flex;
   flex-direction: column;
@@ -525,13 +539,59 @@ body {
   border-color: var(--bs-color-accent-hover);
 }
 
+/* Ilustración CENTRADA en el hueco blanco a la derecha del texto (petición
+   de usuario: "no tan pegada al margen derecho... que quede en la parte
+   central blanca"), mismo patrón que \`.finalAlternateIllustration\`. */
 .finalSuccessIllustration {
   position: absolute;
-  inset: 0;
+  top: 0;
+  bottom: 0;
+  left: 54%;
+  right: 0;
   z-index: 0;
-  background-repeat: no-repeat;
-  background-position: right center;
-  background-size: auto 82%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Caja con el MISMO aspect-ratio que el viewBox del SVG original
+   (545.3×767.4): la figura la rellena exacto, así que los porcentajes de
+   \`.finalSuccessStar\` coinciden con los del arte original sin importar el
+   tamaño renderizado. */
+.finalSuccessIllustrationBox {
+  position: relative;
+  height: 78%;
+  aspect-ratio: 545.3 / 767.4;
+}
+
+.finalSuccessFigure {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* Bounding box real de la estrella dentro del viewBox original, en
+   porcentaje — ver comentario de \`FinalSuccessCard\` en
+   \`src/player/PlayerScreen.tsx\`. */
+.finalSuccessStar {
+  position: absolute;
+  left: 37.2%;
+  top: 0.2%;
+  width: 26.2%;
+  animation: finalSuccessStarFloat 3.2s ease-in-out infinite;
+}
+
+/* Petición de usuario: "la estrella... que se mueva suavemente de arriba a
+   abajo". Respeta "reducir movimiento" a través del reset universal más
+   abajo en este archivo (\`animation-duration: 0.01ms\`). */
+@keyframes finalSuccessStarFloat {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
 }
 
 @media (max-width: 640px) {

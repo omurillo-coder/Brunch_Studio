@@ -987,14 +987,13 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
    *  comentario de esa variable más arriba) no hace nada: el texto cae a
    *  \`var(--bs-font-sans)\`, degradación correcta, no un error.
    *
-   *  El \`background-image\` de \`.introIllustration\` (la portada) y de
-   *  \`.finalSuccessIllustration\` (Final "Perfecto") SÍ se inyecta aquí, por
-   *  el mismo motivo que las tipografías — ambos son assets INCONDICIONALES
-   *  (ver comentario de \`finalSuccessBackgroundDataUri\` en
-   *  \`introBrandAssets.ts\`). La ilustración de "Game Over" NO se inyecta
-   *  aquí — a diferencia de la portada, es un \`<img>\` de verdad (petición de
-   *  usuario: "todo centrado"), así que \`buildGameOverCard\` le fija \`src\`
-   *  directamente, igual que ya hace con el logo. */
+   *  El \`background-image\` de \`.introIllustration\` (la portada) SÍ se
+   *  inyecta aquí, por el mismo motivo que las tipografías. La ilustración
+   *  del Final "Perfecto" NO — a diferencia de la portada, son dos \`<img>\`
+   *  de verdad (petición de usuario: la estrella se anima sola, ver
+   *  \`buildFinalSuccessCard\`), así que esa función les fija \`src\`
+   *  directamente, igual que ya hace \`buildGameOverCard\` con su
+   *  ilustración y el logo. */
   function injectIntroBrandStyles() {
     if (!introBrand) {
       return;
@@ -1009,19 +1008,18 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
       "') format('opentype'); font-weight: 700; font-style: normal; font-display: swap; }" +
       '.introIllustration { background-image: url("' +
       introBrand.backgroundDataUri +
-      '"); }' +
-      '.finalSuccessIllustration { background-image: url("' +
-      introBrand.finalSuccessBackgroundDataUri +
       '"); }';
     // Final "con fallos" (petición de usuario, ver \`buildFinalAlternateCard\`):
     // igual que \`.introIllustration\`, pero OPCIONAL — solo se resuelve en
     // \`introBrandAssets.ts\` (y por tanto solo se inyecta esta regla) cuando
     // el proyecto tiene de verdad algún Final con contenido alternativo (ver
     // \`projectNeedsFinalAlternateAssets\`), así que un proyecto sin ninguno
-    // no paga por este asset.
+    // no paga por este asset. Selector \`.finalAlternateIllustrationImage\`
+    // (la caja interior), no \`.finalAlternateIllustration\` (el contenedor
+    // que la centra) — ver comentario de esa clase en \`exportedStyles.ts\`.
     if (introBrand.finalAlternateBackgroundDataUri) {
       style.textContent +=
-        '.finalAlternateIllustration { background-image: url("' +
+        '.finalAlternateIllustrationImage { background-image: url("' +
         introBrand.finalAlternateBackgroundDataUri +
         '"); }';
     }
@@ -1224,6 +1222,7 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
 
     var illustration = el('div', 'finalAlternateIllustration');
     illustration.setAttribute('aria-hidden', 'true');
+    illustration.appendChild(el('div', 'finalAlternateIllustrationImage'));
     card.appendChild(illustration);
 
     var content = el('div', 'finalAlternateContent');
@@ -1279,14 +1278,35 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
 
   /** Traducción literal de \`FinalSuccessCard\` en \`src/player/PlayerScreen.tsx\`:
    *  mismo shape que \`buildFinalAlternateCard\` (logo + titular/cuerpo FIJOS
-   *  de marca + Reintentar/Salir), con su propia ilustración
-   *  (\`finalSuccessIllustration\`, \`final-success.svg\`) y su propio texto
-   *  (\`texts.finalTopHeading\`/\`finalTopBodyLine1\`/\`Line2\`). */
+   *  de marca + Reintentar/Salir), con su propia ilustración y su propio
+   *  texto (\`texts.finalTopHeading\`/\`finalTopBodyLine1\`/\`Line2\`). Dos
+   *  \`<img>\` dentro de \`.finalSuccessIllustrationBox\` (figura + estrella
+   *  aparte, ver comentario de \`FinalSuccessCard\` en \`PlayerScreen.tsx\`
+   *  para el porqué): sus \`src\` se fijan directamente con \`introBrand\`,
+   *  igual que ya hace \`buildGameOverCard\` con su ilustración — a
+   *  diferencia de \`.finalAlternateIllustrationImage\` (un
+   *  \`background-image\` que sí puede inyectar \`injectIntroBrandStyles\`),
+   *  aquí hacen falta dos \`<img>\` de verdad para poder animar la estrella
+   *  sola con CSS. */
   function buildFinalSuccessCard(totalPoints) {
     var card = el('section', 'finalSuccessCard');
 
     var illustration = el('div', 'finalSuccessIllustration');
     illustration.setAttribute('aria-hidden', 'true');
+    var illustrationBox = el('div', 'finalSuccessIllustrationBox');
+    if (introBrand && introBrand.finalSuccessFigureDataUri) {
+      var figure = el('img', 'finalSuccessFigure');
+      figure.src = introBrand.finalSuccessFigureDataUri;
+      figure.alt = '';
+      illustrationBox.appendChild(figure);
+    }
+    if (introBrand && introBrand.finalSuccessStarDataUri) {
+      var star = el('img', 'finalSuccessStar');
+      star.src = introBrand.finalSuccessStarDataUri;
+      star.alt = '';
+      illustrationBox.appendChild(star);
+    }
+    illustration.appendChild(illustrationBox);
     card.appendChild(illustration);
 
     var content = el('div', 'finalSuccessContent');

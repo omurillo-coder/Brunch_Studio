@@ -718,15 +718,19 @@
 /* ---------------------------------------------------------------------
    Final "con fallos" (`view.usedAlternate`, ver comentario de
    `FinalAlternateCard` en `PlayerScreen.tsx`) — MISMO shape que `.introCard`
-   justo arriba (texto a la izquierda, ilustración de fondo sangrando por la
+   justo arriba (texto a la izquierda, ilustración en el hueco blanco de la
    derecha). Texto FIJO de marca (petición de usuario), ya no contenido real
    del proyecto vía `RichTextView` — por eso el titular/cuerpo son elementos
-   HTML simples (`<h1>`/`<p>`), no HTML generado por Tiptap. Traducción
-   literal en `buildFinalAlternateCard` de `src/export/exportedPlayerScript.ts`. */
+   HTML simples (`<h1>`/`<p>`), no HTML generado por Tiptap. `max-width`
+   reducido de 920px a 860px (petición de usuario: "no hace falta que sea
+   tan ancha"), igualando a `.gameOverCard` — la ilustración ya no necesita
+   tanto hueco para sangrar hasta el borde (ver `.finalAlternateIllustration`
+   más abajo). Traducción literal en `buildFinalAlternateCard` de
+   `src/export/exportedPlayerScript.ts`. */
 .finalAlternateCard {
   position: relative;
   width: 100%;
-  max-width: 920px;
+  max-width: 860px;
   min-height: 440px;
   display: flex;
   flex-direction: column;
@@ -823,30 +827,37 @@
   border-color: var(--bs-color-accent-hover);
 }
 
-/* Ilustración de fondo a pantalla completa de la tarjeta — mismo patrón que
-   `.introIllustration` (capa `position: absolute` por DEBAJO del texto,
-   petición de usuario: "el texto aparece encima de la imagen"): el propio
-   fondo blanco de `final-alt.jpg` hace de fondo de la mitad derecha de la
-   tarjeta, así que no hace falta una columna de layout aparte. Se ancla a la
-   derecha, centrada verticalmente.
-   *
-   * `final-alt.jpg` está recortado pegado a la silueta (sin el margen blanco
-   * enorme del original: "not bad.jpg" solo ocupaba su tercio derecho) —
-   * corrección de revisión de usuario ("corta la imagen... queda muy
-   * separado del texto"): con el margen sin recortar, escalar por ANCHO
-   * dejaba casi toda esa franja en blanco entre el texto y la silueta
-   * visible. Al ir pegado a la silueta, el tamaño se fija por ALTURA
-   * (`auto <alto>`, no `<ancho> auto`): la imagen recortada es más alta que
-   * ancha (retrato), así que escalar por ancho la desbordaría por arriba/
-   * abajo y la recortaría contra el borde de la tarjeta. */
+/* Ilustración CENTRADA en el hueco blanco entre el texto y el margen
+   derecho (petición de usuario: "más centrada y no tan pegada al margen
+   derecho... que quede en la parte central blanca entre el texto y el
+   margen derecho, da igual que pantalla") — a diferencia de la versión
+   anterior (`background-position: right center`, pegada al borde),
+   `.finalAlternateIllustration` ahora acota su propia caja al ANCHO
+   restante tras `.finalAlternateContent` (`left: 54%`, el mismo
+   `max-width` del bloque de texto) y centra dentro de ella con flexbox —
+   balanceado a cualquier ancho de tarjeta sin depender de un valor fijo en
+   píxeles. `final-alt.jpg` sigue recortado pegado a la silueta (sin el
+   margen blanco del original), así que `background-size: contain` no deja
+   ningún hueco de más entre la figura y el resto del recuadro centrado. */
 .finalAlternateIllustration {
   position: absolute;
-  inset: 0;
+  top: 0;
+  bottom: 0;
+  left: 54%;
+  right: 0;
   z-index: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.finalAlternateIllustrationImage {
+  width: 100%;
+  height: 78%;
   background-image: url('../assets/playerIntro/final-alt.jpg');
   background-repeat: no-repeat;
-  background-position: right center;
-  background-size: auto 82%;
+  background-position: center;
+  background-size: contain;
 }
 
 /* Pantalla estrecha (móvil): mismo criterio que `.introIllustration` — se
@@ -864,10 +875,10 @@
 
 /* ---------------------------------------------------------------------
    Final "Perfecto" (contenido POR DEFECTO de un Final, `!view.usedAlternate`
-   — petición de usuario con mockup e ilustración entregados,
-   `final-success.svg`) — MISMO shape que `.finalAlternateCard` justo
-   arriba (texto a la izquierda, ilustración de fondo sangrando por la
-   derecha): ambas reglas están deliberadamente duplicadas en vez de
+   — petición de usuario con mockup e ilustración entregados) — MISMO shape
+   que `.finalAlternateCard` justo arriba (texto a la izquierda, ilustración
+   en el hueco blanco de la derecha, `max-width` igual de reducido a
+   860px): ambas reglas están deliberadamente duplicadas en vez de
    compartir una clase base — dos Finales con tono y assets propios,
    mismo criterio ya establecido entre `.finalAlternateCard`/`.introCard`.
    Traducción literal en `buildFinalSuccessCard` de
@@ -875,7 +886,7 @@
 .finalSuccessCard {
   position: relative;
   width: 100%;
-  max-width: 920px;
+  max-width: 860px;
   min-height: 440px;
   display: flex;
   flex-direction: column;
@@ -970,21 +981,71 @@
   border-color: var(--bs-color-accent-hover);
 }
 
-/* Ilustración de fondo, mismo patrón que `.finalAlternateIllustration`
-   (posición absoluta, ancla a la derecha, centrada verticalmente, tamaño
-   fijado por ALTURA — la ilustración es más alta que ancha) — a diferencia
-   de esa, es un SVG (vectorial, ya entregado recortado pegado a la figura,
-   sin margen blanco que recortar): nítido a cualquier tamaño de tarjeta sin
-   pasos de recorte/exportación intermedios (`sips`) como el resto de
-   ilustraciones JPG. */
+/* Ilustración CENTRADA en el hueco blanco de la derecha, mismo patrón que
+   `.finalAlternateIllustration` (caja acotada a `left: 54%`, centrada con
+   flexbox, balanceada a cualquier ancho de tarjeta) — a diferencia de esa,
+   son DOS imágenes SVG superpuestas, no un único `background-image`: la
+   estrella del dibujo original se separó en su propio archivo
+   (`final-success-star.svg`) para poder animarla sola (petición de
+   usuario: "que se mueva suavemente de arriba a abajo"), ver comentario de
+   `FinalSuccessCard` en `PlayerScreen.tsx`. */
 .finalSuccessIllustration {
   position: absolute;
-  inset: 0;
+  top: 0;
+  bottom: 0;
+  left: 54%;
+  right: 0;
   z-index: 0;
-  background-image: url('../assets/playerIntro/final-success.svg');
-  background-repeat: no-repeat;
-  background-position: right center;
-  background-size: auto 82%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Caja con el MISMO aspect-ratio que el viewBox del SVG (545.3×767.4): la
+   figura (`width/height: 100%`) la rellena exacto, sin el "letterboxing"
+   que dejaría `background-size: contain` en una caja de proporción
+   distinta — así los porcentajes de posición de `.finalSuccessStar` de
+   abajo coinciden exactamente con los del arte original, sea cual sea el
+   tamaño renderizado de la tarjeta. */
+.finalSuccessIllustrationBox {
+  position: relative;
+  height: 78%;
+  aspect-ratio: 545.3 / 767.4;
+}
+
+.finalSuccessFigure {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* Posición y tamaño calculados a partir del bounding box real de la
+   estrella dentro del viewBox original (545.3×767.4): left/top/width en
+   porcentaje de ese mismo viewBox, así que encaja en el hueco exacto que
+   dejó `final-success-figure.svg` al quitarle la estrella. `height` queda
+   en `auto` (por defecto de `<img>`): el propio aspect-ratio del archivo
+   recortado, casi cuadrado, ya lo resuelve sin necesidad de fijarlo. */
+.finalSuccessStar {
+  position: absolute;
+  left: 37.2%;
+  top: 0.2%;
+  width: 26.2%;
+  animation: finalSuccessStarFloat 3.2s ease-in-out infinite;
+}
+
+/* Petición de usuario: "la estrella... que se mueva suavemente de arriba a
+   abajo" — vaivén suave y continuo, independiente del resto del dibujo
+   (que se queda fijo). Respeta "reducir movimiento" a través del reset
+   universal de `src/styles/global.css` (`animation-duration: 0.01ms`), sin
+   necesidad de una excepción aquí. */
+@keyframes finalSuccessStarFloat {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
 }
 
 /* Pantalla estrecha (móvil): mismo criterio que `.finalAlternateIllustration`

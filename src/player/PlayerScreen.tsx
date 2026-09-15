@@ -38,6 +38,8 @@ import type { AssetRepository } from '../persistence'
 import { RichTextView } from '../editor/richText/RichTextView'
 import ilernaLogoUrl from '../assets/playerIntro/ilerna-logo.png'
 import gameOverIllustrationUrl from '../assets/playerIntro/game-over.jpg'
+import finalSuccessFigureUrl from '../assets/playerIntro/final-success-figure.svg'
+import finalSuccessStarUrl from '../assets/playerIntro/final-success-star.svg'
 import styles from './PlayerScreen.module.css'
 
 
@@ -617,11 +619,13 @@ function GameOverCard({
  * (`FinalNode.alternateBody`, que el diseñador sigue editando en el
  * Inspector, pero solo como gate de la variante y para el documento de
  * revisión de `aiReviewExport.ts`; petición de usuario explícita) —
- * + ilustración de fondo sangrando por la derecha + botones Reintentar/Salir
- * al pie de la columna de texto. Mismo shape que `IntroCard` (texto a la
- * izquierda, ilustración de fondo tras él) en vez de `GameOverCard` (columna
- * única centrada): tres líneas de texto fijo encajan mejor en esa columna
- * que en un titular centrado.
+ * + ilustración CENTRADA en el hueco blanco a la derecha del texto
+ * (petición de usuario: "no tan pegada al margen derecho... que quede en
+ * la parte central blanca", ver `.finalAlternateIllustration` en el CSS)
+ * + botones Reintentar/Salir al pie de la columna de texto. Mismo shape
+ * que `IntroCard` (texto a la izquierda, ilustración a la derecha) en vez
+ * de `GameOverCard` (columna única centrada): tres líneas de texto fijo
+ * encajan mejor en esa columna que en un titular centrado.
  *
  * El Final "por defecto" (sin fallos, "Final TOP") tiene su propia pantalla
  * bespoke hermana, `FinalSuccessCard` — mismo shape e ilustración propios,
@@ -657,7 +661,9 @@ function FinalAlternateCard({
           </button>
         </div>
       </div>
-      <div className={styles.finalAlternateIllustration} aria-hidden="true" />
+      <div className={styles.finalAlternateIllustration} aria-hidden="true">
+        <div className={styles.finalAlternateIllustrationImage} />
+      </div>
     </div>
   )
 }
@@ -666,14 +672,27 @@ function FinalAlternateCard({
  * Pantalla de marca "a medida" (bespoke) del Final "Perfecto"/"Final TOP"
  * (contenido POR DEFECTO, `!view.usedAlternate` — ver `resolveFinalContent`
  * en `src/player/runtime.ts`) — petición de usuario con mockup de diseño e
- * ilustración (`final-success.svg`) entregados. Mismo criterio que
- * `FinalAlternateCard` justo arriba: titular + cuerpo FIJOS de marca
+ * ilustración entregados. Mismo criterio que `FinalAlternateCard` justo
+ * arriba: titular + cuerpo FIJOS de marca
  * (`FINAL_TOP_HEADING`/`FINAL_TOP_BODY_LINE_1`/`FINAL_TOP_BODY_LINE_2`), ya
- * NO el cuerpo real del proyecto — mismo shape exacto que
- * `FinalAlternateCard` (logo + titular/cuerpo + ilustración sangrando por
- * la derecha + Reintentar/Salir al pie), con su propia ilustración
- * (`.finalSuccessIllustration`, `final-success.svg`) — son dos Finales con
- * tono distinto (celebración vs "con contratiempos"), cada uno con la suya.
+ * NO el cuerpo real del proyecto — mismo shape que `FinalAlternateCard`
+ * (logo + titular/cuerpo + ilustración + Reintentar/Salir al pie), con dos
+ * diferencias:
+ *
+ * - Ilustración CENTRADA en el hueco blanco entre el texto y el margen
+ *   derecho (petición de usuario: "no tan pegada al margen derecho"), no
+ *   sangrando a pantalla completa como `.finalAlternateIllustration` — ver
+ *   `.finalSuccessIllustration` en el CSS.
+ * - Dos imágenes, no una: `finalSuccessFigureUrl` (la figura) +
+ *   `finalSuccessStarUrl` (solo la estrella, recortada a su propio
+ *   bounding box) superpuesta en la misma posición que ocupaba en el
+ *   dibujo original, dentro de `.finalSuccessIllustrationBox` — una caja
+ *   con el MISMO aspect-ratio que el SVG (viewBox 545.3×767.4), así que
+ *   los porcentajes de posición de la estrella coinciden exactamente con
+ *   los del arte original sin importar el tamaño renderizado de la
+ *   tarjeta. Permite animar solo la estrella (petición de usuario: "que se
+ *   mueva suavemente de arriba a abajo", ver `@keyframes finalSuccessStarFloat`
+ *   en el CSS) sin mover el resto del dibujo.
  */
 function FinalSuccessCard({
   totalPoints,
@@ -705,7 +724,12 @@ function FinalSuccessCard({
           </button>
         </div>
       </div>
-      <div className={styles.finalSuccessIllustration} aria-hidden="true" />
+      <div className={styles.finalSuccessIllustration} aria-hidden="true">
+        <div className={styles.finalSuccessIllustrationBox}>
+          <img className={styles.finalSuccessFigure} src={finalSuccessFigureUrl} alt="" />
+          <img className={styles.finalSuccessStar} src={finalSuccessStarUrl} alt="" />
+        </div>
+      </div>
     </div>
   )
 }
