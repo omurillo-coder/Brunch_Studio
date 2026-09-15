@@ -1012,12 +1012,14 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
    *  comentario de esa variable más arriba) no hace nada: el texto cae a
    *  \`var(--bs-font-sans)\`, degradación correcta, no un error.
    *
-   *  El \`background-image\` de \`.introIllustration\` (la portada) SÍ se
-   *  inyecta aquí, por el mismo motivo que las tipografías. La ilustración
-   *  de "Game Over" NO — a diferencia de la portada, es un \`<img>\` de
-   *  verdad (petición de usuario: "todo centrado"), así que
-   *  \`buildGameOverCard\` le fija \`src\` directamente, igual que ya hace con
-   *  el logo. */
+   *  El \`background-image\` de \`.introIllustration\` (la portada) y de
+   *  \`.finalSuccessIllustration\` (Final "Perfecto") SÍ se inyecta aquí, por
+   *  el mismo motivo que las tipografías — ambos son assets INCONDICIONALES
+   *  (ver comentario de \`finalSuccessBackgroundDataUri\` en
+   *  \`introBrandAssets.ts\`). La ilustración de "Game Over" NO se inyecta
+   *  aquí — a diferencia de la portada, es un \`<img>\` de verdad (petición de
+   *  usuario: "todo centrado"), así que \`buildGameOverCard\` le fija \`src\`
+   *  directamente, igual que ya hace con el logo. */
   function injectIntroBrandStyles() {
     if (!introBrand) {
       return;
@@ -1032,6 +1034,9 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
       "') format('opentype'); font-weight: 700; font-style: normal; font-display: swap; }" +
       '.introIllustration { background-image: url("' +
       introBrand.backgroundDataUri +
+      '"); }' +
+      '.finalSuccessIllustration { background-image: url("' +
+      introBrand.finalSuccessBackgroundDataUri +
       '"); }';
     // Final "con fallos" (petición de usuario, ver \`buildFinalAlternateCard\`):
     // igual que \`.introIllustration\`, pero OPCIONAL — solo se resuelve en
@@ -1292,6 +1297,67 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
     return card;
   }
 
+  /** Traducción literal de \`FinalSuccessCard\` en \`src/player/PlayerScreen.tsx\`:
+   *  mismo shape que \`buildFinalAlternateCard\` (logo + cuerpo real +
+   *  ilustración a la derecha + Reintentar/Salir), con ilustración propia
+   *  (\`finalSuccessIllustration\`, \`final-success.svg\`) y el mismo fallback
+   *  "sin contenido" que ya usaba \`appendBody\` en el layout genérico que
+   *  sustituye (el cuerpo POR DEFECTO de un Final puede estar vacío, a
+   *  diferencia del alternativo — ver comentario de \`FinalSuccessCard\`). */
+  function buildFinalSuccessCard(node, finalContent, totalPoints) {
+    var card = el('section', 'finalSuccessCard');
+
+    var illustration = el('div', 'finalSuccessIllustration');
+    illustration.setAttribute('aria-hidden', 'true');
+    card.appendChild(illustration);
+
+    var content = el('div', 'finalSuccessContent');
+    card.appendChild(content);
+
+    if (introBrand && introBrand.logoDataUri) {
+      var logo = el('img', 'introLogo');
+      logo.src = introBrand.logoDataUri;
+      logo.alt = 'iLERNA';
+      content.appendChild(logo);
+    }
+
+    appendBody(
+      content,
+      finalContent.bodyId,
+      finalContent.rawBody,
+      trimmed(node.title) || texts.finalFallbackBody,
+      'finalSuccessBody',
+    );
+
+    if (totalPoints !== null) {
+      var points = el('p', 'finalSuccessPoints');
+      points.textContent = texts.pointsPrefix + totalPoints + texts.pointsSuffix;
+      content.appendChild(points);
+    }
+
+    var actions = el('div', 'finalSuccessActions');
+
+    var retryButton = el('button', 'introButton');
+    retryButton.type = 'button';
+    retryButton.textContent = texts.retry;
+    retryButton.addEventListener('click', function () {
+      setState(restart());
+    });
+    actions.appendChild(retryButton);
+
+    var exitButton = el('button', 'finalSuccessButtonSecondary');
+    exitButton.type = 'button';
+    exitButton.textContent = EXIT_BUTTON_LABEL;
+    exitButton.addEventListener('click', function () {
+      attemptExit(card);
+    });
+    actions.appendChild(exitButton);
+
+    content.appendChild(actions);
+
+    return card;
+  }
+
   function buildCard(view) {
     if (view.kind === 'intro') {
       return buildIntroCard(view.node);
@@ -1365,63 +1431,21 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
         return altCard;
       }
 
+      // Final "Perfecto" (contenido por defecto, sin fallos): pantalla
+      // bespoke propia (\`buildFinalSuccessCard\`, mismo shape que
+      // \`buildFinalAlternateCard\` de más arriba), sustituye al antiguo
+      // layout genérico de \`.card\`/\`.title\`/\`.points\` (ver mockup
+      // "¡Impresionante!" entregado por Content Factory).
+      var successCard = buildFinalSuccessCard(view.node, finalContent, state.totalPoints);
       // Confeti (milestone "+1 fallo con Game Over", petición de usuario
       // ampliada después: "si llegas al final sin fallos y con fallos, en
       // los dos"): traducción literal de \`view.celebrate\` en
       // \`src/player/runtime.ts\`/\`PlayerScreen.tsx\` — sobre CUALQUIER
       // contenido de este Final, el por defecto y el alternativo.
       if (view.node.celebrate === true) {
-        card.appendChild(buildConfetti());
+        successCard.appendChild(buildConfetti());
       }
-      var heading = el('h1', 'title');
-      heading.textContent = texts.finalTitle;
-      card.appendChild(heading);
-      appendBody(
-        card,
-        finalContent.bodyId,
-        finalContent.rawBody,
-        trimmed(view.node.title) || texts.finalFallbackBody,
-      );
-      if (state.totalPoints !== null) {
-        var points = el('p', 'points');
-        points.textContent = texts.pointsPrefix + state.totalPoints + texts.pointsSuffix;
-        card.appendChild(points);
-      }
-
-      // Fila de acciones: "Reintentar" (acento, mismo estilo que
-      // "Continuar") + "Salir" (neutro), una junto a la otra. Sin clase
-      // propia en exportedStyles.ts (fuera de alcance): flex simple vía
-      // \`style.cssText\`.
-      var actions = el('div', null);
-      actions.style.cssText = 'display:flex;align-items:center;gap:var(--bs-space-3);';
-
-      var retryButton = el('button', 'primaryButton');
-      retryButton.type = 'button';
-      retryButton.textContent = texts.retry;
-      retryButton.addEventListener('click', function () {
-        setState(restart());
-      });
-      actions.appendChild(retryButton);
-
-      // "Salir": estilo neutro (no es la acción principal de esta fila),
-      // reutilizando los mismos tokens --bs-* que ya define
-      // exportedStyles.ts en :root para que se vea coherente con el resto de
-      // la tarjeta, sin añadir ninguna clase a ese archivo.
-      var exitButton = el('button', null);
-      exitButton.type = 'button';
-      exitButton.textContent = EXIT_BUTTON_LABEL;
-      exitButton.style.cssText =
-        'align-self:flex-start;padding:var(--bs-space-2) var(--bs-space-4);' +
-        'border:1px solid var(--bs-color-border);border-radius:var(--bs-radius-sm);' +
-        'background:var(--bs-color-bg);color:var(--bs-color-text);' +
-        'font-size:var(--bs-font-size-md);font-weight:600;cursor:pointer;';
-      exitButton.addEventListener('click', function () {
-        attemptExit(card);
-      });
-      actions.appendChild(exitButton);
-
-      card.appendChild(actions);
-      return card;
+      return successCard;
     }
 
     var deadEnd = el('p', 'body');

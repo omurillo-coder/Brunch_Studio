@@ -138,13 +138,6 @@ body {
   }
 }
 
-.title {
-  margin: 0;
-  font-size: var(--bs-font-size-lg);
-  font-weight: 600;
-  color: var(--bs-color-text);
-}
-
 /* ---------------------------------------------------------------------
    Portada de marca iLERNA (nodo \`intro\`) — traducción literal de la misma
    sección de \`src/player/PlayerScreen.module.css\` (mismos nombres de clase,
@@ -426,6 +419,127 @@ body {
   }
 
   .finalAlternateContent {
+    max-width: none;
+    padding: 28px 24px;
+  }
+}
+
+/* ---------------------------------------------------------------------
+   Final "Perfecto" (contenido por defecto, sin fallos, petición de usuario
+   con mockup "¡Impresionante!" entregado) — traducción literal de la misma
+   sección de \`src/player/PlayerScreen.module.css\`. Construida por
+   \`buildFinalSuccessCard\` en \`exportedPlayerScript.ts\`. El
+   \`background-image\` de \`.finalSuccessIllustration\` NO está aquí, por el
+   mismo motivo que \`.introIllustration\`: es un \`data:\` URI que solo se
+   conoce en tiempo de exportación — a diferencia del Final "con fallos",
+   este asset es INCONDICIONAL (todo proyecto exportado llega a un Final por
+   defecto tarde o temprano), lo inyecta igualmente
+   \`injectIntroBrandStyles\` en \`exportedPlayerScript.ts\`, junto a
+   \`.introIllustration\`.
+   --------------------------------------------------------------------- */
+.finalSuccessCard {
+  position: relative;
+  width: 100%;
+  max-width: 920px;
+  min-height: 440px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: var(--bs-radius-lg);
+  background: #ffffff;
+  border: 1px solid var(--bs-color-border);
+  box-shadow: var(--bs-shadow-sm);
+  font-family: 'FS Millbank', var(--bs-font-sans);
+  color: #0a0a0a;
+  animation: cardFadeIn 0.2s ease;
+}
+
+.finalSuccessContent {
+  position: relative;
+  z-index: 1;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 18px;
+  max-width: 54%;
+  padding: 36px 40px;
+}
+
+.finalSuccessBody {
+  margin: 0;
+  font-family: inherit;
+  font-size: 17px;
+  line-height: 1.5;
+  color: #0a0a0a;
+}
+
+.finalSuccessBody h1,
+.finalSuccessBody h2,
+.finalSuccessBody h3 {
+  margin: 0 0 4px;
+  font-family: inherit;
+  font-weight: 700;
+  font-size: clamp(24px, 3.2vw, 34px);
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  color: #0a0a0a;
+}
+
+.finalSuccessBody p {
+  margin: 0;
+}
+
+.finalSuccessPoints {
+  margin: 0;
+  font-size: 13px;
+  color: #4a4a4a;
+}
+
+.finalSuccessActions {
+  margin-top: auto;
+  padding-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.finalSuccessButtonSecondary {
+  flex: 0 0 auto;
+  padding: 12px 29px;
+  border: 2px solid var(--bs-color-accent);
+  border-radius: var(--bs-radius-sm);
+  background: transparent;
+  color: #0a0a0a;
+  font-family: inherit;
+  font-weight: 700;
+  font-size: 15px;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.finalSuccessButtonSecondary:hover {
+  background: rgba(10, 10, 10, 0.05);
+  border-color: var(--bs-color-accent-hover);
+}
+
+.finalSuccessIllustration {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-repeat: no-repeat;
+  background-position: right center;
+  background-size: auto 82%;
+}
+
+@media (max-width: 640px) {
+  .finalSuccessIllustration {
+    display: none;
+  }
+
+  .finalSuccessContent {
     max-width: none;
     padding: 28px 24px;
   }
@@ -922,13 +1036,6 @@ button:focus-visible {
 
 .audio {
   width: 100%;
-}
-
-.points {
-  margin: 0;
-  font-size: var(--bs-font-size-lg);
-  font-weight: 600;
-  color: var(--bs-color-text);
 }
 
 /* Confeti (milestone "+1 fallo con Game Over", petición de usuario: "Final

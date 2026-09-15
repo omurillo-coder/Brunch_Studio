@@ -240,7 +240,7 @@ function runExportedBundle(html: string): void {
  *  `buildFinalAlternateCard` en `exportedPlayerScript.ts`. */
 function currentCard(): HTMLElement {
   const card = document.querySelector<HTMLElement>(
-    '#brunch-root .card, #brunch-root .introCard, #brunch-root .finalAlternateCard',
+    '#brunch-root .card, #brunch-root .introCard, #brunch-root .finalAlternateCard, #brunch-root .finalSuccessCard',
   )
   if (!card) {
     throw new Error('No se ha pintado ninguna tarjeta en el HTML exportado.')
@@ -316,7 +316,6 @@ describe('buildHtmlBundle — contenido del archivo generado', () => {
     expect(html).toContain('Reintentar')
     expect(html).toContain('Puntuación final: ')
     expect(html).toContain('Continuar')
-    expect(html).toContain('Fin de la experiencia')
   })
 
   it('no incluye en ningún punto el título de las diapositivas (es solo referencia interna)', () => {
@@ -553,10 +552,13 @@ describe('buildHtmlBundle — comportamiento del HTML generado (jsdom)', () => {
     clickButton('Avisar al responsable')
 
     const card = currentCard()
-    expect(card.querySelector('.title')?.textContent).toBe('Fin de la experiencia')
-    expect(card.querySelector('.body')?.textContent).toContain('Has terminado el recorrido.')
-    expect(card.querySelector('.points')?.textContent).toBe('Puntuación final: 10 puntos')
-    expect(card.querySelector('.primaryButton')?.textContent).toBe('Reintentar')
+    expect(card.querySelector('.finalSuccessBody')?.textContent).toContain(
+      'Has terminado el recorrido.',
+    )
+    expect(card.querySelector('.finalSuccessPoints')?.textContent).toBe(
+      'Puntuación final: 10 puntos',
+    )
+    expect(card.querySelector('.introButton')?.textContent).toBe('Reintentar')
   })
 
   it('la respuesta con puntuación negativa también se acumula tal cual', () => {
@@ -564,7 +566,7 @@ describe('buildHtmlBundle — comportamiento del HTML generado (jsdom)', () => {
     clickButton('Empezar el caso')
     clickButton('No hacer nada')
 
-    expect(currentCard().querySelector('.points')?.textContent).toBe(
+    expect(currentCard().querySelector('.finalSuccessPoints')?.textContent).toBe(
       'Puntuación final: -5 puntos',
     )
   })
@@ -582,7 +584,7 @@ describe('buildHtmlBundle — comportamiento del HTML generado (jsdom)', () => {
     // Y el segundo recorrido no arrastra la puntuación del primero.
     clickButton('Empezar el caso')
     clickButton('No hacer nada')
-    expect(currentCard().querySelector('.points')?.textContent).toBe(
+    expect(currentCard().querySelector('.finalSuccessPoints')?.textContent).toBe(
       'Puntuación final: -5 puntos',
     )
   })
@@ -596,8 +598,8 @@ describe('buildHtmlBundle — comportamiento del HTML generado (jsdom)', () => {
     clickButton('Empezar el caso')
 
     const card = currentCard()
-    expect(card.querySelector('.title')?.textContent).toBe('Fin de la experiencia')
-    expect(card.querySelector('.points')).toBeNull()
+    expect(card.querySelector('.finalSuccessBody')).not.toBeNull()
+    expect(card.querySelector('.finalSuccessPoints')).toBeNull()
   })
 
   it('un Final sin body no usa su título como texto de repuesto (referencia interna, no contenido)', () => {
@@ -615,7 +617,7 @@ describe('buildHtmlBundle — comportamiento del HTML generado (jsdom)', () => {
 
     const card = currentCard()
     expect(card.textContent).not.toContain('Caso cerrado')
-    expect(card.querySelector('.body')?.textContent).toBe(
+    expect(card.querySelector('.finalSuccessBody')?.textContent).toBe(
       'Has llegado al final de esta experiencia.',
     )
     expect(html).not.toContain('Caso cerrado')
@@ -642,7 +644,7 @@ describe('buildHtmlBundle — comportamiento del HTML generado (jsdom)', () => {
 
     const card = currentCard()
     expect(card.textContent).toContain('Salir')
-    expect(card.querySelector('.primaryButton')?.textContent).toBe('Reintentar')
+    expect(card.querySelector('.introButton')?.textContent).toBe('Reintentar')
     expect(card.textContent).not.toContain('Ya puedes cerrar esta pestaña.')
 
     clickButton('Salir')
@@ -1081,7 +1083,7 @@ describe('buildHtmlBundle — comportamiento del HTML generado: variables/condic
     // verdadera (flag=true tras el efecto de "Activar").
     clickButton('Ver resultado')
 
-    expect(currentCard().querySelector('.body')?.textContent).toContain(
+    expect(currentCard().querySelector('.finalSuccessBody')?.textContent).toContain(
       'Terminaste con el flag activado.',
     )
   })
@@ -1091,7 +1093,7 @@ describe('buildHtmlBundle — comportamiento del HTML generado: variables/condic
     clickButton('Omitir')
     clickButton('Ver resultado')
 
-    expect(currentCard().querySelector('.body')?.textContent).toContain(
+    expect(currentCard().querySelector('.finalSuccessBody')?.textContent).toContain(
       'Terminaste sin activar el flag.',
     )
   })
@@ -1224,7 +1226,7 @@ describe('buildHtmlBundle — reproducción del reporte de bug: ambas ramas del 
     expect(card.textContent).not.toContain(
       'Esta parte de la experiencia no tiene una continuación configurada.',
     )
-    expect(card.querySelector('.body')?.textContent).toContain('Llegaste con el punto.')
+    expect(card.querySelector('.finalSuccessBody')?.textContent).toContain('Llegaste con el punto.')
   })
 
   it('rama FALSA (elige la respuesta SIN el +1): navega a elseTargetNodeId, NO aparece el aviso de dead-end', () => {
@@ -1238,7 +1240,7 @@ describe('buildHtmlBundle — reproducción del reporte de bug: ambas ramas del 
     expect(card.textContent).not.toContain(
       'Esta parte de la experiencia no tiene una continuación configurada.',
     )
-    expect(card.querySelector('.body')?.textContent).toContain('Llegaste sin el punto.')
+    expect(card.querySelector('.finalSuccessBody')?.textContent).toContain('Llegaste sin el punto.')
   })
 })
 

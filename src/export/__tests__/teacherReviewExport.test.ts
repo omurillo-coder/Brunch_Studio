@@ -149,7 +149,9 @@ function runExportedBundle(html: string): void {
  *  distinta de `.card` (el resto de vistas) — ver `buildIntroCard` en
  *  `exportedPlayerScript.ts`. */
 function currentCard(): HTMLElement {
-  const card = document.querySelector<HTMLElement>('#brunch-root .card, #brunch-root .introCard')
+  const card = document.querySelector<HTMLElement>(
+    '#brunch-root .card, #brunch-root .introCard, #brunch-root .finalSuccessCard',
+  )
   if (!card) {
     throw new Error('No se ha pintado ninguna tarjeta en el HTML exportado.')
   }

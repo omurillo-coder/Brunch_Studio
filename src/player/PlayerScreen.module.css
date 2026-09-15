@@ -126,13 +126,6 @@
   }
 }
 
-.title {
-  margin: 0;
-  font-size: var(--bs-font-size-lg);
-  font-weight: 600;
-  color: var(--bs-color-text);
-}
-
 /* Título del NODO (vistas "continuar"/"decisión"): es una referencia interna
    del diseñador instruccional, no contenido final — nunca aparece en el
    HTML/SCORM exportado (ver `src/export/exportedPlayerScript.ts`), pero aquí,
@@ -141,8 +134,7 @@
    pintada como contenido final. Reutiliza `--bs-color-text-faint`, el mismo
    tono "apagado" que ya usa el resto de la app para metadatos secundarios
    (p.ej. el número de nodo en `LeftPanel`), en vez de inventar un color
-   nuevo. El título fijo del Final ("Fin de la experiencia", ver más abajo)
-   NO es el título del nodo, así que sigue usando `.title` sin cambios. */
+   nuevo. */
 .nodeReferenceTitle {
   margin: 0;
   font-size: var(--bs-font-size-lg);
@@ -284,13 +276,6 @@
   width: 100%;
 }
 
-.points {
-  margin: 0;
-  font-size: var(--bs-font-size-lg);
-  font-weight: 600;
-  color: var(--bs-color-text);
-}
-
 /* Espacio EXTRA (además del `gap` normal entre opciones que hereda de aquí
    abajo, `.options`) antes de la primera respuesta: separa visualmente el
    bloque de CONTENIDO de la diapositiva (texto/imagen/audio/vídeo, pintado
@@ -413,34 +398,6 @@
 
 .optionButton:disabled .optionArrow {
   color: var(--bs-color-border-strong);
-}
-
-/* Fila de acciones de la vista Final: "Volver a jugar" (`.primaryButton`,
-   mismo acento que "Continuar") + "Salir" (neutro), uno junto al otro. */
-.finalActions {
-  display: flex;
-  align-items: center;
-  gap: var(--bs-space-3);
-}
-
-/* "Salir": no es la acción principal de la fila, así que usa un estilo
-   neutro (mismo criterio que `.secondaryButton` de la cabecera, pero al
-   tamaño de los botones de la tarjeta de Final). */
-.neutralButton {
-  align-self: flex-start;
-  padding: var(--bs-space-2) var(--bs-space-4);
-  border: 1px solid var(--bs-color-border);
-  border-radius: var(--bs-radius-sm);
-  background: var(--bs-color-bg);
-  color: var(--bs-color-text);
-  font-size: var(--bs-font-size-md);
-  font-weight: 600;
-  cursor: pointer;
-  transition: border-color 0.15s ease;
-}
-
-.neutralButton:hover {
-  border-color: var(--bs-color-border-strong);
 }
 
 .muted {
@@ -914,6 +871,150 @@
   }
 
   .finalAlternateContent {
+    max-width: none;
+    padding: 28px 24px;
+  }
+}
+
+/* ---------------------------------------------------------------------
+   Final "Perfecto" (contenido POR DEFECTO de un Final, `!view.usedAlternate`
+   — petición de usuario con mockup e ilustración entregados,
+   `final-success.svg`) — MISMO shape que `.finalAlternateCard` justo
+   arriba (texto a la izquierda, ilustración de fondo sangrando por la
+   derecha): ambas reglas están deliberadamente duplicadas en vez de
+   compartir una clase base — dos Finales con tono y assets propios,
+   mismo criterio ya establecido entre `.finalAlternateCard`/`.introCard`.
+   Traducción literal en `buildFinalSuccessCard` de
+   `src/export/exportedPlayerScript.ts`. */
+.finalSuccessCard {
+  position: relative;
+  width: 100%;
+  max-width: 920px;
+  min-height: 440px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: var(--bs-radius-lg);
+  background: #ffffff;
+  border: 1px solid var(--bs-color-border);
+  box-shadow: var(--bs-shadow-sm);
+  font-family: 'FS Millbank', var(--bs-font-sans);
+  color: #0a0a0a;
+  animation: cardFadeIn 0.2s ease;
+}
+
+.finalSuccessContent {
+  position: relative;
+  z-index: 1;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 18px;
+  max-width: 54%;
+  padding: 36px 40px;
+}
+
+/* Mismo motivo que `.finalAlternateBody`: el cuerpo es contenido REAL del
+   proyecto (Tiptap), de longitud variable, así que necesita su propio
+   tamaño/line-height en vez de reutilizar una clase de `IntroCard`. */
+.finalSuccessBody {
+  margin: 0;
+  font-family: inherit;
+  font-size: 17px;
+  line-height: 1.5;
+  color: #0a0a0a;
+}
+
+/* Mismo motivo/especificidad que `.finalAlternateCard .finalAlternateBody
+   :global(.tiptap)` — ver su comentario: sin este override, `RichTextView`
+   se queda con la fuente/tamaño genéricos de `.content :global(.tiptap)`
+   (`RichTextView.module.css`) en vez de heredar FS Millbank de aquí. */
+.finalSuccessCard .finalSuccessBody :global(.tiptap) {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+
+.finalSuccessBody :global(h1),
+.finalSuccessBody :global(h2),
+.finalSuccessBody :global(h3) {
+  margin: 0 0 4px;
+  font-family: inherit;
+  font-weight: 700;
+  font-size: clamp(24px, 3.2vw, 34px);
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  color: #0a0a0a;
+}
+
+.finalSuccessBody :global(p) {
+  margin: 0;
+}
+
+.finalSuccessPoints {
+  margin: 0;
+  font-size: 13px;
+  color: #4a4a4a;
+}
+
+.finalSuccessActions {
+  margin-top: auto;
+  padding-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+/* Secundario/"Salir": mismo criterio que `.finalAlternateButtonSecondary` —
+   contorno en vez de relleno, colores FIJOS (no `var(--bs-color-*)`) porque
+   esta tarjeta, como `.introCard`, no se adapta al tema claro/oscuro. */
+.finalSuccessButtonSecondary {
+  flex: 0 0 auto;
+  padding: 12px 29px;
+  border: 2px solid var(--bs-color-accent);
+  border-radius: var(--bs-radius-sm);
+  background: transparent;
+  color: #0a0a0a;
+  font-family: inherit;
+  font-weight: 700;
+  font-size: 15px;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.finalSuccessButtonSecondary:hover {
+  background: rgba(10, 10, 10, 0.05);
+  border-color: var(--bs-color-accent-hover);
+}
+
+/* Ilustración de fondo, mismo patrón que `.finalAlternateIllustration`
+   (posición absoluta, ancla a la derecha, centrada verticalmente, tamaño
+   fijado por ALTURA — la ilustración es más alta que ancha) — a diferencia
+   de esa, es un SVG (vectorial, ya entregado recortado pegado a la figura,
+   sin margen blanco que recortar): nítido a cualquier tamaño de tarjeta sin
+   pasos de recorte/exportación intermedios (`sips`) como el resto de
+   ilustraciones JPG. */
+.finalSuccessIllustration {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-image: url('../assets/playerIntro/final-success.svg');
+  background-repeat: no-repeat;
+  background-position: right center;
+  background-size: auto 82%;
+}
+
+/* Pantalla estrecha (móvil): mismo criterio que `.finalAlternateIllustration`
+   — se oculta, el contenido recupera el ancho completo de la tarjeta. */
+@media (max-width: 640px) {
+  .finalSuccessIllustration {
+    display: none;
+  }
+
+  .finalSuccessContent {
     max-width: none;
     padding: 28px 24px;
   }

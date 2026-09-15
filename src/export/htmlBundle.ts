@@ -57,7 +57,6 @@ interface ExportedTexts {
   defaultContinueLabel: string
   emptySlideBody: string
   emptyResponse: string
-  finalTitle: string
   finalFallbackBody: string
   pointsPrefix: string
   pointsSuffix: string
@@ -85,7 +84,6 @@ const EXPORTED_TEXTS: ExportedTexts = {
   defaultContinueLabel: DEFAULT_CONTINUE_LABEL,
   emptySlideBody: 'Esta diapositiva todavía no tiene contenido.',
   emptyResponse: 'Opción sin texto configurado',
-  finalTitle: 'Fin de la experiencia',
   finalFallbackBody: 'Has llegado al final de esta experiencia.',
   pointsPrefix: 'Puntuación final: ',
   pointsSuffix: ' puntos',

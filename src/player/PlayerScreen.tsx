@@ -18,6 +18,7 @@ import {
 import type {
   ContentBlock,
   DecisionResponse,
+  FinalNode,
   ImageSize,
   IntroNode,
   ProjectDocument,
@@ -616,9 +617,9 @@ function GameOverCard({
  * lo escribe el diseñador), así que el layout de `IntroCard` — pensado
  * precisamente para eso — encaja mejor que forzar una columna centrada.
  *
- * El Final "por defecto" (sin fallos) NO pasa por aquí todavía — sigue
- * usando el layout genérico de `.card` más abajo hasta que se rediseñe esa
- * pantalla también (petición de usuario, pendiente, fuera de este alcance).
+ * El Final "por defecto" (sin fallos) tiene su propia pantalla bespoke
+ * hermana, `FinalSuccessCard` — mismo shape, mockup e ilustración propios,
+ * ver su comentario justo debajo.
  */
 function FinalAlternateCard({
   resolvedBody,
@@ -649,6 +650,68 @@ function FinalAlternateCard({
         </div>
       </div>
       <div className={styles.finalAlternateIllustration} aria-hidden="true" />
+    </div>
+  )
+}
+
+/**
+ * Pantalla de marca "a medida" (bespoke) del Final "Perfecto" (contenido POR
+ * DEFECTO, `!view.usedAlternate` — ver `resolveFinalContent` en
+ * `src/player/runtime.ts`) — petición de usuario con mockup de diseño e
+ * ilustración (`final-success.svg`) entregados. Sustituye al antiguo layout
+ * genérico de `.card` que usaba este caso: mismo shape exacto que
+ * `FinalAlternateCard` (logo + cuerpo REAL del proyecto + ilustración
+ * sangrando por la derecha + Reintentar/Salir al pie), con dos diferencias:
+ *
+ * - Ilustración propia (`.finalSuccessIllustration`, `final-success.svg`),
+ *   NO la de `FinalAlternateCard` — son dos Finales con tono distinto
+ *   (celebración vs "con contratiempos"), cada uno con la suya.
+ * - SÍ necesita el mismo fallback "sin contenido" que ya tenía el layout
+ *   genérico que sustituye (`resolvedBody.trim()` vacío -> título del nodo o
+ *   un texto genérico): a diferencia del cuerpo ALTERNATIVO (que
+ *   `resolveFinalContent` solo elige cuando `alternateBody` YA tiene
+ *   contenido, nunca vacío), el cuerpo POR DEFECTO de un Final puede
+ *   perfectamente estar vacío (p.ej. un Final recién creado, sin editar
+ *   todavía) — sin este fallback, la tarjeta se quedaría sin ningún texto.
+ */
+function FinalSuccessCard({
+  node,
+  resolvedBody,
+  totalPoints,
+  onRestart,
+  onExit,
+}: {
+  node: FinalNode
+  resolvedBody: string
+  totalPoints: number | null
+  onRestart: () => void
+  onExit: () => void
+}) {
+  const hasBody = resolvedBody.trim() !== ''
+  return (
+    <div className={styles.finalSuccessCard}>
+      <div className={styles.finalSuccessContent}>
+        <img className={styles.introLogo} src={ilernaLogoUrl} alt="iLERNA" />
+        {hasBody ? (
+          <RichTextView body={resolvedBody} className={styles.finalSuccessBody} />
+        ) : (
+          <p className={styles.finalSuccessBody}>
+            {node.title.trim() || 'Has llegado al final de esta experiencia.'}
+          </p>
+        )}
+        {totalPoints !== null && (
+          <p className={styles.finalSuccessPoints}>Puntuación final: {totalPoints} puntos</p>
+        )}
+        <div className={styles.finalSuccessActions}>
+          <button type="button" className={styles.introButton} onClick={onRestart}>
+            Reintentar
+          </button>
+          <button type="button" className={styles.finalSuccessButtonSecondary} onClick={onExit}>
+            Salir
+          </button>
+        </div>
+      </div>
+      <div className={styles.finalSuccessIllustration} aria-hidden="true" />
     </div>
   )
 }
@@ -1025,12 +1088,12 @@ export function PlayerScreen({ filePath }: PlayerScreenProps) {
         {/* Confeti (milestone "+1 fallo con Game Over", petición de usuario
             ampliada después: "si llegas al final sin fallos y con fallos, en
             los dos"): sobre CUALQUIER contenido de un Final con
-            `node.celebrate` (ver `view.celebrate` en `./runtime`), tanto el
-            genérico como `FinalAlternateCard`. Pintado a pantalla completa
-            (`.confetti` es `position: fixed`), así que montarlo aquí, como
-            hermano de las dos ramas de más abajo en vez de dentro de cada
-            una, es indiferente para su posición pero evita duplicar la
-            condición. */}
+            `node.celebrate` (ver `view.celebrate` en `./runtime`), tanto
+            `FinalSuccessCard` como `FinalAlternateCard`. Pintado a pantalla
+            completa (`.confetti` es `position: fixed`), así que montarlo
+            aquí, como hermano de las dos ramas de más abajo en vez de
+            dentro de cada una, es indiferente para su posición pero evita
+            duplicar la condición. */}
         {view.kind === 'final' && view.celebrate && <Confetti />}
 
         {view.kind === 'final' && view.usedAlternate && (
@@ -1044,38 +1107,14 @@ export function PlayerScreen({ filePath }: PlayerScreenProps) {
         )}
 
         {view.kind === 'final' && !view.usedAlternate && (
-          <div key={view.node.id} className={styles.card}>
-            <h1 className={styles.title}>Fin de la experiencia</h1>
-            {view.resolvedBody.trim() ? (
-              <RichTextView body={view.resolvedBody} className={styles.body} />
-            ) : (
-              <p className={styles.body}>
-                {view.node.title.trim() || 'Has llegado al final de esta experiencia.'}
-              </p>
-            )}
-            {playerState.totalPoints !== null && (
-              <p className={styles.points}>Puntuación final: {playerState.totalPoints} puntos</p>
-            )}
-            <div className={styles.finalActions}>
-              {/* Reintentar: mismo efecto que "↺ Reiniciar experiencia" de
-                  la cabecera, pero dentro de la propia tarjeta de Final, que
-                  es donde el usuario está mirando al terminar el recorrido.
-                  Mismo estilo/color de acento que "Continuar" (`.primaryButton`,
-                  ver comentario de esa clase en `PlayerScreen.module.css`) —
-                  antes era un botón de peligro (rojo) porque descartaba el
-                  recorrido en curso, pero "reintentar" es una acción
-                  habitual y esperada al terminar, no destructiva. Petición
-                  de usuario: renombrado de "Volver a jugar" a "Reintentar". */}
-              <button type="button" className={styles.primaryButton} onClick={handleRestart}>
-                Reintentar
-              </button>
-              {/* Salir: estilo neutro (no es la acción principal de esta
-                  fila). Ver `handleExit`. */}
-              <button type="button" className={styles.neutralButton} onClick={handleExit}>
-                Salir
-              </button>
-            </div>
-          </div>
+          <FinalSuccessCard
+            key={view.node.id}
+            node={view.node}
+            resolvedBody={view.resolvedBody}
+            totalPoints={playerState.totalPoints}
+            onRestart={handleRestart}
+            onExit={handleExit}
+          />
         )}
 
         {view.kind === 'dead-end' && (

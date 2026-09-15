@@ -144,7 +144,6 @@ describe('PlayerScreen', () => {
 
     fireEvent.click(screen.getByText('Camino A'))
 
-    expect(screen.getByText('Fin de la experiencia')).toBeInTheDocument()
     expect(screen.getByText('Llegaste al final A.')).toBeInTheDocument()
   })
 
@@ -171,14 +170,14 @@ describe('PlayerScreen', () => {
 
     fireEvent.click(screen.getByText('Continuar'))
     fireEvent.click(screen.getByText('Camino A'))
-    expect(screen.getByText('Fin de la experiencia')).toBeInTheDocument()
+    expect(screen.getByText('Llegaste al final A.')).toBeInTheDocument()
 
     fireEvent.click(screen.getByText('Reintentar'))
 
     expect(screen.getByText('Bienvenida')).toBeInTheDocument()
   })
 
-  it('"Reintentar" solo aparece en la tarjeta de Final, con el mismo estilo de acento que "Continuar"', () => {
+  it('"Reintentar" solo aparece en la tarjeta de Final, con el mismo estilo de acento que la portada ("Continuar")', () => {
     buildGraphInStore()
     renderPlayer()
 
@@ -190,7 +189,10 @@ describe('PlayerScreen', () => {
     fireEvent.click(screen.getByText('Camino A'))
     const replayButton = screen.getByText('Reintentar')
     expect(replayButton).toBeInTheDocument()
-    expect(replayButton.className).toBe(styles.primaryButton)
+    // Mismo estilo de acento (`.introButton`) que el resto de tarjetas
+    // bespoke del Player (portada, Game Over, Final "con fallos") — no el
+    // botón de continuar genérico de una diapositiva (`.primaryButton`).
+    expect(replayButton.className).toBe(styles.introButton)
   })
 
   it('"Reiniciar experiencia" vuelve al principio dentro del propio Player', () => {
@@ -240,7 +242,7 @@ describe('PlayerScreen', () => {
       renderPlayer()
 
       fireEvent.click(screen.getByText('Camino A'))
-      expect(screen.getByText('Fin de la experiencia')).toBeInTheDocument()
+      expect(screen.getByText('Llegaste al final A.')).toBeInTheDocument()
       expect(finalId).toBeTruthy()
 
       fireEvent.click(screen.getByText('↺ Reiniciar experiencia'))
@@ -310,7 +312,6 @@ describe('PlayerScreen: título del nodo (referencia interna del diseñador inst
     // final. Nunca aparece así en el HTML/SCORM exportado (ver
     // `src/export/__tests__/htmlBundle.test.ts`).
     expect(heading.className).toBe(styles.nodeReferenceTitle)
-    expect(heading.className).not.toBe(styles.title)
   })
 
   it('sigue mostrando el título del nodo en la diapositiva de decisión, en gris claro', () => {
@@ -321,18 +322,6 @@ describe('PlayerScreen: título del nodo (referencia interna del diseñador inst
 
     const heading = screen.getByText('¿Qué eliges?')
     expect(heading.className).toBe(styles.nodeReferenceTitle)
-  })
-
-  it('el Final NO usa el estilo de referencia interna: su título fijo mantiene el color normal', () => {
-    buildGraphInStore()
-    renderPlayer()
-
-    fireEvent.click(screen.getByText('Continuar'))
-    fireEvent.click(screen.getByText('Camino A'))
-
-    const heading = screen.getByText('Fin de la experiencia')
-    expect(heading.className).toBe(styles.title)
-    expect(heading.className).not.toBe(styles.nodeReferenceTitle)
   })
 })
 
@@ -785,7 +774,10 @@ describe('PlayerScreen: puntuación acumulada', () => {
 
     fireEvent.click(screen.getByText('Camino con puntos'))
 
-    expect(screen.getByText('Fin de la experiencia')).toBeInTheDocument()
+    // Sin `body` en el fixture (`buildGraphWithPoints`), el fallback de
+    // `FinalSuccessCard` pinta el título del nodo ("Fin") — confirma que
+    // hemos llegado al Final antes de comprobar la puntuación.
+    expect(screen.getByText('Fin')).toBeInTheDocument()
     expect(screen.getByText('Puntuación final: 7 puntos')).toBeInTheDocument()
   })
 
@@ -799,7 +791,7 @@ describe('PlayerScreen: puntuación acumulada', () => {
 
     fireEvent.click(screen.getByText('Camino sin puntos'))
 
-    expect(screen.getByText('Fin de la experiencia')).toBeInTheDocument()
+    expect(screen.getByText('Fin')).toBeInTheDocument()
     expect(screen.queryByText(/Puntuación final/)).not.toBeInTheDocument()
   })
 })
@@ -811,10 +803,10 @@ describe('PlayerScreen: botón "Salir" (vista Final)', () => {
     renderPlayer()
     fireEvent.click(screen.getByText('Continuar'))
     fireEvent.click(screen.getByText('Camino A'))
-    expect(screen.getByText('Fin de la experiencia')).toBeInTheDocument()
+    expect(screen.getByText('Llegaste al final A.')).toBeInTheDocument()
   }
 
-  it('aparece junto a "Reintentar", solo en la tarjeta de Final, con estilo neutro (no de acento)', () => {
+  it('aparece junto a "Reintentar", solo en la tarjeta de Final, con estilo de contorno (secundario, no de acento)', () => {
     buildGraphInStore()
     renderPlayer()
 
@@ -826,9 +818,10 @@ describe('PlayerScreen: botón "Salir" (vista Final)', () => {
     fireEvent.click(screen.getByText('Camino A'))
     const exitButton = screen.getByText('Salir')
     expect(exitButton).toBeInTheDocument()
-    // Estilo neutro, no el de "Reintentar" (acento, ver test de abajo).
-    expect(exitButton.className).toBe(styles.neutralButton)
-    expect(exitButton.className).not.toBe(styles.primaryButton)
+    // Estilo de contorno secundario (`.finalSuccessButtonSecondary`), no el
+    // relleno de acento de "Reintentar" (`.introButton`, ver test de abajo).
+    expect(exitButton.className).toBe(styles.finalSuccessButtonSecondary)
+    expect(exitButton.className).not.toBe(styles.introButton)
   })
 
   it('corrección de bug reportado: al pulsarlo sale del modo "Probar" (mismo destino que "← Volver al editor"), sin quedarse con un aviso de "cerrar la pestaña" que no tiene sentido dentro de la app', () => {
@@ -1054,7 +1047,6 @@ describe('PlayerScreen: milestone "+1 fallo con Game Over"', () => {
 
       fireEvent.click(screen.getByText('Reintentar'))
 
-      expect(screen.getByText('Fin de la experiencia')).toBeInTheDocument()
       expect(screen.getByText('Llegaste al final A.')).toBeInTheDocument()
     })
 
@@ -1122,7 +1114,6 @@ describe('PlayerScreen: milestone "+1 fallo con Game Over"', () => {
       // Navega al Final real de "Camino A" — si el bug de resolución por
       // posición reapareciera, "Reintentar" dispararía la respuesta
       // actsAsExit en su lugar y esta pantalla nunca aparecería.
-      expect(screen.getByText('Fin de la experiencia')).toBeInTheDocument()
       expect(screen.getByText('Llegaste al final A.')).toBeInTheDocument()
     })
 
@@ -1265,7 +1256,6 @@ describe('PlayerScreen: portada (nodo intro, milestone "Diapositiva de Inicio")'
 
     fireEvent.click(screen.getByText('Continuar'))
 
-    expect(screen.getByText('Fin de la experiencia')).toBeInTheDocument()
     expect(screen.getByText('Fin del caso.')).toBeInTheDocument()
   })
 
@@ -1299,7 +1289,7 @@ describe('PlayerScreen: portada (nodo intro, milestone "Diapositiva de Inicio")'
     renderPlayer()
 
     fireEvent.click(screen.getByText('Continuar'))
-    expect(screen.getByText('Fin de la experiencia')).toBeInTheDocument()
+    expect(screen.getByText('Fin del caso.')).toBeInTheDocument()
 
     fireEvent.click(screen.getByText('↺ Reiniciar experiencia'))
 

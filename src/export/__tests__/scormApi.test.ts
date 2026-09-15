@@ -159,8 +159,8 @@ describe('script exportado — SCORM 2004 4ª edición', () => {
 
     // Sin API, el comportamiento observable debe ser exactamente el de la
     // fase 1: llega al Final con normalidad.
-    const card = document.querySelector('#brunch-root .card')
-    expect(card?.querySelector('.title')?.textContent).toBe('Fin de la experiencia')
+    const card = document.querySelector('#brunch-root .finalSuccessCard')
+    expect(card?.querySelector('.finalSuccessBody')?.textContent).toBe('Se acabó.')
   })
 
   it('llama a Initialize al cargar cuando hay una API SCORM en window', () => {
@@ -245,7 +245,7 @@ describe('script exportado — SCORM 2004 4ª edición', () => {
     }).not.toThrow()
 
     expect(closeSpy).toHaveBeenCalledTimes(1)
-    expect(document.querySelector('#brunch-root .card')?.textContent).toContain(
+    expect(document.querySelector('#brunch-root .finalSuccessCard')?.textContent).toContain(
       'Ya puedes cerrar esta pestaña.',
     )
 
@@ -275,7 +275,7 @@ describe('script exportado — SCORM 2004 4ª edición', () => {
       window.dispatchEvent(new Event('beforeunload'))
     }).not.toThrow()
 
-    const card = document.querySelector('#brunch-root .card')
-    expect(card?.querySelector('.title')?.textContent).toBe('Fin de la experiencia')
+    const card = document.querySelector('#brunch-root .finalSuccessCard')
+    expect(card?.querySelector('.finalSuccessBody')?.textContent).toBe('Se acabó.')
   })
 })
