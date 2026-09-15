@@ -621,16 +621,22 @@ body {
   backdrop-filter: blur(6px);
 }
 
+/* Mismo tamaño que \`.introButton\`/\`.finalSuccessButtonSecondary\` (petición
+   de usuario: "igualar las letras de Game Over, Final con fallos y Final
+   sin fallos para que se vean de las mismas proporciones") — antes tenía
+   letra y relleno más grandes ("Botones más grandes que los de
+   \`.introButton\`", petición de usuario anterior), pero al ver las tres
+   pantallas de marca una junto a otra el tamaño desentonaba. */
 .gameOverButtonPrimary {
   flex: 0 0 auto;
-  padding: 16px 40px;
+  padding: 13px 30px;
   border: none;
   border-radius: var(--bs-radius-sm);
   background: var(--bs-color-accent);
   color: #0a0a0a;
   font-family: inherit;
   font-weight: 700;
-  font-size: 17px;
+  font-size: 15px;
   transition: background-color 0.15s ease;
 }
 
@@ -646,14 +652,14 @@ body {
 
 .gameOverButtonSecondary {
   flex: 0 0 auto;
-  padding: 15px 39px;
+  padding: 12px 29px;
   border: 2px solid var(--bs-color-accent);
   border-radius: var(--bs-radius-sm);
   background: transparent;
   color: #0a0a0a;
   font-family: inherit;
   font-weight: 700;
-  font-size: 17px;
+  font-size: 15px;
   transition:
     background-color 0.15s ease,
     border-color 0.15s ease;
