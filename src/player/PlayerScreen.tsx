@@ -5,6 +5,12 @@ import {
   CICLOS,
   cicloOutputName,
   DEFAULT_CONTINUE_LABEL,
+  FINAL_ALTERNATE_BODY_LINE_1,
+  FINAL_ALTERNATE_BODY_LINE_2,
+  FINAL_ALTERNATE_HEADING,
+  FINAL_TOP_BODY_LINE_1,
+  FINAL_TOP_BODY_LINE_2,
+  FINAL_TOP_HEADING,
   GAME_OVER_HEADING,
   INTRO_ASIGNATURA_PLACEHOLDER,
   INTRO_CASE_NAME_PLACEHOLDER,
@@ -18,7 +24,6 @@ import {
 import type {
   ContentBlock,
   DecisionResponse,
-  FinalNode,
   ImageSize,
   IntroNode,
   ProjectDocument,
@@ -605,29 +610,28 @@ function GameOverCard({
 /**
  * Pantalla de marca "a medida" (bespoke) del Final "con fallos"
  * (`view.usedAlternate`, ver comentario de ese campo en `src/player/runtime.ts`)
- * — petición de usuario con mockup de diseño entregado: logo + título/cuerpo
- * REALES del proyecto (`resolvedBody`, editable por el diseñador en el
- * Inspector — a diferencia de `GameOverCard`, aquí el contenido NO es fijo,
- * solo el ENVOLTORIO visual lo es) + ilustración de fondo sangrando por la
- * derecha + botones Reintentar/Salir al pie de la columna de texto. Mismo
- * shape que `IntroCard` (texto a la izquierda, ilustración de fondo tras él
- * — petición de usuario: "el texto aparece encima de la imagen en la parte
- * izquierda") en vez de `GameOverCard` (columna única centrada): esta
- * pantalla SÍ tiene contenido variable de longitud impredecible (el cuerpo
- * lo escribe el diseñador), así que el layout de `IntroCard` — pensado
- * precisamente para eso — encaja mejor que forzar una columna centrada.
+ * — petición de usuario con mockup de diseño entregado: logo + titular +
+ * cuerpo FIJOS de marca (`FINAL_ALTERNATE_HEADING`/`FINAL_ALTERNATE_BODY_LINE_1`/
+ * `FINAL_ALTERNATE_BODY_LINE_2`, ver `src/domain/playerIntroTexts.ts`) —
+ * igual que `GameOverCard`, ya NO el cuerpo real del proyecto
+ * (`FinalNode.alternateBody`, que el diseñador sigue editando en el
+ * Inspector, pero solo como gate de la variante y para el documento de
+ * revisión de `aiReviewExport.ts`; petición de usuario explícita) —
+ * + ilustración de fondo sangrando por la derecha + botones Reintentar/Salir
+ * al pie de la columna de texto. Mismo shape que `IntroCard` (texto a la
+ * izquierda, ilustración de fondo tras él) en vez de `GameOverCard` (columna
+ * única centrada): tres líneas de texto fijo encajan mejor en esa columna
+ * que en un titular centrado.
  *
- * El Final "por defecto" (sin fallos) tiene su propia pantalla bespoke
- * hermana, `FinalSuccessCard` — mismo shape, mockup e ilustración propios,
+ * El Final "por defecto" (sin fallos, "Final TOP") tiene su propia pantalla
+ * bespoke hermana, `FinalSuccessCard` — mismo shape e ilustración propios,
  * ver su comentario justo debajo.
  */
 function FinalAlternateCard({
-  resolvedBody,
   totalPoints,
   onRestart,
   onExit,
 }: {
-  resolvedBody: string
   totalPoints: number | null
   onRestart: () => void
   onExit: () => void
@@ -636,7 +640,11 @@ function FinalAlternateCard({
     <div className={styles.finalAlternateCard}>
       <div className={styles.finalAlternateContent}>
         <img className={styles.introLogo} src={ilernaLogoUrl} alt="iLERNA" />
-        <RichTextView body={resolvedBody} className={styles.finalAlternateBody} />
+        <div className={styles.finalAlternateTextBlock}>
+          <h1 className={styles.finalAlternateHeading}>{FINAL_ALTERNATE_HEADING}</h1>
+          <p className={styles.finalAlternateBody}>{FINAL_ALTERNATE_BODY_LINE_1}</p>
+          <p className={styles.finalAlternateBody}>{FINAL_ALTERNATE_BODY_LINE_2}</p>
+        </div>
         {totalPoints !== null && (
           <p className={styles.finalAlternatePoints}>Puntuación final: {totalPoints} puntos</p>
         )}
@@ -655,50 +663,36 @@ function FinalAlternateCard({
 }
 
 /**
- * Pantalla de marca "a medida" (bespoke) del Final "Perfecto" (contenido POR
- * DEFECTO, `!view.usedAlternate` — ver `resolveFinalContent` en
- * `src/player/runtime.ts`) — petición de usuario con mockup de diseño e
- * ilustración (`final-success.svg`) entregados. Sustituye al antiguo layout
- * genérico de `.card` que usaba este caso: mismo shape exacto que
- * `FinalAlternateCard` (logo + cuerpo REAL del proyecto + ilustración
- * sangrando por la derecha + Reintentar/Salir al pie), con dos diferencias:
- *
- * - Ilustración propia (`.finalSuccessIllustration`, `final-success.svg`),
- *   NO la de `FinalAlternateCard` — son dos Finales con tono distinto
- *   (celebración vs "con contratiempos"), cada uno con la suya.
- * - SÍ necesita el mismo fallback "sin contenido" que ya tenía el layout
- *   genérico que sustituye (`resolvedBody.trim()` vacío -> título del nodo o
- *   un texto genérico): a diferencia del cuerpo ALTERNATIVO (que
- *   `resolveFinalContent` solo elige cuando `alternateBody` YA tiene
- *   contenido, nunca vacío), el cuerpo POR DEFECTO de un Final puede
- *   perfectamente estar vacío (p.ej. un Final recién creado, sin editar
- *   todavía) — sin este fallback, la tarjeta se quedaría sin ningún texto.
+ * Pantalla de marca "a medida" (bespoke) del Final "Perfecto"/"Final TOP"
+ * (contenido POR DEFECTO, `!view.usedAlternate` — ver `resolveFinalContent`
+ * en `src/player/runtime.ts`) — petición de usuario con mockup de diseño e
+ * ilustración (`final-success.svg`) entregados. Mismo criterio que
+ * `FinalAlternateCard` justo arriba: titular + cuerpo FIJOS de marca
+ * (`FINAL_TOP_HEADING`/`FINAL_TOP_BODY_LINE_1`/`FINAL_TOP_BODY_LINE_2`), ya
+ * NO el cuerpo real del proyecto — mismo shape exacto que
+ * `FinalAlternateCard` (logo + titular/cuerpo + ilustración sangrando por
+ * la derecha + Reintentar/Salir al pie), con su propia ilustración
+ * (`.finalSuccessIllustration`, `final-success.svg`) — son dos Finales con
+ * tono distinto (celebración vs "con contratiempos"), cada uno con la suya.
  */
 function FinalSuccessCard({
-  node,
-  resolvedBody,
   totalPoints,
   onRestart,
   onExit,
 }: {
-  node: FinalNode
-  resolvedBody: string
   totalPoints: number | null
   onRestart: () => void
   onExit: () => void
 }) {
-  const hasBody = resolvedBody.trim() !== ''
   return (
     <div className={styles.finalSuccessCard}>
       <div className={styles.finalSuccessContent}>
         <img className={styles.introLogo} src={ilernaLogoUrl} alt="iLERNA" />
-        {hasBody ? (
-          <RichTextView body={resolvedBody} className={styles.finalSuccessBody} />
-        ) : (
-          <p className={styles.finalSuccessBody}>
-            {node.title.trim() || 'Has llegado al final de esta experiencia.'}
-          </p>
-        )}
+        <div className={styles.finalSuccessTextBlock}>
+          <h1 className={styles.finalSuccessHeading}>{FINAL_TOP_HEADING}</h1>
+          <p className={styles.finalSuccessBody}>{FINAL_TOP_BODY_LINE_1}</p>
+          <p className={styles.finalSuccessBody}>{FINAL_TOP_BODY_LINE_2}</p>
+        </div>
         {totalPoints !== null && (
           <p className={styles.finalSuccessPoints}>Puntuación final: {totalPoints} puntos</p>
         )}
@@ -1099,7 +1093,6 @@ export function PlayerScreen({ filePath }: PlayerScreenProps) {
         {view.kind === 'final' && view.usedAlternate && (
           <FinalAlternateCard
             key={view.node.id}
-            resolvedBody={view.resolvedBody}
             totalPoints={playerState.totalPoints}
             onRestart={handleRestart}
             onExit={handleExit}
@@ -1109,8 +1102,6 @@ export function PlayerScreen({ filePath }: PlayerScreenProps) {
         {view.kind === 'final' && !view.usedAlternate && (
           <FinalSuccessCard
             key={view.node.id}
-            node={view.node}
-            resolvedBody={view.resolvedBody}
             totalPoints={playerState.totalPoints}
             onRestart={handleRestart}
             onExit={handleExit}

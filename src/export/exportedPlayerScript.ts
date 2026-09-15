@@ -687,31 +687,6 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
     return typeof value === 'string' ? value.trim() : '';
   }
 
-  /** Cuerpo enriquecido ya renderizado en tiempo de exportación (Tiptap ->
-   *  HTML estático), de un nodo con un único \`body\` (solo \`final\`, ver
-   *  \`appendContent\` más abajo para los bloques de \`content\` de una
-   *  diapositiva). \`fallback\` se pinta como texto plano cuando el nodo no
-   *  tiene cuerpo; \`null\` significa "no pintar nada". */
-  /** \`bodyId\`/\`rawBody\` en vez de \`node\` directamente (milestone "+1 fallo
-   *  con Game Over"): el único llamador (la vista 'final') necesita poder
-   *  pedir el \`body\` por defecto O el alternativo, cada uno con su propia
-   *  clave en \`bodyHtml\` — ver \`resolveFinalContent\`. */
-  function appendBody(card, bodyId, rawBody, fallback, className) {
-    var cls = className || 'body';
-    var html = bodyHtml[bodyId];
-    if (trimmed(rawBody) && html) {
-      var rich = el('div', cls);
-      rich.innerHTML = html;
-      card.appendChild(rich);
-      return;
-    }
-    if (fallback !== null) {
-      var paragraph = el('p', cls);
-      paragraph.textContent = fallback;
-      card.appendChild(paragraph);
-    }
-  }
-
   /** Clase de tamaño de \`.media\` para una imagen (petición de usuario: "un
    *  desplegable... Pequeño/Normal/Grande") — traducción literal de
    *  \`imageSizeClassName\` en \`src/player/PlayerScreen.tsx\`. \`undefined\`/
@@ -1237,13 +1212,14 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
   }
 
   /** Traducción literal de \`FinalAlternateCard\` en
-   *  \`src/player/PlayerScreen.tsx\`: logo + cuerpo REAL del proyecto
-   *  (\`finalContent\`, contenido variable — a diferencia de
-   *  \`buildGameOverCard\`, aquí NO hay texto fijo) + ilustración de fondo
-   *  sangrando por la derecha + botones Reintentar/Salir al pie. Mismo shape
-   *  que \`buildIntroCard\` (columna de texto + fondo), no
-   *  \`buildGameOverCard\` (columna única centrada). */
-  function buildFinalAlternateCard(node, finalContent, totalPoints) {
+   *  \`src/player/PlayerScreen.tsx\`: logo + titular/cuerpo FIJOS de marca
+   *  (\`texts.finalAlternateHeading\`/\`finalAlternateBodyLine1\`/\`Line2\`,
+   *  igual que \`buildGameOverCard\` — petición de usuario, ya NO el
+   *  contenido real del proyecto) + ilustración de fondo sangrando por la
+   *  derecha + botones Reintentar/Salir al pie. Mismo shape que
+   *  \`buildIntroCard\` (columna de texto + fondo), no \`buildGameOverCard\`
+   *  (columna única centrada). */
+  function buildFinalAlternateCard(totalPoints) {
     var card = el('section', 'finalAlternateCard');
 
     var illustration = el('div', 'finalAlternateIllustration');
@@ -1260,13 +1236,17 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
       content.appendChild(logo);
     }
 
-    appendBody(
-      content,
-      finalContent.bodyId,
-      finalContent.rawBody,
-      trimmed(node.title) || texts.finalFallbackBody,
-      'finalAlternateBody',
-    );
+    var textBlock = el('div', 'finalAlternateTextBlock');
+    var heading = el('h1', 'finalAlternateHeading');
+    heading.textContent = texts.finalAlternateHeading;
+    textBlock.appendChild(heading);
+    var bodyLine1 = el('p', 'finalAlternateBody');
+    bodyLine1.textContent = texts.finalAlternateBodyLine1;
+    textBlock.appendChild(bodyLine1);
+    var bodyLine2 = el('p', 'finalAlternateBody');
+    bodyLine2.textContent = texts.finalAlternateBodyLine2;
+    textBlock.appendChild(bodyLine2);
+    content.appendChild(textBlock);
 
     if (totalPoints !== null) {
       var points = el('p', 'finalAlternatePoints');
@@ -1298,13 +1278,11 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
   }
 
   /** Traducción literal de \`FinalSuccessCard\` en \`src/player/PlayerScreen.tsx\`:
-   *  mismo shape que \`buildFinalAlternateCard\` (logo + cuerpo real +
-   *  ilustración a la derecha + Reintentar/Salir), con ilustración propia
-   *  (\`finalSuccessIllustration\`, \`final-success.svg\`) y el mismo fallback
-   *  "sin contenido" que ya usaba \`appendBody\` en el layout genérico que
-   *  sustituye (el cuerpo POR DEFECTO de un Final puede estar vacío, a
-   *  diferencia del alternativo — ver comentario de \`FinalSuccessCard\`). */
-  function buildFinalSuccessCard(node, finalContent, totalPoints) {
+   *  mismo shape que \`buildFinalAlternateCard\` (logo + titular/cuerpo FIJOS
+   *  de marca + Reintentar/Salir), con su propia ilustración
+   *  (\`finalSuccessIllustration\`, \`final-success.svg\`) y su propio texto
+   *  (\`texts.finalTopHeading\`/\`finalTopBodyLine1\`/\`Line2\`). */
+  function buildFinalSuccessCard(totalPoints) {
     var card = el('section', 'finalSuccessCard');
 
     var illustration = el('div', 'finalSuccessIllustration');
@@ -1321,13 +1299,17 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
       content.appendChild(logo);
     }
 
-    appendBody(
-      content,
-      finalContent.bodyId,
-      finalContent.rawBody,
-      trimmed(node.title) || texts.finalFallbackBody,
-      'finalSuccessBody',
-    );
+    var textBlock = el('div', 'finalSuccessTextBlock');
+    var heading = el('h1', 'finalSuccessHeading');
+    heading.textContent = texts.finalTopHeading;
+    textBlock.appendChild(heading);
+    var bodyLine1 = el('p', 'finalSuccessBody');
+    bodyLine1.textContent = texts.finalTopBodyLine1;
+    textBlock.appendChild(bodyLine1);
+    var bodyLine2 = el('p', 'finalSuccessBody');
+    bodyLine2.textContent = texts.finalTopBodyLine2;
+    textBlock.appendChild(bodyLine2);
+    content.appendChild(textBlock);
 
     if (totalPoints !== null) {
       var points = el('p', 'finalSuccessPoints');
@@ -1424,19 +1406,19 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
       // alternativo — el contenido por defecto ("Perfecto") sigue con el
       // genérico hasta que se rediseñe también (fuera de este alcance).
       if (finalContent.usedAlternate) {
-        var altCard = buildFinalAlternateCard(view.node, finalContent, state.totalPoints);
+        var altCard = buildFinalAlternateCard(state.totalPoints);
         if (view.node.celebrate === true) {
           altCard.appendChild(buildConfetti());
         }
         return altCard;
       }
 
-      // Final "Perfecto" (contenido por defecto, sin fallos): pantalla
-      // bespoke propia (\`buildFinalSuccessCard\`, mismo shape que
+      // Final "Perfecto"/"Final TOP" (contenido por defecto, sin fallos):
+      // pantalla bespoke propia (\`buildFinalSuccessCard\`, mismo shape que
       // \`buildFinalAlternateCard\` de más arriba), sustituye al antiguo
       // layout genérico de \`.card\`/\`.title\`/\`.points\` (ver mockup
       // "¡Impresionante!" entregado por Content Factory).
-      var successCard = buildFinalSuccessCard(view.node, finalContent, state.totalPoints);
+      var successCard = buildFinalSuccessCard(state.totalPoints);
       // Confeti (milestone "+1 fallo con Game Over", petición de usuario
       // ampliada después: "si llegas al final sin fallos y con fallos, en
       // los dos"): traducción literal de \`view.celebrate\` en

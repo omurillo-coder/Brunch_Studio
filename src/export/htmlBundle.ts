@@ -3,6 +3,12 @@ import {
   CICLOS,
   cicloOutputName,
   DEFAULT_CONTINUE_LABEL,
+  FINAL_ALTERNATE_BODY_LINE_1,
+  FINAL_ALTERNATE_BODY_LINE_2,
+  FINAL_ALTERNATE_HEADING,
+  FINAL_TOP_BODY_LINE_1,
+  FINAL_TOP_BODY_LINE_2,
+  FINAL_TOP_HEADING,
   GAME_OVER_HEADING,
   INTRO_ASIGNATURA_PLACEHOLDER,
   INTRO_CASE_NAME_PLACEHOLDER,
@@ -57,7 +63,6 @@ interface ExportedTexts {
   defaultContinueLabel: string
   emptySlideBody: string
   emptyResponse: string
-  finalFallbackBody: string
   pointsPrefix: string
   pointsSuffix: string
   retry: string
@@ -78,13 +83,23 @@ interface ExportedTexts {
    *  `playerIntroTexts.ts`, fuente única compartida con `GameOverCard` en
    *  `PlayerScreen.tsx`). */
   gameOverHeading: string
+  /** Copy fijo de "Final TOP" (por defecto, sin fallos) y "Final con
+   *  fallos" (ver `buildFinalSuccessCard`/`buildFinalAlternateCard` en
+   *  `exportedPlayerScript.ts` y comentario de `FINAL_TOP_HEADING` en
+   *  `playerIntroTexts.ts`, fuente única compartida con `FinalSuccessCard`/
+   *  `FinalAlternateCard` en `PlayerScreen.tsx`). */
+  finalTopHeading: string
+  finalTopBodyLine1: string
+  finalTopBodyLine2: string
+  finalAlternateHeading: string
+  finalAlternateBodyLine1: string
+  finalAlternateBodyLine2: string
 }
 
 const EXPORTED_TEXTS: ExportedTexts = {
   defaultContinueLabel: DEFAULT_CONTINUE_LABEL,
   emptySlideBody: 'Esta diapositiva todavía no tiene contenido.',
   emptyResponse: 'Opción sin texto configurado',
-  finalFallbackBody: 'Has llegado al final de esta experiencia.',
   pointsPrefix: 'Puntuación final: ',
   pointsSuffix: ' puntos',
   retry: 'Reintentar',
@@ -98,6 +113,12 @@ const EXPORTED_TEXTS: ExportedTexts = {
   introAsignaturaPlaceholder: INTRO_ASIGNATURA_PLACEHOLDER,
   introCaseNamePlaceholder: INTRO_CASE_NAME_PLACEHOLDER,
   gameOverHeading: GAME_OVER_HEADING,
+  finalTopHeading: FINAL_TOP_HEADING,
+  finalTopBodyLine1: FINAL_TOP_BODY_LINE_1,
+  finalTopBodyLine2: FINAL_TOP_BODY_LINE_2,
+  finalAlternateHeading: FINAL_ALTERNATE_HEADING,
+  finalAlternateBodyLine1: FINAL_ALTERNATE_BODY_LINE_1,
+  finalAlternateBodyLine2: FINAL_ALTERNATE_BODY_LINE_2,
 }
 
 /** Mensaje para quien abra el archivo con JavaScript desactivado. */

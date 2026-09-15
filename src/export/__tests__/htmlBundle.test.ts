@@ -552,9 +552,9 @@ describe('buildHtmlBundle — comportamiento del HTML generado (jsdom)', () => {
     clickButton('Avisar al responsable')
 
     const card = currentCard()
-    expect(card.querySelector('.finalSuccessBody')?.textContent).toContain(
-      'Has terminado el recorrido.',
-    )
+    // Confirma que hemos llegado al Final (texto fijo de marca, ya no el
+    // cuerpo real del proyecto) antes de comprobar la puntuación.
+    expect(card.querySelector('.finalSuccessHeading')?.textContent).toBe('¡Impresionante!')
     expect(card.querySelector('.finalSuccessPoints')?.textContent).toBe(
       'Puntuación final: 10 puntos',
     )
@@ -602,13 +602,12 @@ describe('buildHtmlBundle — comportamiento del HTML generado (jsdom)', () => {
     expect(card.querySelector('.finalSuccessPoints')).toBeNull()
   })
 
-  it('un Final sin body no usa su título como texto de repuesto (referencia interna, no contenido)', () => {
+  it('el título del Final (referencia interna) nunca se pinta, ni siquiera sin body: el Final "Perfecto" usa siempre su texto fijo de marca', () => {
     const project = sampleProject()
     const final = project.graph.nodes[2] as FinalNode
     final.body = ''
     // El título sigue teniendo un valor no vacío ("Caso cerrado"): si se
-    // filtrara por el HTML exportado, no debe aparecer en ningún sitio, ni
-    // siquiera como texto de repuesto del cuerpo.
+    // filtrara por el HTML exportado, no debe aparecer en ningún sitio.
 
     const html = buildHtmlBundle(project, sampleAssets)
     runExportedBundle(html)
@@ -617,9 +616,7 @@ describe('buildHtmlBundle — comportamiento del HTML generado (jsdom)', () => {
 
     const card = currentCard()
     expect(card.textContent).not.toContain('Caso cerrado')
-    expect(card.querySelector('.finalSuccessBody')?.textContent).toBe(
-      'Has llegado al final de esta experiencia.',
-    )
+    expect(card.querySelector('.finalSuccessHeading')?.textContent).toBe('¡Impresionante!')
     expect(html).not.toContain('Caso cerrado')
   })
 
@@ -1075,7 +1072,16 @@ describe('buildHtmlBundle — comportamiento del HTML generado: variables/condic
     expect(optionTexts).not.toContain('Solo si ya está activo')
   })
 
-  it('elegir "Activar" aplica sus efectos y el enrutador condicional lleva al Final "activado"', () => {
+  // Petición de usuario ("texto fijo, como Game Over"): el Final "Perfecto"
+  // ya no pinta el cuerpo real del proyecto (`finalTrue.body`/`finalFalse.body`),
+  // así que las dos ramas (finalTrue/finalFalse) son visualmente IDÉNTICAS
+  // en el HTML exportado — sin marca visible para distinguir a cuál de los
+  // dos nodos se navegó. Lo que este test SÍ puede comprobar: que el
+  // enrutador condicional lleva a un Final real (sin caer en el aviso de
+  // dead-end) en ambas ramas — la resolución del nodo CORRECTO según la
+  // condición es responsabilidad de `getView`/`resolveFinalContent`, ya
+  // cubierta a nivel de dominio en `src/player/__tests__/runtime.test.ts`.
+  it('elegir "Activar" aplica sus efectos y el enrutador condicional lleva a un Final real (activado)', () => {
     runExportedBundle(buildHtmlBundle(variablesProject(), {}))
     clickButton('Activar')
 
@@ -1083,19 +1089,17 @@ describe('buildHtmlBundle — comportamiento del HTML generado: variables/condic
     // verdadera (flag=true tras el efecto de "Activar").
     clickButton('Ver resultado')
 
-    expect(currentCard().querySelector('.finalSuccessBody')?.textContent).toContain(
-      'Terminaste con el flag activado.',
-    )
+    // \`.finalSuccessHeading\` solo se pinta en la tarjeta de Final; si el
+    // enrutador hubiera caído en el aviso de dead-end no existiría.
+    expect(currentCard().querySelector('.finalSuccessHeading')?.textContent).toBe('¡Impresionante!')
   })
 
-  it('elegir "Omitir" (sin efectos) deja flag=false y el enrutador lleva al Final "no activado"', () => {
+  it('elegir "Omitir" (sin efectos) deja flag=false y el enrutador lleva a un Final real (no activado)', () => {
     runExportedBundle(buildHtmlBundle(variablesProject(), {}))
     clickButton('Omitir')
     clickButton('Ver resultado')
 
-    expect(currentCard().querySelector('.finalSuccessBody')?.textContent).toContain(
-      'Terminaste sin activar el flag.',
-    )
+    expect(currentCard().querySelector('.finalSuccessHeading')?.textContent).toBe('¡Impresionante!')
   })
 
   it('"Reintentar" reinicia las variables: tras reiniciar, la respuesta condicionada vuelve a estar oculta', () => {
@@ -1217,7 +1221,12 @@ describe('buildHtmlBundle — reproducción del reporte de bug: ambas ramas del 
     document.body.innerHTML = ''
   })
 
-  it('rama VERDADERA (elige la respuesta con el +1): navega al Final correspondiente, sin dead-end', () => {
+  // Petición de usuario ("texto fijo, como Game Over"): el Final "Perfecto"
+  // ya no pinta el cuerpo real del proyecto, así que finalTrue/finalFalse
+  // son visualmente idénticos en el HTML exportado — ver comentario
+  // análogo en "comportamiento del HTML generado: variables/condiciones"
+  // más arriba en este archivo.
+  it('rama VERDADERA (elige la respuesta con el +1): navega a un Final real, sin dead-end', () => {
     runExportedBundle(buildHtmlBundle(bugReportProject(), {}))
     clickButton('Consigue el +1')
     clickButton('Ver resultado')
@@ -1226,7 +1235,7 @@ describe('buildHtmlBundle — reproducción del reporte de bug: ambas ramas del 
     expect(card.textContent).not.toContain(
       'Esta parte de la experiencia no tiene una continuación configurada.',
     )
-    expect(card.querySelector('.finalSuccessBody')?.textContent).toContain('Llegaste con el punto.')
+    expect(card.querySelector('.finalSuccessHeading')?.textContent).toBe('¡Impresionante!')
   })
 
   it('rama FALSA (elige la respuesta SIN el +1): navega a elseTargetNodeId, NO aparece el aviso de dead-end', () => {
@@ -1240,7 +1249,7 @@ describe('buildHtmlBundle — reproducción del reporte de bug: ambas ramas del 
     expect(card.textContent).not.toContain(
       'Esta parte de la experiencia no tiene una continuación configurada.',
     )
-    expect(card.querySelector('.finalSuccessBody')?.textContent).toContain('Llegaste sin el punto.')
+    expect(card.querySelector('.finalSuccessHeading')?.textContent).toBe('¡Impresionante!')
   })
 })
 
@@ -1568,8 +1577,8 @@ describe('buildHtmlBundle — milestone "+1 fallo con Game Over"', () => {
     // Elige "Seguir" -> Final. La variable ya vale 5 (>= 5, la condición del
     // alternativo), así que se ve el contenido ALTERNATIVO.
     clickButton('Seguir')
-    expect(currentCard().textContent).toContain('Final alternativo por fallos')
-    expect(currentCard().textContent).not.toContain('Final normal')
+    expect(currentCard().textContent).toContain('¡Buen trabajo!')
+    expect(currentCard().textContent).not.toContain('¡Impresionante!')
   })
 
   it('sin haber visitado la diapositiva con visitEffects, el Final muestra su contenido por defecto', () => {
@@ -1582,8 +1591,8 @@ describe('buildHtmlBundle — milestone "+1 fallo con Game Over"', () => {
 
     clickButton('Seguir')
 
-    expect(currentCard().textContent).toContain('Final normal')
-    expect(currentCard().textContent).not.toContain('Final alternativo por fallos')
+    expect(currentCard().textContent).toContain('¡Impresionante!')
+    expect(currentCard().textContent).not.toContain('¡Buen trabajo!')
   })
 
   it('una respuesta actsAsExit es pulsable sin destino y no navega: se queda en la misma diapositiva y muestra el aviso de salir', () => {
@@ -1650,7 +1659,7 @@ describe('buildHtmlBundle — milestone "+1 fallo con Game Over"', () => {
 
       clickButton('Reintentar')
 
-      expect(currentCard().textContent).toContain('Final normal')
+      expect(currentCard().textContent).toContain('¡Impresionante!')
     })
 
     it('"Salir" ejecuta el comportamiento REAL de la segunda respuesta visible (actsAsExit: no navega, aviso de salir)', () => {
@@ -1714,7 +1723,7 @@ describe('buildHtmlBundle — milestone "+1 fallo con Game Over"', () => {
       runExportedBundle(buildHtmlBundle(project, {}))
       clickButton('Reintentar')
 
-      expect(currentCard().textContent).toContain('Final normal')
+      expect(currentCard().textContent).toContain('¡Impresionante!')
     })
 
     it('con las respuestas invertidas en el array, "Salir" sigue actuando como actsAsExit (no navega)', () => {
@@ -1768,7 +1777,7 @@ describe('buildHtmlBundle — milestone "+1 fallo con Game Over"', () => {
 
       clickButton('Seguir')
 
-      expect(currentCard().textContent).toContain('Final normal')
+      expect(currentCard().textContent).toContain('¡Impresionante!')
       const confetti = currentCard().querySelector('.confetti')
       expect(confetti).not.toBeNull()
       expect(confetti?.querySelectorAll('.confettiPiece').length).toBeGreaterThan(0)
@@ -1786,7 +1795,7 @@ describe('buildHtmlBundle — milestone "+1 fallo con Game Over"', () => {
       clickButton('Continuar')
       clickButton('Seguir')
 
-      expect(currentCard().textContent).toContain('Final alternativo por fallos')
+      expect(currentCard().textContent).toContain('¡Buen trabajo!')
       const confetti = currentCard().querySelector('.confetti')
       expect(confetti).not.toBeNull()
       expect(confetti?.querySelectorAll('.confettiPiece').length).toBeGreaterThan(0)
@@ -1799,7 +1808,7 @@ describe('buildHtmlBundle — milestone "+1 fallo con Game Over"', () => {
 
       clickButton('Seguir')
 
-      expect(currentCard().textContent).toContain('Final normal')
+      expect(currentCard().textContent).toContain('¡Impresionante!')
       expect(currentCard().querySelector('.confetti')).toBeNull()
     })
   })

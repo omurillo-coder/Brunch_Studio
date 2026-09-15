@@ -37,3 +37,30 @@ export const INTRO_CASE_NAME_PLACEHOLDER = '— Título sin definir —'
  * `exportedPlayerScript.ts`) importen la MISMA fuente.
  */
 export const GAME_OVER_HEADING = '¿Seguro que no quieres volver a intentarlo?'
+
+/**
+ * Copy fijo de "Final TOP" (contenido POR DEFECTO de un Final, sin fallos —
+ * `!view.usedAlternate`, ver `FinalSuccessCard` en `src/player/PlayerScreen.tsx`)
+ * y de "Final con fallos" (contenido ALTERNATIVO, `view.usedAlternate` —
+ * ver `FinalAlternateCard`). Petición de usuario: igual que `GAME_OVER_HEADING`,
+ * texto de marca FIJO e igual en todos los proyectos — ya NO el cuerpo real
+ * (`FinalNode.body`/`alternateBody`) que edita el diseñador en el Inspector.
+ * Ese campo del dominio se conserva (sigue siendo el gate de qué variante
+ * se activa, y lo sigue usando `aiReviewExport.ts` para el documento de
+ * revisión), pero deja de pintarse en la tarjeta bespoke del Player — mismo
+ * criterio que las respuestas de `brandedGameOverScreen`, cuyo texto
+ * tampoco se pinta (ver comentario de `resolveGameOverResponses`).
+ *
+ * La primera línea de cada pantalla ("¡Impresionante!"/"¡Buen trabajo!") es
+ * un titular aparte (`FINAL_TOP_HEADING`/`FINAL_ALTERNATE_HEADING`), grande
+ * y en negrita — petición de usuario: "dar prioridad a la primera parte de
+ * las frases". Las otras dos líneas son cuerpo normal.
+ */
+export const FINAL_TOP_HEADING = '¡Impresionante!'
+export const FINAL_TOP_BODY_LINE_1 = 'Lo has resuelto en un momento.'
+export const FINAL_TOP_BODY_LINE_2 = '¿Quieres explorar otros caminos?'
+
+export const FINAL_ALTERNATE_HEADING = '¡Buen trabajo!'
+export const FINAL_ALTERNATE_BODY_LINE_1 =
+  'Has conseguido resolver el caso, aunque has tenido algunos contratiempos.'
+export const FINAL_ALTERNATE_BODY_LINE_2 = '¿Qué decisiones cambiarías?'

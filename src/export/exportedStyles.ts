@@ -345,18 +345,14 @@ body {
   padding: 36px 40px;
 }
 
-.finalAlternateBody {
-  margin: 0;
-  font-family: inherit;
-  font-size: 17px;
-  line-height: 1.5;
-  color: #0a0a0a;
+.finalAlternateTextBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
-.finalAlternateBody h1,
-.finalAlternateBody h2,
-.finalAlternateBody h3 {
-  margin: 0 0 4px;
+.finalAlternateHeading {
+  margin: 0;
   font-family: inherit;
   font-weight: 700;
   font-size: clamp(24px, 3.2vw, 34px);
@@ -365,8 +361,12 @@ body {
   color: #0a0a0a;
 }
 
-.finalAlternateBody p {
+.finalAlternateBody {
   margin: 0;
+  font-family: inherit;
+  font-size: 17px;
+  line-height: 1.5;
+  color: #0a0a0a;
 }
 
 .finalAlternatePoints {
@@ -466,18 +466,14 @@ body {
   padding: 36px 40px;
 }
 
-.finalSuccessBody {
-  margin: 0;
-  font-family: inherit;
-  font-size: 17px;
-  line-height: 1.5;
-  color: #0a0a0a;
+.finalSuccessTextBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
-.finalSuccessBody h1,
-.finalSuccessBody h2,
-.finalSuccessBody h3 {
-  margin: 0 0 4px;
+.finalSuccessHeading {
+  margin: 0;
   font-family: inherit;
   font-weight: 700;
   font-size: clamp(24px, 3.2vw, 34px);
@@ -486,8 +482,12 @@ body {
   color: #0a0a0a;
 }
 
-.finalSuccessBody p {
+.finalSuccessBody {
   margin: 0;
+  font-family: inherit;
+  font-size: 17px;
+  line-height: 1.5;
+  color: #0a0a0a;
 }
 
 .finalSuccessPoints {

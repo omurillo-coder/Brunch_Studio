@@ -144,7 +144,7 @@ describe('PlayerScreen', () => {
 
     fireEvent.click(screen.getByText('Camino A'))
 
-    expect(screen.getByText('Llegaste al final A.')).toBeInTheDocument()
+    expect(screen.getByText('¡Impresionante!')).toBeInTheDocument()
   })
 
   it('nunca muestra la letra de una respuesta como texto visible', () => {
@@ -170,7 +170,7 @@ describe('PlayerScreen', () => {
 
     fireEvent.click(screen.getByText('Continuar'))
     fireEvent.click(screen.getByText('Camino A'))
-    expect(screen.getByText('Llegaste al final A.')).toBeInTheDocument()
+    expect(screen.getByText('¡Impresionante!')).toBeInTheDocument()
 
     fireEvent.click(screen.getByText('Reintentar'))
 
@@ -242,7 +242,7 @@ describe('PlayerScreen', () => {
       renderPlayer()
 
       fireEvent.click(screen.getByText('Camino A'))
-      expect(screen.getByText('Llegaste al final A.')).toBeInTheDocument()
+      expect(screen.getByText('¡Impresionante!')).toBeInTheDocument()
       expect(finalId).toBeTruthy()
 
       fireEvent.click(screen.getByText('↺ Reiniciar experiencia'))
@@ -774,10 +774,9 @@ describe('PlayerScreen: puntuación acumulada', () => {
 
     fireEvent.click(screen.getByText('Camino con puntos'))
 
-    // Sin `body` en el fixture (`buildGraphWithPoints`), el fallback de
-    // `FinalSuccessCard` pinta el título del nodo ("Fin") — confirma que
-    // hemos llegado al Final antes de comprobar la puntuación.
-    expect(screen.getByText('Fin')).toBeInTheDocument()
+    // Confirma que hemos llegado al Final (texto fijo de marca) antes de
+    // comprobar la puntuación.
+    expect(screen.getByText('¡Impresionante!')).toBeInTheDocument()
     expect(screen.getByText('Puntuación final: 7 puntos')).toBeInTheDocument()
   })
 
@@ -791,7 +790,7 @@ describe('PlayerScreen: puntuación acumulada', () => {
 
     fireEvent.click(screen.getByText('Camino sin puntos'))
 
-    expect(screen.getByText('Fin')).toBeInTheDocument()
+    expect(screen.getByText('¡Impresionante!')).toBeInTheDocument()
     expect(screen.queryByText(/Puntuación final/)).not.toBeInTheDocument()
   })
 })
@@ -803,7 +802,7 @@ describe('PlayerScreen: botón "Salir" (vista Final)', () => {
     renderPlayer()
     fireEvent.click(screen.getByText('Continuar'))
     fireEvent.click(screen.getByText('Camino A'))
-    expect(screen.getByText('Llegaste al final A.')).toBeInTheDocument()
+    expect(screen.getByText('¡Impresionante!')).toBeInTheDocument()
   }
 
   it('aparece junto a "Reintentar", solo en la tarjeta de Final, con estilo de contorno (secundario, no de acento)', () => {
@@ -879,8 +878,11 @@ describe('PlayerScreen: milestone "+1 fallo con Game Over"', () => {
     fireEvent.click(screen.getByText('Continuar')) // visita el inicio -> +1 Fallos
     fireEvent.click(screen.getByText('Camino A')) // -> Final
 
-    expect(screen.getByText('Contenido alternativo por fallos.')).toBeInTheDocument()
-    expect(screen.queryByText('Llegaste al final A.')).not.toBeInTheDocument()
+    // Texto FIJO de marca del Final "con fallos" (petición de usuario) — ya
+    // no el contenido real del proyecto (`alternateBody`), que solo actúa
+    // como gate de la variante.
+    expect(screen.getByText('¡Buen trabajo!')).toBeInTheDocument()
+    expect(screen.queryByText('¡Impresionante!')).not.toBeInTheDocument()
   })
 
   it('el Final muestra su contenido por defecto cuando la condición NO se cumple', () => {
@@ -903,8 +905,8 @@ describe('PlayerScreen: milestone "+1 fallo con Game Over"', () => {
     fireEvent.click(screen.getByText('Continuar'))
     fireEvent.click(screen.getByText('Camino A'))
 
-    expect(screen.getByText('Llegaste al final A.')).toBeInTheDocument()
-    expect(screen.queryByText('Contenido alternativo por fallos.')).not.toBeInTheDocument()
+    expect(screen.getByText('¡Impresionante!')).toBeInTheDocument()
+    expect(screen.queryByText('¡Buen trabajo!')).not.toBeInTheDocument()
   })
 
   describe('indicador de fallos (petición de usuario: "un indicador de fallos... durante la experiencia")', () => {
@@ -988,7 +990,7 @@ describe('PlayerScreen: milestone "+1 fallo con Game Over"', () => {
       fireEvent.click(screen.getByText('Continuar'))
       fireEvent.click(screen.getByText('Camino A'))
 
-      expect(screen.getByText('Contenido alternativo por fallos.')).toBeInTheDocument()
+      expect(screen.getByText('¡Buen trabajo!')).toBeInTheDocument()
       expect(document.querySelector(`.${styles.confetti}`)).toBeInTheDocument()
       expect(confettiPieceCount()).toBeGreaterThan(0)
     })
@@ -1000,7 +1002,7 @@ describe('PlayerScreen: milestone "+1 fallo con Game Over"', () => {
       fireEvent.click(screen.getByText('Continuar'))
       fireEvent.click(screen.getByText('Camino A'))
 
-      expect(screen.getByText('Llegaste al final A.')).toBeInTheDocument()
+      expect(screen.getByText('¡Impresionante!')).toBeInTheDocument()
       expect(document.querySelector(`.${styles.confetti}`)).not.toBeInTheDocument()
     })
   })
@@ -1047,7 +1049,7 @@ describe('PlayerScreen: milestone "+1 fallo con Game Over"', () => {
 
       fireEvent.click(screen.getByText('Reintentar'))
 
-      expect(screen.getByText('Llegaste al final A.')).toBeInTheDocument()
+      expect(screen.getByText('¡Impresionante!')).toBeInTheDocument()
     })
 
     it('"Salir" ejecuta el comportamiento REAL de la segunda respuesta (actsAsExit: sale del modo "Probar")', () => {
@@ -1114,7 +1116,7 @@ describe('PlayerScreen: milestone "+1 fallo con Game Over"', () => {
       // Navega al Final real de "Camino A" — si el bug de resolución por
       // posición reapareciera, "Reintentar" dispararía la respuesta
       // actsAsExit en su lugar y esta pantalla nunca aparecería.
-      expect(screen.getByText('Llegaste al final A.')).toBeInTheDocument()
+      expect(screen.getByText('¡Impresionante!')).toBeInTheDocument()
     })
 
     /** Corrección de revisión de código: `disabled` solo se comprobaba en el
@@ -1256,7 +1258,7 @@ describe('PlayerScreen: portada (nodo intro, milestone "Diapositiva de Inicio")'
 
     fireEvent.click(screen.getByText('Continuar'))
 
-    expect(screen.getByText('Fin del caso.')).toBeInTheDocument()
+    expect(screen.getByText('¡Impresionante!')).toBeInTheDocument()
   })
 
   it('con la portada incompleta (sin ciclo/asignatura/caseName) no rompe la vista: pinta placeholders grises', () => {
@@ -1289,7 +1291,7 @@ describe('PlayerScreen: portada (nodo intro, milestone "Diapositiva de Inicio")'
     renderPlayer()
 
     fireEvent.click(screen.getByText('Continuar'))
-    expect(screen.getByText('Fin del caso.')).toBeInTheDocument()
+    expect(screen.getByText('¡Impresionante!')).toBeInTheDocument()
 
     fireEvent.click(screen.getByText('↺ Reiniciar experiencia'))
 

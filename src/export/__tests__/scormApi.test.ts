@@ -158,9 +158,10 @@ describe('script exportado — SCORM 2004 4ª edición', () => {
     clickButton('Continuar')
 
     // Sin API, el comportamiento observable debe ser exactamente el de la
-    // fase 1: llega al Final con normalidad.
+    // fase 1: llega al Final con normalidad (texto fijo de marca, ya no el
+    // cuerpo real del proyecto).
     const card = document.querySelector('#brunch-root .finalSuccessCard')
-    expect(card?.querySelector('.finalSuccessBody')?.textContent).toBe('Se acabó.')
+    expect(card?.querySelector('.finalSuccessHeading')?.textContent).toBe('¡Impresionante!')
   })
 
   it('llama a Initialize al cargar cuando hay una API SCORM en window', () => {
@@ -276,6 +277,6 @@ describe('script exportado — SCORM 2004 4ª edición', () => {
     }).not.toThrow()
 
     const card = document.querySelector('#brunch-root .finalSuccessCard')
-    expect(card?.querySelector('.finalSuccessBody')?.textContent).toBe('Se acabó.')
+    expect(card?.querySelector('.finalSuccessHeading')?.textContent).toBe('¡Impresionante!')
   })
 })
