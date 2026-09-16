@@ -219,13 +219,15 @@ body {
   color: var(--bs-color-accent);
 }
 
+/* Columna, no fila (petición de usuario): el botón "Continuar" debe caer
+   SIEMPRE en su propia línea, debajo del título — no al final del título
+   cuando cabía en la misma fila. */
 .introFooter {
   margin-top: auto;
   display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 16px;
-  flex-wrap: wrap;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
 }
 
 .introCaseTitle {
@@ -1005,10 +1007,12 @@ button:focus-visible {
   gap: var(--bs-space-3);
 }
 
+/* Sin borde propio (petición de usuario: "las imágenes no ampliables...
+   sin marco") — el borde vive en \`.expandableImage\` (el envoltorio
+   \`<button>\`, más abajo), no aquí. */
 .media {
   max-width: 100%;
   max-height: 320px;
-  border: 1px solid var(--bs-color-border);
   border-radius: var(--bs-radius-md);
 }
 
@@ -1033,10 +1037,13 @@ button:focus-visible {
 
 /* Envoltorio <button> de una imagen ampliable — mismas reglas que
    PlayerScreen.module.css. */
+/* El borde SÍ es propio de aquí (petición de usuario: solo debe aparecer
+   cuando la imagen sea ampliable), mismo valor que tenía \`.media\` antes. */
 .expandableImage {
   display: inline-block;
   padding: 0;
-  border: none;
+  border: 1px solid var(--bs-color-border);
+  border-radius: var(--bs-radius-md);
   background: none;
   cursor: zoom-in;
   line-height: 0;

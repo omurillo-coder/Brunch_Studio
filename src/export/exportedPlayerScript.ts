@@ -418,32 +418,28 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
     return ordered;
   }
 
-  /** Equivalente de \`resolveFinalBody\` (\`src/player/runtime.ts\`, milestone
-   *  "+1 fallo con Game Over") adaptado a este runtime: a diferencia de la
-   *  app (Tiptap disponible en tiempo de recorrido), aquí el HTML de CADA
-   *  cuerpo posible se pre-renderiza EN TIEMPO DE EXPORTACIÓN
-   *  (\`renderNodeBodies\` en \`htmlBundle.ts\`) e indexa en \`bodyHtml\` por
-   *  clave — \`node.id\` para el \`body\` por defecto, \`node.id + ':alternate'\`
-   *  para \`alternateBody\` (el mismo sufijo literal que
-   *  \`ALTERNATE_BODY_KEY_SUFFIX\` en \`htmlBundle.ts\`: cambiar uno exige
-   *  cambiar el otro). Esta función decide solo QUÉ CLAVE/texto plano usar,
-   *  nunca genera HTML — eso ya está hecho. \`rawBody\` viaja además del id
-   *  porque \`appendBody\` lo necesita para decidir "vacío = nada" (mismo
-   *  criterio que con \`node.body\` de siempre). \`usedAlternate\` (petición de
-   *  usuario: "vamos a por la pantalla de con fallos") decide además qué
-   *  DISEÑO usar (\`buildFinalAlternateCard\` para "con fallos", el genérico
-   *  para el contenido por defecto) — se había quitado cuando solo hacía
-   *  falta para el confeti, que dejó de depender de esto. */
-  function resolveFinalContent(node, variables) {
-    if (
-      node.alternateCondition &&
-      node.alternateBody &&
-      trimmed(node.alternateBody) &&
-      evaluateCondition(variables, node.alternateCondition)
-    ) {
-      return { bodyId: node.id + ':alternate', rawBody: node.alternateBody, usedAlternate: true };
-    }
-    return { bodyId: node.id, rawBody: node.body, usedAlternate: false };
+  /** Equivalente de \`resolveFinalContent\` (\`src/player/runtime.ts\`,
+   *  milestone "+1 fallo con Game Over") adaptado a este runtime: decide
+   *  SOLO qué DISEÑO de Final usar — \`buildFinalAlternateCard\` ("con
+   *  fallos") vs \`buildFinalSuccessCard\` ("Final TOP", contenido por
+   *  defecto) — nunca qué texto pintar, ambas pantallas usan texto FIJO de
+   *  marca (ver \`texts.finalTopHeading\`/\`finalAlternateHeading\`).
+   *
+   *  Corrección de bug reportado ("me sale siempre el Impresionante,
+   *  debería salir el con fallos"): el gate exigía ANTES \`node.alternateBody\`
+   *  no vacío además de la condición — un resto de cuando esta función
+   *  también decidía qué \`bodyHtml\` pre-renderizado usar (\`node.id\` vs
+   *  \`node.id + ':alternate'\`, ver \`ALTERNATE_BODY_KEY_SUFFIX\` en
+   *  \`htmlBundle.ts\`), antes de que las dos pantallas de Final pasaran a
+   *  texto fijo. \`alternateBody\` ya NO se pinta en ningún sitio del Player
+   *  — sigue existiendo en el dominio solo para el documento de
+   *  \`aiReviewExport.ts\` — así que exigirlo aquí bloqueaba la variante
+   *  alternativa en cualquier proyecto donde el diseñador configuró la
+   *  condición pero nunca escribió nada en "Contenido alternativo" del
+   *  Inspector (ya no hay motivo visible para hacerlo). El gate real es
+   *  solo la condición. */
+  function finalUsesAlternateContent(node, variables) {
+    return Boolean(node.alternateCondition) && evaluateCondition(variables, node.alternateCondition);
   }
 
   /** Traducción literal de \`Confetti\` (\`src/player/PlayerScreen.tsx\`,
@@ -1418,14 +1414,14 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
 
     if (view.kind === 'final') {
       scormReportCompletion(state.totalPoints);
-      var finalContent = resolveFinalContent(view.node, state.variables);
+      var usedAlternate = finalUsesAlternateContent(view.node, state.variables);
 
-      // Pantalla bespoke "con fallos" (\`finalContent.usedAlternate\`, petición
-      // de usuario "vamos a por la pantalla de con fallos"): se usa SOLO
-      // cuando se resolvió al contenido alternativo — el contenido por
-      // defecto ("Final TOP") tiene su propia pantalla bespoke hermana,
-      // \`buildFinalSuccessCard\`, más abajo.
-      if (finalContent.usedAlternate) {
+      // Pantalla bespoke "con fallos" (petición de usuario "vamos a por la
+      // pantalla de con fallos"): se usa SOLO cuando se resolvió al
+      // contenido alternativo — el contenido por defecto ("Final TOP")
+      // tiene su propia pantalla bespoke hermana, \`buildFinalSuccessCard\`,
+      // más abajo.
+      if (usedAlternate) {
         var altCard = buildFinalAlternateCard(state.totalPoints);
         if (view.node.celebrate === true) {
           altCard.appendChild(buildConfetti());

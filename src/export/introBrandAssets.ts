@@ -45,20 +45,21 @@ export function projectNeedsGameOverAssets(project: ProjectDocument): boolean {
 }
 
 /**
- * ¿Tiene `project` algún Final que pueda mostrar de verdad su contenido
- * ALTERNATIVO ("con fallos", ver `FinalNodeSchema.alternateCondition`/
- * `alternateBody`)? Mismo criterio que `resolveFinalContent`
- * (`src/player/runtime.ts`): hace falta la condición Y un cuerpo alternativo
- * con contenido — un Final con `alternateBody` vacío, o sin
- * `alternateCondition`, nunca activará `buildFinalAlternateCard`
- * (`exportedPlayerScript.ts`), así que no tiene sentido pagar por su
- * ilustración. Calculado UNA vez por cada hook de exportación y pasado en
+ * ¿Tiene `project` algún Final que pueda mostrar de verdad su pantalla
+ * ALTERNATIVA ("con fallos", ver `FinalNodeSchema.alternateCondition`)?
+ * Mismo criterio que `resolveFinalContent` (`src/player/runtime.ts`):
+ * hace falta la condición — un Final sin `alternateCondition` nunca activará
+ * `buildFinalAlternateCard` (`exportedPlayerScript.ts`), así que no tiene
+ * sentido pagar por su ilustración. Corrección de bug reportado ("me sale
+ * siempre el Impresionante"): antes exigía además `alternateBody` no vacío,
+ * un resto de cuando esa pantalla pintaba ese cuerpo real — ya no lo hace
+ * (texto FIJO de marca), así que ese campo dejó de ser parte del gate.
+ * Calculado UNA vez por cada hook de exportación y pasado en
  * `needs.finalAlternate` a `resolvePlayerIntroBrandAssets`.
  */
 export function projectNeedsFinalAlternateAssets(project: ProjectDocument): boolean {
   return project.graph.nodes.some(
-    (node): node is FinalNode =>
-      node.type === 'final' && Boolean(node.alternateCondition) && Boolean(node.alternateBody?.trim()),
+    (node): node is FinalNode => node.type === 'final' && Boolean(node.alternateCondition),
   )
 }
 

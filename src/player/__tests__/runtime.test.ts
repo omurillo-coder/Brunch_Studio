@@ -925,7 +925,12 @@ describe('runtime del Player: variante alternativa de un Final ("Final Ok"/"Fina
     }
   })
 
-  it('con la condición verdadera pero alternateBody vacío, no deja la vista en blanco: cae al cuerpo por defecto', () => {
+  // Corrección de bug reportado ("me sale siempre el Impresionante, debería
+  // salir el con fallos"): la variante alternativa usa texto FIJO de marca
+  // (`FinalAlternateCard`), no `alternateBody` — así que la condición por
+  // sí sola basta para activarla, sin exigir además un `alternateBody` no
+  // vacío (un resto de cuando esa pantalla sí pintaba ese cuerpo real).
+  it('con la condición verdadera y alternateBody vacío, SÍ activa la variante alternativa (el texto de esa pantalla es fijo, no depende de alternateBody)', () => {
     let { project, counter } = withTwoVariables()
     project = createNode(project, 'final', { x: 200, y: 0 }, { body: 'Cuerpo por defecto' })
     const finalId = project.graph.nodes.find((node) => node.type === 'final')!.id
@@ -938,7 +943,7 @@ describe('runtime del Player: variante alternativa de un Final ("Final Ok"/"Fina
     const view = getView(project, state)
     expect(view.kind).toBe('final')
     if (view.kind === 'final') {
-      expect(view.resolvedBody).toBe('Cuerpo por defecto')
+      expect(view.usedAlternate).toBe(true)
     }
   })
 

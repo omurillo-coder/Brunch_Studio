@@ -62,7 +62,11 @@ describe('projectNeedsFinalAlternateAssets', () => {
     expect(projectNeedsFinalAlternateAssets(project)).toBe(false)
   })
 
-  it('false si el Final tiene alternateCondition pero alternateBody vacío', () => {
+  // Corrección de bug reportado ("me sale siempre el Impresionante, debería
+  // salir el con fallos"): la pantalla "con fallos" usa texto FIJO de
+  // marca, no `alternateBody` — así que `alternateCondition` por sí solo
+  // basta para necesitar la ilustración, con o sin `alternateBody`.
+  it('true si el Final tiene alternateCondition, aunque alternateBody esté vacío', () => {
     let project = createProject('P')
     project = createNode(project, 'final', { x: 200, y: 0 })
     const finalId = project.graph.nodes.find((n) => n.type === 'final')?.id
@@ -72,7 +76,7 @@ describe('projectNeedsFinalAlternateAssets', () => {
       alternateCondition: { variableId: 'x', operator: '>', value: 0 },
       alternateBody: '',
     })
-    expect(projectNeedsFinalAlternateAssets(project)).toBe(false)
+    expect(projectNeedsFinalAlternateAssets(project)).toBe(true)
   })
 
   it('true si el Final tiene alternateCondition y alternateBody con contenido', () => {

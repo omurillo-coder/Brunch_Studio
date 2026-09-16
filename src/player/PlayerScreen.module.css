@@ -173,11 +173,14 @@
   gap: var(--bs-space-3);
 }
 
+/* Sin borde propio (petición de usuario: "las imágenes no ampliables...
+   sin marco") — el borde es la señal visual de "esto se puede ampliar", así
+   que vive en `.expandableImage` (el envoltorio `<button>`, más abajo), no
+   aquí: una imagen no ampliable no debe parecer clicable. */
 .media {
   max-width: 100%;
   max-height: 320px;
   border-radius: var(--bs-radius-md);
-  border: 1px solid var(--bs-color-border);
 }
 
 /* Tamaños de imagen (petición de usuario: "un desplegable... Pequeño/Normal/
@@ -200,12 +203,17 @@
 }
 
 /* Envoltorio `<button>` de una imagen ampliable (ver `PlayerImage` en
-   `PlayerScreen.tsx`): sin bordes/fondo/relleno propios para no alterar el
-   aspecto de la imagen que contiene, solo añade el cursor de "ampliar". */
+   `PlayerScreen.tsx`): sin fondo/relleno propios para no alterar el
+   aspecto de la imagen que contiene, solo añade el cursor de "ampliar" —
+   el borde SÍ es propio de aquí (petición de usuario: solo debe aparecer
+   cuando la imagen sea ampliable), mismo valor que tenía `.media` antes,
+   con el mismo `border-radius` para que encaje visualmente con la imagen
+   que envuelve. */
 .expandableImage {
   display: inline-block;
   padding: 0;
-  border: none;
+  border: 1px solid var(--bs-color-border);
+  border-radius: var(--bs-radius-md);
   background: none;
   cursor: zoom-in;
   line-height: 0;
@@ -633,19 +641,16 @@
    flex column, fluye normal por encima), sea cual sea la longitud del resto
    del contenido de arriba — `.introMeta` (ciclo/asignatura) va justo debajo,
    con su propio margen pequeño, no con `margin-top: auto` propio: solo hace
-   falta empujar al fondo al PRIMERO del grupo. `justify-content: flex-start`
-   (no `space-between`, como en un primer borrador): el botón queda pegado
-   al título, ambos alineados a la izquierda, en vez de empujado al borde
-   derecho de la tarjeta. `flex-wrap: wrap` es la salvaguarda para un
-   `caseName` largo en una tarjeta estrecha (móvil), donde el botón pasaría
-   a su propia línea en vez de solaparse con el título. */
+   falta empujar al fondo al PRIMERO del grupo. Columna, no fila (petición
+   de usuario: el botón "Continuar" debe caer SIEMPRE en su propia línea,
+   debajo del título — no al final del título cuando cabía en la misma
+   fila, que es lo que hacía la fila con `flex-wrap: wrap` de antes). */
 .introFooter {
   margin-top: auto;
   display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 16px;
-  flex-wrap: wrap;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
 }
 
 .introCaseTitle {

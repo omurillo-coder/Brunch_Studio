@@ -273,23 +273,30 @@ function orderResponses(
 }
 
 /**
- * Milestone "+1 fallo con Game Over": resuelve qué `body` debe pintarse
- * para un nodo `final` (ver el comentario de `PlayerView`, rama `'final'`,
- * campo `resolvedBody`). `usedAlternate` se había quitado de aquí (cuando
- * solo hacía falta para `celebrate`, que dejó de depender de esto), y se
- * reintroduce ahora que además decide qué DISEÑO usar (`FinalAlternateCard`
- * para "con fallos" vs el genérico para el contenido por defecto).
+ * Milestone "+1 fallo con Game Over": resuelve qué DISEÑO usar para un nodo
+ * `final` — `FinalAlternateCard` ("con fallos") vs `FinalSuccessCard`
+ * ("Final TOP", contenido por defecto) — ver el comentario de `PlayerView`,
+ * rama `'final'`, campo `usedAlternate`.
+ *
+ * Corrección de bug reportado ("me sale siempre el Impresionante, debería
+ * salir el con fallos"): el gate exigía ANTES `alternateBody?.trim()` no
+ * vacío además de la condición — un resto de cuando `FinalAlternateCard`
+ * pintaba ese cuerpo real. Desde que las dos pantallas usan texto FIJO de
+ * marca (ver `FINAL_ALTERNATE_HEADING`/`FINAL_TOP_HEADING` en
+ * `playerIntroTexts.ts`), `alternateBody` ya NO se pinta en ningún sitio del
+ * Player — sigue existiendo en el dominio solo para el documento de
+ * `aiReviewExport.ts` — así que exigirlo aquí bloqueaba la variante
+ * alternativa en cualquier proyecto donde el diseñador configuró la
+ * condición pero nunca escribió nada en "Contenido alternativo" del
+ * Inspector (ya no hay motivo visible para hacerlo). El gate real es solo
+ * la condición.
  */
 function resolveFinalContent(
   node: FinalNode,
   variables: VariableState,
 ): { body: string; usedAlternate: boolean } {
-  if (
-    node.alternateCondition &&
-    node.alternateBody?.trim() &&
-    evaluateCondition(variables, node.alternateCondition)
-  ) {
-    return { body: node.alternateBody, usedAlternate: true }
+  if (node.alternateCondition && evaluateCondition(variables, node.alternateCondition)) {
+    return { body: node.alternateBody ?? '', usedAlternate: true }
   }
   return { body: node.body, usedAlternate: false }
 }
