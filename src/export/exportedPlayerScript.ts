@@ -1421,10 +1421,10 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
       var finalContent = resolveFinalContent(view.node, state.variables);
 
       // Pantalla bespoke "con fallos" (\`finalContent.usedAlternate\`, petición
-      // de usuario "vamos a por la pantalla de con fallos"): sustituye el
-      // layout genérico de más abajo SOLO cuando se resolvió al contenido
-      // alternativo — el contenido por defecto ("Perfecto") sigue con el
-      // genérico hasta que se rediseñe también (fuera de este alcance).
+      // de usuario "vamos a por la pantalla de con fallos"): se usa SOLO
+      // cuando se resolvió al contenido alternativo — el contenido por
+      // defecto ("Final TOP") tiene su propia pantalla bespoke hermana,
+      // \`buildFinalSuccessCard\`, más abajo.
       if (finalContent.usedAlternate) {
         var altCard = buildFinalAlternateCard(state.totalPoints);
         if (view.node.celebrate === true) {
