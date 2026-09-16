@@ -1,5 +1,6 @@
 import type { ProjectDocument } from '../domain'
 import type { ProjectRepository } from '../persistence'
+import { recordRecentProject } from './recentProjects'
 
 /**
  * Extrae el nombre "legible" de una ruta `.brunch`: el nombre de archivo sin
@@ -35,22 +36,36 @@ export function projectNameFromFilePath(path: string): string {
  * autoguardado (ya existente) persiste este nombre corregido sin necesitar
  * ningún código de migración adicional.
  *
- * Punto único compartido por los dos flujos que abren un `.brunch` ya
- * existente: "Abrir proyecto" (`HomeScreen.tsx`) y el arranque con una ruta
- * inicial recibida de Finder/Explorador (`App.tsx`). El flujo de "Nuevo
- * proyecto" no pasa por aquí — ese ya fija `metadata.name` correctamente a
- * partir de lo que escribe el usuario y no debe cambiar.
+ * Punto único compartido por los TRES flujos que abren un `.brunch` ya
+ * existente: "Abrir proyecto" y "Recientes" (`HomeScreen.tsx`) y el arranque
+ * con una ruta inicial recibida de Finder/Explorador (`App.tsx`). El flujo
+ * de "Nuevo proyecto" no pasa por aquí — ese ya fija `metadata.name`
+ * correctamente a partir de lo que escribe el usuario y no debe cambiar (sí
+ * registra su propia entrada en "Recientes", pero directamente — ver
+ * `saveAndOpenProject` en `HomeScreen.tsx`).
+ *
+ * También registra `path`/el nombre ya sincronizado en "Recientes"
+ * (`recordRecentProject`, ver `src/app/recentProjects.ts`) — corrección de
+ * revisión de código: antes cada uno de los tres llamantes repetía su propia
+ * llamada a `recordRecentProject` justo después de esperar a esta función,
+ * así que un futuro CUARTO flujo de apertura (arrastrar un `.brunch`, un
+ * deep link) podía reutilizar `openExistingProject` con total normalidad y
+ * aun así olvidarse de registrar la entrada en "Recientes", sin ningún error
+ * visible. Vive aquí, en el único punto que YA sabe que la apertura fue de
+ * verdad un éxito y ya tiene el nombre sincronizado que hace falta.
  */
 export async function openExistingProject(
   repository: ProjectRepository,
   path: string,
 ): Promise<ProjectDocument> {
   const document = await repository.openProject(path)
+  const name = projectNameFromFilePath(path)
+  recordRecentProject(path, name)
   return {
     ...document,
     metadata: {
       ...document.metadata,
-      name: projectNameFromFilePath(path),
+      name,
     },
   }
 }

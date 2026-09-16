@@ -51,11 +51,16 @@
 }
 
 .primaryButton,
+.secondaryButton,
+.recentItem {
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.primaryButton,
 .secondaryButton {
   padding: var(--bs-space-3);
   border-radius: var(--bs-radius-md);
   font-size: var(--bs-font-size-md);
-  transition: background-color 0.15s ease, border-color 0.15s ease;
 }
 
 .primaryButton {
@@ -83,6 +88,57 @@
 button:disabled {
   opacity: 0.6;
   cursor: default;
+}
+
+.recent {
+  display: flex;
+  flex-direction: column;
+  gap: var(--bs-space-2);
+  margin-top: var(--bs-space-4);
+}
+
+.recentList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--bs-space-1);
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.recentItem {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  padding: var(--bs-space-2);
+  border: 1px solid transparent;
+  border-radius: var(--bs-radius-sm);
+  background: none;
+  text-align: left;
+}
+
+.recentItem:hover:not(:disabled) {
+  background: var(--bs-color-bg);
+  border-color: var(--bs-color-border);
+}
+
+.recentItemName,
+.recentItemPath {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recentItemName {
+  font-size: var(--bs-font-size-sm);
+  color: var(--bs-color-text);
+}
+
+.recentItemPath {
+  font-size: var(--bs-font-size-xs);
+  color: var(--bs-color-text-faint);
 }
 
 .namingForm {

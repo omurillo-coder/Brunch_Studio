@@ -6,6 +6,12 @@ import { convertTweeToProject } from '../../import/twee'
 import { useAppServices } from '../../app/AppServicesContext'
 import { openExistingProject } from '../../app/openExistingProject'
 import { showAlreadyOpenElsewhereWarningIfApplicable } from '../../app/alreadyOpenElsewhereWarning'
+import {
+  loadRecentProjects,
+  recordRecentProject,
+  removeRecentProject,
+} from '../../app/recentProjects'
+import type { RecentProjectEntry } from '../../app/recentProjects'
 import { useProjectStore } from '../../store'
 import logo from '../../assets/logo.png'
 import styles from './HomeScreen.module.css'
@@ -61,6 +67,13 @@ export function HomeScreen({ onProjectOpened, initialError }: HomeScreenProps) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [pendingTwee, setPendingTwee] = useState<PendingTweeImport | null>(null)
+  // Leído UNA vez al montar (valor inicial de `useState`, no en cada
+  // render): "Recientes" no necesita reaccionar a cambios de otra pestaña/
+  // ventana mientras esta pantalla está montada, y esta pantalla se
+  // desmonta/remonta entera al volver aquí desde el editor (`App.tsx`
+  // cambia `openProjectPath` a `null`), así que sí se refresca en cuanto
+  // vuelve a verse.
+  const [recentProjects, setRecentProjects] = useState<RecentProjectEntry[]>(loadRecentProjects)
 
   // `initialError` llega, si llega, un instante después del primer render
   // (viene de un intento de apertura asíncrono en `AppShell`, ver
@@ -77,28 +90,19 @@ export function HomeScreen({ onProjectOpened, initialError }: HomeScreenProps) {
     if (initialError) setError(initialError)
   }, [initialError])
 
+  /** Corrección de revisión de código: antes duplicaba línea a línea el
+   *  cuerpo de `saveAndOpenProject` (elegir ruta, crear, cargar, registrar
+   *  en "Recientes", navegar), solo con el nombre calculado a mano en vez de
+   *  leído de `document.metadata.name` — el mismo valor, ya que
+   *  `getProjectTemplate(...).build(name)` lo fija a partir de ese mismo
+   *  `name`. Construye el documento y delega el resto ahí. */
   async function handleCreate(event: FormEvent) {
     event.preventDefault()
     setError(null)
     setBusy(true)
-    try {
-      const name = projectName.trim() || 'Sin título'
-      const path = await pickSaveProjectPath(name)
-      if (!path) {
-        // Cancelado por el usuario: sin error visible, se mantiene el formulario.
-        setBusy(false)
-        return
-      }
-      const document = getProjectTemplate(templateId).build(name)
-      await repository.createProject(path, document)
-      loadProject(document)
-      onProjectOpened(path)
-    } catch {
-      setError(
-        'No se ha podido crear el proyecto en la ubicación elegida. Prueba con otro nombre de archivo o otra carpeta.',
-      )
-      setBusy(false)
-    }
+    const name = projectName.trim() || 'Sin título'
+    const document = getProjectTemplate(templateId).build(name)
+    await saveAndOpenProject(document)
   }
 
   async function handleOpen() {
@@ -126,6 +130,39 @@ export function HomeScreen({ onProjectOpened, initialError }: HomeScreenProps) {
     }
   }
 
+  /** Abre directamente `entry.path` (ver "Recientes" más abajo), sin pasar
+   *  por el diálogo nativo "Abrir proyecto" — mismo flujo que `handleOpen`
+   *  a partir de tener ya la ruta. Al éxito, `entry` "sube" al principio del
+   *  estado local `recentProjects` (mismo orden en el que
+   *  `openExistingProject` ya la reordenó en `localStorage`) — sin este
+   *  ajuste, la lista visible se quedaría con el orden antiguo si esta
+   *  pantalla siguiera montada tras la apertura. Si falla (el archivo se
+   *  movió/borró fuera de la app desde que se abrió por última vez, o
+   *  cualquier otro motivo), además de avisar se quita esa entrada de la
+   *  lista: no tiene sentido dejar un atajo que nunca va a funcionar. */
+  async function handleOpenRecent(entry: RecentProjectEntry) {
+    setError(null)
+    setBusy(true)
+    try {
+      const document = await openExistingProject(repository, entry.path)
+      loadProject(document)
+      setRecentProjects((current) => [
+        { ...entry, name: document.metadata.name, lastOpenedAt: new Date().toISOString() },
+        ...current.filter((candidate) => candidate.path !== entry.path),
+      ])
+      onProjectOpened(entry.path)
+    } catch (error) {
+      if (!(await showAlreadyOpenElsewhereWarningIfApplicable(error))) {
+        setError(
+          `No se ha podido abrir "${entry.name}". Puede que el archivo se haya movido o eliminado.`,
+        )
+        removeRecentProject(entry.path)
+        setRecentProjects((current) => current.filter((candidate) => candidate.path !== entry.path))
+      }
+      setBusy(false)
+    }
+  }
+
   /** Guarda en disco el `ProjectDocument` ya construido (por el flujo normal
    *  de "Nuevo proyecto" o por la importación de un `.twee`) y navega al
    *  editor. Cancelar el diálogo de guardado no muestra error: se mantiene
@@ -139,6 +176,7 @@ export function HomeScreen({ onProjectOpened, initialError }: HomeScreenProps) {
       }
       await repository.createProject(path, document)
       loadProject(document)
+      recordRecentProject(path, document.metadata.name)
       onProjectOpened(path)
     } catch {
       setError(
@@ -225,6 +263,33 @@ export function HomeScreen({ onProjectOpened, initialError }: HomeScreenProps) {
             >
               Importar .twee
             </button>
+          </div>
+        )}
+
+        {/* "Recientes" (petición de usuario): solo se muestra con al menos
+            una entrada — una sección "Recientes" vacía en la primera
+            apertura de la app no aporta nada, solo ruido. Cada entrada abre
+            directamente esa ruta (`handleOpenRecent`), sin pasar por el
+            diálogo nativo "Abrir proyecto". */}
+        {mode === 'idle' && recentProjects.length > 0 && (
+          <div className={styles.recent}>
+            <span className={styles.label}>Recientes</span>
+            <ul className={styles.recentList}>
+              {recentProjects.map((entry) => (
+                <li key={entry.path}>
+                  <button
+                    type="button"
+                    className={styles.recentItem}
+                    onClick={() => handleOpenRecent(entry)}
+                    disabled={busy}
+                    title={entry.path}
+                  >
+                    <span className={styles.recentItemName}>{entry.name}</span>
+                    <span className={styles.recentItemPath}>{entry.path}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
           </div>
         )}
 

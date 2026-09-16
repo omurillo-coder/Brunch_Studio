@@ -5,6 +5,7 @@ import { MemoryProjectRepository, PersistenceCommandError } from '../persistence
 import type { ProjectRepository } from '../persistence'
 import { createProject } from '../domain'
 import { resetProjectStore } from '../store/testHelpers'
+import { loadRecentProjects } from '../app/recentProjects'
 
 const messageMock = vi.fn()
 vi.mock('@tauri-apps/plugin-dialog', () => ({
@@ -42,6 +43,9 @@ vi.mock('@tauri-apps/api/event', () => ({
 beforeEach(() => {
   resetProjectStore()
   menuEventListeners.clear()
+  // "Recientes" (`recentProjects.ts`) persiste en `localStorage` real de
+  // jsdom entre tests de este archivo.
+  window.localStorage.clear()
 })
 
 afterEach(() => {
@@ -140,6 +144,13 @@ describe('App: navegación HomeScreen -> EditorScreen', () => {
     expect(screen.queryByText('Proyecto abierto desde el sistema')).not.toBeInTheDocument()
     // Nunca llegó a pasar por HomeScreen.
     expect(screen.queryByText('Nuevo proyecto')).not.toBeInTheDocument()
+    // Aun así queda registrado en "Recientes" (mismo punto único que "Abrir
+    // proyecto" en HomeScreen, ver comentario de `openExistingProject`): la
+    // próxima vez que se cierre este proyecto y se vuelva a HomeScreen (o se
+    // abra otra ventana), aparecerá en la lista.
+    const recent = loadRecentProjects()
+    expect(recent).toHaveLength(1)
+    expect(recent[0]).toMatchObject({ path: '/tmp/desde-finder.brunch', name: 'desde-finder' })
   })
 
   it('con una ruta inicial que no se puede abrir, se queda en HomeScreen mostrando el mismo error que "Abrir proyecto"', async () => {

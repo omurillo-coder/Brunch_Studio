@@ -12,6 +12,7 @@ import type { ProjectRepository } from '../../../persistence'
 import { createProject } from '../../../domain'
 import { useProjectStore } from '../../../store'
 import { resetProjectStore } from '../../../store/testHelpers'
+import { loadRecentProjects, recordRecentProject } from '../../../app/recentProjects'
 
 const messageMock = vi.fn()
 vi.mock('@tauri-apps/plugin-dialog', () => ({
@@ -20,6 +21,10 @@ vi.mock('@tauri-apps/plugin-dialog', () => ({
 
 beforeEach(() => {
   resetProjectStore()
+  // "Recientes" (`recentProjects.ts`) persiste en `localStorage` real de
+  // jsdom entre tests de este archivo — sin limpiarlo, un test contaminaría
+  // la lista que ve el siguiente.
+  window.localStorage.clear()
 })
 
 afterEach(() => {
@@ -302,6 +307,99 @@ describe('HomeScreen', () => {
       const alert = await screen.findByRole('alert')
       expect(alert.textContent).not.toMatch(/error|stack|undefined|NaN|\[object/i)
       expect(onProjectOpened).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('Recientes', () => {
+    it('sin proyectos recientes guardados, no muestra la sección "Recientes"', () => {
+      const repository = new MemoryProjectRepository()
+      renderHomeScreen({ repository })
+
+      expect(screen.queryByText('Recientes')).not.toBeInTheDocument()
+    })
+
+    it('"Nuevo proyecto" registra el archivo creado en recientes', async () => {
+      const repository = new MemoryProjectRepository()
+      const pickSaveProjectPath = vi.fn().mockResolvedValue('/tmp/nuevo.brunch')
+      const onProjectOpened = renderHomeScreen({ repository, pickSaveProjectPath })
+
+      fireEvent.click(screen.getByText('Nuevo proyecto'))
+      fireEvent.change(screen.getByLabelText('Nombre del proyecto'), {
+        target: { value: 'Mi escenario' },
+      })
+      fireEvent.click(screen.getByText('Crear'))
+
+      await vi.waitFor(() => expect(onProjectOpened).toHaveBeenCalled())
+      const entries = loadRecentProjects()
+      expect(entries).toHaveLength(1)
+      expect(entries[0]).toMatchObject({ path: '/tmp/nuevo.brunch', name: 'Mi escenario' })
+    })
+
+    it('"Abrir proyecto" registra el archivo abierto en recientes', async () => {
+      const repository = new MemoryProjectRepository()
+      const existing = createProject('Proyecto existente')
+      await repository.createProject('/tmp/existente.brunch', existing)
+      const pickOpenProjectPath = vi.fn().mockResolvedValue('/tmp/existente.brunch')
+      const onProjectOpened = renderHomeScreen({ repository, pickOpenProjectPath })
+
+      fireEvent.click(screen.getByText('Abrir proyecto'))
+
+      await vi.waitFor(() => expect(onProjectOpened).toHaveBeenCalled())
+      const entries = loadRecentProjects()
+      expect(entries).toHaveLength(1)
+      // El nombre registrado es el sincronizado con el archivo real
+      // ("existente"), no el guardado en el documento — mismo criterio que
+      // `openExistingProject`.
+      expect(entries[0]).toMatchObject({ path: '/tmp/existente.brunch', name: 'existente' })
+    })
+
+    it('con proyectos recientes ya guardados, los muestra y un clic reabre esa ruta directamente, sin pasar por el diálogo nativo', async () => {
+      const repository = new MemoryProjectRepository()
+      const existing = createProject('Proyecto reciente')
+      await repository.createProject('/tmp/reciente.brunch', existing)
+      recordRecentProject('/tmp/reciente.brunch', 'Proyecto reciente')
+      const pickOpenProjectPath = vi.fn()
+      const onProjectOpened = renderHomeScreen({ repository, pickOpenProjectPath })
+
+      expect(screen.getByText('Recientes')).toBeInTheDocument()
+      fireEvent.click(screen.getByText('Proyecto reciente'))
+
+      await vi.waitFor(() => expect(onProjectOpened).toHaveBeenCalledWith('/tmp/reciente.brunch'))
+      expect(pickOpenProjectPath).not.toHaveBeenCalled()
+    })
+
+    it('reabrir un reciente cuyo archivo ya no existe muestra un error comprensible y lo quita de la lista', async () => {
+      const repository = new MemoryProjectRepository() // sin createProject: openProject rechaza
+      recordRecentProject('/tmp/borrado.brunch', 'Proyecto borrado')
+      const onProjectOpened = renderHomeScreen({ repository })
+
+      fireEvent.click(screen.getByText('Proyecto borrado'))
+
+      const alert = await screen.findByRole('alert')
+      expect(alert.textContent).toMatch(/movido o eliminado/i)
+      expect(onProjectOpened).not.toHaveBeenCalled()
+      expect(loadRecentProjects()).toHaveLength(0)
+      expect(screen.queryByText('Recientes')).not.toBeInTheDocument()
+    })
+
+    it('reabrir un reciente ya abierto en otra ventana muestra el aviso nativo, sin el error genérico, y lo conserva en la lista', async () => {
+      messageMock.mockResolvedValue(undefined)
+      const repository: ProjectRepository = {
+        createProject: vi.fn(),
+        openProject: vi
+          .fn()
+          .mockRejectedValue(new PersistenceCommandError('AlreadyOpenElsewhere', '/tmp/ya-abierto.brunch')),
+        saveProject: vi.fn(),
+      }
+      recordRecentProject('/tmp/ya-abierto.brunch', 'Ya abierto')
+      const onProjectOpened = renderHomeScreen({ repository })
+
+      fireEvent.click(screen.getByText('Ya abierto'))
+
+      await vi.waitFor(() => expect(messageMock).toHaveBeenCalledTimes(1))
+      expect(onProjectOpened).not.toHaveBeenCalled()
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      expect(loadRecentProjects()).toHaveLength(1)
     })
   })
 })
