@@ -1543,9 +1543,11 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
   }
 
   /** "Diapositiva {número}" (palabra completa, nunca la abreviatura "D{número}"
-   *  del editor) — prominente, en la parte de arriba de la tarjeta, antes del
-   *  propio contenido. La referencia que el profesor usa en su hoja de
-   *  validación externa. */
+   *  del editor) — la referencia que el profesor usa en su hoja de
+   *  validación externa. Petición de usuario: discreto, al pie de la
+   *  tarjeta, en pequeño — NO debe leerse como el título ni como lo más
+   *  importante de la pantalla (antes iba arriba, grande y en el color de
+   *  acento; ver \`render()\` para dónde se inserta ahora). */
   function buildReviewSlideLabel(number) {
     var label = el('p', 'reviewSlideLabel');
     label.textContent = 'Diapositiva ' + number;
@@ -1718,7 +1720,20 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
 
     var card = buildCard(view);
     if (reviewMode && view.node) {
-      card.insertBefore(buildReviewSlideLabel(view.node.number), card.firstChild);
+      // Al pie de la columna de texto, no de la tarjeta entera (petición de
+      // usuario: discreto, en pequeño) — en \`.introCard\`/\`.finalSuccessCard\`/
+      // \`.finalAlternateCard\` esa columna (\`.introContent\`/
+      // \`.finalSuccessContent\`/\`.finalAlternateContent\`) NO ocupa todo el
+      // ancho de la tarjeta (la ilustración cubre el resto, posicionada
+      // ABSOLUTA por encima en el orden de apilamiento); añadirlo directo a
+      // \`card\` en esas tarjetas lo dejaría parcialmente tapado por la
+      // ilustración. En el resto de tarjetas (\`.card\`, \`.gameOverCard\`, sin
+      // ninguna columna de texto aparte) \`card\` mismo es el único candidato,
+      // y añadirlo al final simplemente lo deja debajo de las opciones/
+      // botones, en flujo normal.
+      var reviewAnchor =
+        card.querySelector('.introContent, .finalSuccessContent, .finalAlternateContent') || card;
+      reviewAnchor.appendChild(buildReviewSlideLabel(view.node.number));
     }
     root.appendChild(card);
 

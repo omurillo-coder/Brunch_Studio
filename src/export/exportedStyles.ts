@@ -1169,27 +1169,31 @@ button:focus-visible {
    estas clases.
    --------------------------------------------------------------------- */
 
-/* "Diapositiva {número}", grande y bien visible, antes del propio
-   contenido de la tarjeta — la referencia que el profesor usa en su hoja
-   de validación externa. \`position: relative\` + \`z-index: 1\` (sin mover
-   nada) es necesario ÚNICAMENTE para la portada (\`.introCard\`): al
-   insertarse como su primer hijo (\`card.insertBefore\`, ver \`render()\` en
-   \`exportedPlayerScript.ts\`) queda HERMANO de \`.introIllustration\`
-   (\`position: absolute; z-index: 0\`), que sin este empate de "estar
-   posicionado" pintaría por encima de esta etiqueta (estática) aunque vaya
-   antes en el DOM — las reglas de contexto de apilamiento pintan los
-   elementos posicionados por encima de los estáticos, sea cual sea su
-   orden. En el resto de tarjetas (\`.card\`, sin ninguna capa posicionada
-   dentro) esta regla no cambia nada visualmente. */
+/* "Diapositiva {número}", discreta y al pie de la tarjeta (petición de
+   usuario: NO debe parecer el título ni lo más importante de la pantalla
+   — antes iba arriba, grande, en negrita y en el color de acento) — la
+   referencia que el profesor usa en su hoja de validación externa.
+   \`render()\` en \`exportedPlayerScript.ts\` la añade dentro de la MISMA
+   columna de texto que el resto del contenido (\`.introContent\`/
+   \`.finalSuccessContent\`/\`.finalAlternateContent\` cuando existe, si no
+   \`card\` mismo), nunca como hermana suelta de una ilustración posicionada
+   — así que no hace falta ningún ajuste de \`z-index\`/apilamiento aquí,
+   a diferencia de la versión anterior. */
 .reviewSlideLabel {
-  position: relative;
-  z-index: 1;
   margin: 0;
-  font-size: 22px;
-  font-weight: 700;
-  color: var(--bs-color-accent);
-  text-transform: uppercase;
-  letter-spacing: 0.02em;
+  font-size: 11px;
+  color: var(--bs-color-text-faint);
+}
+
+/* Mismo texto, pero DENTRO de una tarjeta de colores FIJOS (no se adapta al
+   tema claro/oscuro — igual criterio que \`.introMetaLine\`/\`.finalSuccessPoints\`):
+   \`var(--bs-color-text-faint)\` cambia con el tema y perdería contraste
+   sobre el fondo blanco fijo de estas tarjetas. */
+.introContent .reviewSlideLabel,
+.finalSuccessContent .reviewSlideLabel,
+.finalAlternateContent .reviewSlideLabel,
+.gameOverCard .reviewSlideLabel {
+  color: #8a8a8a;
 }
 
 /* Indicador de progreso persistente (esquina superior derecha) + lista de
