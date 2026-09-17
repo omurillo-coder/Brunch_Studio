@@ -145,6 +145,15 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
   var reviewMode = !!bundle.reviewMode;
   var teacherReview = bundle.teacherReview || null;
 
+  // En escritorio, \`ensureReviewIndicator\`/CSS reservan una franja fija a la
+  // derecha para el índice de cobertura SIEMPRE visible (petición de
+  // usuario, ver más abajo) — la propia tarjeta necesita saber que debe
+  // dejar hueco, y solo el modo revisión lo necesita, así que se marca aquí
+  // con una clase en \`body\` en vez de reservar ese hueco siempre.
+  if (reviewMode) {
+    document.body.classList.add('reviewModeActive');
+  }
+
   // -------------------------------------------------------------------------
   // SCORM 2004 4ª edición (no-op silencioso fuera de un LMS; ver cabecera
   // del archivo)
@@ -1637,10 +1646,18 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
   var reviewIndicator = null;
   var reviewPanelOpen = false;
 
-  /** Indicador de progreso persistente (esquina superior derecha, siempre
-   *  visible) + lista de cobertura desplegable. Vive fuera de \`root\` (que
-   *  \`render\` vacía en cada pintado) para no reconstruirse entera cada vez;
-   *  solo su CONTENIDO se actualiza, ver \`updateReviewIndicator\`. */
+  /** Índice de diapositivas revisadas/sin revisar, fijo en el lateral
+   *  derecho. Petición de usuario: antes era un botón con el porcentaje que
+   *  había que pulsar para desplegar la lista — ahora la lista sale "de por
+   *  sí" a la derecha, sin tener que abrir nada ni interpretar un número de
+   *  progreso para saber qué falta. \`.reviewPanel\` está SIEMPRE visible por
+   *  CSS en pantallas anchas (ver \`exportedStyles.ts\`); por debajo de 640px
+   *  no cabe una franja fija permanente sin tapar el contenido, así que ahí
+   *  se conserva el comportamiento desplegable de siempre, controlado por la
+   *  clase \`reviewPanelOpen\` que alterna \`updateReviewIndicator\` — el botón
+   *  sigue existiendo para ese caso. Vive fuera de \`root\` (que \`render\`
+   *  vacía en cada pintado) para no reconstruirse entera cada vez; solo su
+   *  CONTENIDO se actualiza, ver \`updateReviewIndicator\`. */
   function ensureReviewIndicator() {
     if (reviewIndicator) {
       return reviewIndicator;
@@ -1684,7 +1701,11 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
     var indicator = ensureReviewIndicator();
     var percent = reviewPercent();
     indicator.button.textContent = percent + '% revisado';
-    indicator.panel.style.display = reviewPanelOpen ? 'flex' : 'none';
+    // La clase, no un \`style.display\` inline: en escritorio el CSS de
+    // \`.reviewPanel\` la deja siempre visible pase lo que pase aquí; esta
+    // clase solo tiene efecto dentro del \`@media (max-width: 640px)\` de
+    // \`exportedStyles.ts\`, ver el comentario de \`ensureReviewIndicator\`.
+    indicator.wrapper.classList.toggle('reviewPanelOpen', reviewPanelOpen);
 
     indicator.panel.textContent = '';
     for (var i = 0; i < allNodesByNumber.length; i += 1) {

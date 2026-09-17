@@ -188,6 +188,11 @@ function coveragePanelItems(): HTMLButtonElement[] {
 
 beforeEach(() => {
   document.body.innerHTML = ''
+  // `innerHTML = ''` solo vacía los hijos: la clase `reviewModeActive` que
+  // `exportedPlayerScript.ts` añade a `body` (nunca la quita, no hace
+  // falta dentro de una única carga de página real) sobreviviría entre
+  // tests de este mismo archivo sin este reseteo explícito.
+  document.body.className = ''
   window.localStorage.clear()
 })
 
@@ -236,6 +241,7 @@ describe('buildTeacherReviewBundle — contenido del bundle', () => {
     runExportedBundle(html)
     expect(document.querySelector('.reviewSlideLabel')).toBeNull()
     expect(document.querySelector('.reviewIndicator')).toBeNull()
+    expect(document.body.classList.contains('reviewModeActive')).toBe(false)
   })
 })
 
@@ -295,12 +301,26 @@ describe('buildHtmlBundle con opciones de revisión — comportamiento en jsdom'
     expect(indicatorButton().textContent).toBe('80% revisado')
   })
 
+  it('la lista de cobertura está visible sin tener que pulsar nada (petición de usuario: sale "de por sí" a la derecha)', () => {
+    runExportedBundle(buildReviewHtml(METADATA_ID_A))
+
+    // `body` lleva la clase que le reserva sitio a la franja fija de
+    // `exportedStyles.ts` — sin ella la tarjeta quedaría detrás.
+    expect(document.body.classList.contains('reviewModeActive')).toBe(true)
+
+    // Sin pulsar el botón del indicador, los ítems ya están en el documento
+    // (a diferencia del comportamiento anterior, que exigía desplegar la
+    // lista primero).
+    expect(coveragePanelItems().length).toBeGreaterThan(0)
+    expect(document.querySelector('.reviewIndicator.reviewPanelOpen')).toBeNull()
+  })
+
   it('saltar desde la lista de cobertura a una diapositiva no visitada lleva ahí y la marca como visitada', () => {
     runExportedBundle(buildReviewHtml(METADATA_ID_A))
     clickButtonWithText('Continuar', currentCard()) // Diapositiva 1
 
-    // Abre la lista de cobertura.
-    indicatorButton().click()
+    // Ya no hace falta desplegar la lista de cobertura: sale visible "de
+    // por sí" en el lateral derecho.
     const items = coveragePanelItems()
     expect(items.map((item) => item.textContent)).toEqual([
       '✓ Diapositiva 1',
@@ -332,8 +352,8 @@ describe('buildHtmlBundle con opciones de revisión — comportamiento en jsdom'
       'flex',
     )
 
-    // Salta a la última diapositiva que falta desde la lista de cobertura.
-    indicatorButton().click()
+    // Salta a la última diapositiva que falta desde la lista de cobertura,
+    // visible sin pulsar el botón del indicador.
     clickButtonWithText('Diapositiva 5')
 
     expect(indicatorButton().textContent).toBe('100% revisado')

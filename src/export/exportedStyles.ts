@@ -1203,42 +1203,49 @@ button:focus-visible {
   color: #8a8a8a;
 }
 
-/* Indicador de progreso persistente (esquina superior derecha) + lista de
-   cobertura desplegable. */
+/* Índice de diapositivas revisadas/sin revisar, SIEMPRE visible en el
+   lateral derecho (petición de usuario: antes era un botón con el
+   porcentaje que había que pulsar para desplegar la lista — nada de eso
+   ahora, la lista sale "de por sí", sin tener que consultar el número de
+   progreso). Franja fija de borde a borde vertical; \`body.reviewModeActive
+   .stage\` (más abajo) le reserva el hueco para que ninguna tarjeta quede
+   parcialmente tapada detrás. Por debajo de 640px (mismo corte que el
+   resto de la hoja) no cabe una franja fija permanente sin tapar el
+   contenido, así que el media query del final recupera el comportamiento
+   desplegable de siempre. */
 .reviewIndicator {
   position: fixed;
-  top: var(--bs-space-4);
-  right: var(--bs-space-4);
+  top: 0;
+  right: 0;
+  bottom: 0;
   z-index: 1000;
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
-  gap: var(--bs-space-2);
+  width: 280px;
+  border-left: 1px solid var(--bs-color-border);
+  background: var(--bs-color-surface);
+  box-shadow: var(--bs-shadow-sm);
 }
 
 .reviewIndicatorButton {
-  padding: var(--bs-space-2) var(--bs-space-4);
-  border: 1px solid var(--bs-color-border);
-  border-radius: 999px;
-  background: var(--bs-color-surface);
+  flex: none;
+  padding: var(--bs-space-3) var(--bs-space-4);
+  border: none;
+  border-bottom: 1px solid var(--bs-color-border);
+  background: transparent;
   color: var(--bs-color-text);
   font-size: var(--bs-font-size-sm);
   font-weight: 600;
-  box-shadow: var(--bs-shadow-sm);
+  text-align: left;
 }
 
 .reviewPanel {
-  display: none;
+  display: flex;
   flex-direction: column;
   gap: var(--bs-space-1);
-  width: 240px;
-  max-height: 320px;
+  flex: 1;
   overflow-y: auto;
   padding: var(--bs-space-2);
-  border: 1px solid var(--bs-color-border);
-  border-radius: var(--bs-radius-md);
-  background: var(--bs-color-surface);
-  box-shadow: var(--bs-shadow-sm);
 }
 
 .reviewPanelItem {
@@ -1260,6 +1267,51 @@ button:focus-visible {
 .reviewPanelItemVisited {
   color: var(--bs-color-text-muted);
   font-weight: 600;
+}
+
+/* Reserva el hueco de \`.reviewIndicator\` (ver arriba) para que ninguna
+   tarjeta quede parcialmente tapada detrás — \`document.body\` solo lleva
+   esta clase cuando \`reviewMode\` está activo, ver
+   \`exportedPlayerScript.ts\`. */
+body.reviewModeActive .stage {
+  padding-right: calc(280px + var(--bs-space-6));
+}
+
+@media (max-width: 640px) {
+  /* Sin sitio para una franja fija permanente en pantallas estrechas:
+     vuelve a ser un panel flotante que se despliega desde el botón, como
+     antes de esta petición — ver \`reviewPanelOpen\` en
+     \`exportedPlayerScript.ts\`. */
+  .reviewIndicator {
+    top: var(--bs-space-4);
+    right: var(--bs-space-4);
+    bottom: auto;
+    left: auto;
+    width: auto;
+    max-width: calc(100vw - (var(--bs-space-4) * 2));
+    max-height: calc(100vh - (var(--bs-space-4) * 2));
+    border-left: 1px solid var(--bs-color-border);
+    border-radius: var(--bs-radius-md);
+  }
+
+  .reviewIndicatorButton {
+    border-bottom: none;
+    border-radius: var(--bs-radius-md);
+  }
+
+  .reviewPanel {
+    display: none;
+    width: 240px;
+    max-height: 320px;
+  }
+
+  .reviewIndicator.reviewPanelOpen .reviewPanel {
+    display: flex;
+  }
+
+  body.reviewModeActive .stage {
+    padding-right: var(--bs-space-4);
+  }
 }
 
 /* Pantalla de felicitación al llegar al 100%. */
