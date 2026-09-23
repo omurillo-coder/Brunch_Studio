@@ -39,10 +39,12 @@ export interface AppServices {
   pickImportAssetPath: (kind: 'image' | 'audio' | 'video') => Promise<string | null>
   /**
    * Abre el diálogo nativo de "Guardar como…" para elegir dónde escribir el
-   * `index.html` autónomo de la exportación; `null` si el usuario cancela.
-   * `suggestedName` (normalmente el nombre del proyecto) preselecciona el
-   * nombre de archivo propuesto, con extensión `.html`. Mismo patrón que
-   * `pickSaveProjectPath`.
+   * `.zip` (una única entrada, `index.html` autónomo) de la exportación
+   * HTML; `null` si el usuario cancela. `suggestedName` (normalmente el
+   * nombre del proyecto) preselecciona el nombre de archivo propuesto, con
+   * extensión `.zip` — petición de usuario ("la versión HTML quiero que me
+   * la des comprimida en ZIP ya"), antes era `.html` sin comprimir. Mismo
+   * patrón que `pickSaveProjectPath`.
    */
   pickExportHtmlPath: (suggestedName?: string) => Promise<string | null>
   /**

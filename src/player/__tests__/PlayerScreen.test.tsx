@@ -275,6 +275,31 @@ describe('PlayerScreen', () => {
     expect(screen.getByText('← Volver al editor')).toBeInTheDocument()
   })
 
+  it('hallazgo de auditoría: el aviso de "sin continuación" indica qué diapositiva es, y un botón vuelve al editor con esa diapositiva ya seleccionada', () => {
+    const startId = startNodeId()
+    act(() => {
+      useProjectStore.getState().updateNode(startId, { title: 'Bienvenida sin destino' })
+    })
+
+    renderPlayer()
+
+    expect(screen.getByText(/1\. Bienvenida sin destino/)).toBeInTheDocument()
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Volver al editor y seleccionar esta diapositiva' }),
+    )
+
+    expect(useProjectStore.getState().ui.previewMode).toBe(false)
+    expect(useProjectStore.getState().ui.focusRequestNodeId).toBe(startId)
+    expect(useProjectStore.getState().selection.selectedNodeIds).toEqual([startId])
+  })
+
+  it('sin ninguna "Ref. oculta" propia, el aviso usa "Sin ref. oculta" (mismo criterio que el resto de la app)', () => {
+    renderPlayer()
+
+    expect(screen.getByText(/1\. Sin ref\. oculta/)).toBeInTheDocument()
+  })
+
   it('lee el project real del store (no una copia): refleja exactamente los nodos/textos creados', () => {
     const project = createProject('Mi proyecto de prueba')
     act(() => {
@@ -675,6 +700,39 @@ describe('PlayerScreen: imágenes ampliables + tamaño (petición de usuario)', 
     expect(container.querySelector(`.${styles.lightboxBackdrop}`)).toBeInTheDocument()
   })
 
+  it('hallazgo de auditoría (foco): al abrirse, el foco se mueve al botón "×"; al cerrarse, vuelve al botón que lo abrió', async () => {
+    const { assetRepository } = await slideWithImageBlock()
+    renderPlayer({ assetRepository })
+
+    const image = await screen.findByAltText('Imagen de esta pantalla')
+    const triggerButton = image.closest('button') as HTMLButtonElement
+    triggerButton.focus()
+    expect(document.activeElement).toBe(triggerButton)
+
+    fireEvent.click(triggerButton)
+
+    const closeButton = screen.getByRole('button', { name: 'Cerrar imagen ampliada' })
+    expect(document.activeElement).toBe(closeButton)
+
+    fireEvent.click(closeButton)
+    expect(document.activeElement).toBe(triggerButton)
+  })
+
+  it('hallazgo de auditoría (foco): mientras está abierto, Tab/Shift+Tab no se escapa del diálogo — se queda en el botón "×"', async () => {
+    const { assetRepository } = await slideWithImageBlock()
+    renderPlayer({ assetRepository })
+
+    fireEvent.click(await screen.findByAltText('Imagen de esta pantalla'))
+    const closeButton = screen.getByRole('button', { name: 'Cerrar imagen ampliada' })
+    expect(document.activeElement).toBe(closeButton)
+
+    fireEvent.keyDown(window, { key: 'Tab' })
+    expect(document.activeElement).toBe(closeButton)
+
+    fireEvent.keyDown(window, { key: 'Tab', shiftKey: true })
+    expect(document.activeElement).toBe(closeButton)
+  })
+
   it('petición de usuario ("un botón... para hacer no ampliable la imagen"): `expandable: false` la deja como una imagen normal, sin botón ni lightbox', async () => {
     const { assetRepository, startId, blockId } = await slideWithImageBlock()
     act(() => {
@@ -714,6 +772,32 @@ describe('PlayerScreen: imágenes ampliables + tamaño (petición de usuario)', 
           .querySelector('img[alt="Imagen de esta pantalla"]')
           ?.classList.contains(styles.mediaNormal ?? ''),
       ).toBe(true)
+    })
+  })
+
+  it('un `alt` personalizado sustituye al genérico; cadena vacía vuelve a usar el genérico', async () => {
+    const { assetRepository, startId, blockId } = await slideWithImageBlock()
+    act(() => {
+      useProjectStore.getState().updateImageBlockOptions(startId, blockId, {
+        alt: 'Diagrama del proceso de fabricación',
+      })
+    })
+    const { rerender } = renderPlayer({ assetRepository })
+
+    const custom = await screen.findByAltText('Diagrama del proceso de fabricación')
+    expect(custom.getAttribute('src')).toContain('data:image/png;base64,')
+    expect(screen.queryByAltText('Imagen de esta pantalla')).not.toBeInTheDocument()
+
+    act(() => {
+      useProjectStore.getState().updateImageBlockOptions(startId, blockId, { alt: null })
+    })
+    rerender(
+      <AppServicesProvider services={{ assetRepository }}>
+        <PlayerScreen filePath={TEST_FILE_PATH} />
+      </AppServicesProvider>,
+    )
+    await waitFor(() => {
+      expect(screen.getByAltText('Imagen de esta pantalla')).toBeInTheDocument()
     })
   })
 })
@@ -949,15 +1033,27 @@ describe('PlayerScreen: milestone "+1 fallo con Game Over"', () => {
     })
   })
 
-  describe('confeti del Final "Perfecto" (petición de usuario: "con confeti", ampliada después: "si llegas al final sin fallos y con fallos, en los dos")', () => {
+  describe('confeti del Final: regla fija (petición de usuario: "quita el check del confeti... ponlo siempre en el Final TOP")', () => {
     function confettiPieceCount(): number {
       return document.querySelectorAll(`.${styles.confettiPiece}`).length
     }
 
-    it('celebrate + contenido por defecto -> confeti visible', () => {
+    it('el Final TOP (contenido por defecto) SIEMPRE lleva confeti, sin ninguna configuración', () => {
+      buildGraphInStore()
+
+      renderPlayer()
+      fireEvent.click(screen.getByText('Continuar'))
+      fireEvent.click(screen.getByText('Camino A'))
+
+      expect(screen.getByText('¡Impresionante!')).toBeInTheDocument()
+      expect(document.querySelector(`.${styles.confetti}`)).toBeInTheDocument()
+      expect(confettiPieceCount()).toBeGreaterThan(0)
+    })
+
+    it('el campo `celebrate` heredado de un documento antiguo se ignora: el Final TOP celebra igual aunque valga `false`', () => {
       const { finalId } = buildGraphInStore()
       act(() => {
-        useProjectStore.getState().updateNode(finalId, { celebrate: true })
+        useProjectStore.getState().updateNode(finalId, { celebrate: false })
       })
 
       renderPlayer()
@@ -965,10 +1061,9 @@ describe('PlayerScreen: milestone "+1 fallo con Game Over"', () => {
       fireEvent.click(screen.getByText('Camino A'))
 
       expect(document.querySelector(`.${styles.confetti}`)).toBeInTheDocument()
-      expect(confettiPieceCount()).toBeGreaterThan(0)
     })
 
-    it('petición de usuario ("en los dos"): celebrate + contenido ALTERNATIVO (condición cumplida) -> confeti TAMBIÉN visible', () => {
+    it('petición de usuario ("ponlo siempre en el TOP"): el Final "con fallos" (contenido ALTERNATIVO) NUNCA lleva confeti', () => {
       const { startId, finalId } = buildGraphInStore()
       act(() => {
         useProjectStore.getState().addVariable({ name: 'Fallos', type: 'number', initialValue: 0 })
@@ -980,7 +1075,6 @@ describe('PlayerScreen: milestone "+1 fallo con Game Over"', () => {
           visitEffects: [{ variableId: fallosVar.id, operation: 'increment', value: 1 }],
         })
         useProjectStore.getState().updateNode(finalId, {
-          celebrate: true,
           alternateCondition: { variableId: fallosVar.id, operator: '>=', value: 1 },
           alternateBody: 'Contenido alternativo por fallos.',
         })
@@ -991,18 +1085,28 @@ describe('PlayerScreen: milestone "+1 fallo con Game Over"', () => {
       fireEvent.click(screen.getByText('Camino A'))
 
       expect(screen.getByText('¡Buen trabajo!')).toBeInTheDocument()
-      expect(document.querySelector(`.${styles.confetti}`)).toBeInTheDocument()
-      expect(confettiPieceCount()).toBeGreaterThan(0)
+      expect(document.querySelector(`.${styles.confetti}`)).not.toBeInTheDocument()
     })
 
-    it('sin celebrate, nunca hay confeti, ni con el contenido por defecto ni con el alternativo', () => {
-      buildGraphInStore()
+    it('con una variable "Fallos" > 0 pero SIN alternateCondition guardada, la variante "con fallos" se activa igualmente y tampoco lleva confeti', () => {
+      const { startId } = buildGraphInStore()
+      act(() => {
+        useProjectStore.getState().addVariable({ name: 'Fallos', type: 'number', initialValue: 0 })
+      })
+      const fallosVar = useProjectStore.getState().project.variables[0]
+      if (!fallosVar) throw new Error('setup inválido')
+      act(() => {
+        useProjectStore.getState().updateNode(startId, {
+          visitEffects: [{ variableId: fallosVar.id, operation: 'increment', value: 1 }],
+        })
+      })
+      // Deliberadamente SIN updateNode(finalId, { alternateCondition: ... }).
 
       renderPlayer()
       fireEvent.click(screen.getByText('Continuar'))
       fireEvent.click(screen.getByText('Camino A'))
 
-      expect(screen.getByText('¡Impresionante!')).toBeInTheDocument()
+      expect(screen.getByText('¡Buen trabajo!')).toBeInTheDocument()
       expect(document.querySelector(`.${styles.confetti}`)).not.toBeInTheDocument()
     })
   })
@@ -1313,5 +1417,45 @@ describe('PlayerScreen: portada (nodo intro, milestone "Diapositiva de Inicio")'
       screen.getByText(/todavía no tiene una continuación configurada/i),
     ).toBeInTheDocument()
     expect(screen.queryByText('Caso sin destino aún')).not.toBeInTheDocument()
+  })
+})
+
+describe('PlayerScreen — accesibilidad: foco y anuncio al cambiar de pantalla', () => {
+  it('mueve el foco a <main> al montar y tras cada cambio de pantalla', () => {
+    buildGraphInStore()
+    renderPlayer()
+
+    const stage = screen.getByRole('main')
+    expect(stage).toHaveFocus()
+
+    fireEvent.click(screen.getByText('Continuar'))
+    expect(stage).toHaveFocus()
+
+    fireEvent.click(screen.getByText('Camino A'))
+    expect(stage).toHaveFocus()
+  })
+
+  it('<main> es focusable mediante tabIndex = -1 sin entrar en el orden de tabulación normal', () => {
+    buildGraphInStore()
+    renderPlayer()
+
+    expect(screen.getByRole('main')).toHaveAttribute('tabindex', '-1')
+  })
+
+  it('anuncia cada cambio de pantalla en una única región aria-live="polite"', () => {
+    buildGraphInStore()
+    renderPlayer()
+
+    const statusRegions = screen.getAllByRole('status')
+    expect(statusRegions).toHaveLength(1)
+    const announcer = statusRegions[0]!
+    expect(announcer).toHaveAttribute('aria-live', 'polite')
+    expect(announcer.textContent).not.toBe('')
+
+    fireEvent.click(screen.getByText('Continuar'))
+    // Sigue siendo la MISMA región (no se crea una nueva en cada cambio de
+    // pantalla) y sigue con contenido.
+    expect(screen.getAllByRole('status')).toHaveLength(1)
+    expect(screen.getByRole('status').textContent).not.toBe('')
   })
 })

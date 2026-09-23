@@ -1,4 +1,4 @@
-import { GAME_OVER_HEADING } from '../domain'
+import { defaultAlternateCondition, GAME_OVER_HEADING } from '../domain'
 import type {
   ContentBlock,
   FinalNode,
@@ -215,22 +215,28 @@ function renderSlideSection(
 
 function renderFinalSection(node: FinalNode, project: ProjectDocument): string {
   const body = extractPlainText(parseRichBody(node.body))
-  const lines = [`## ${nodeLabel(node)}`, '', body || '(sin contenido)']
+  const lines = [
+    `## ${nodeLabel(node)}`,
+    '',
+    body || '(sin contenido)',
+    '',
+    '🎉 Este contenido (el de arriba, "Final TOP") se celebra siempre con confeti.',
+  ]
 
-  if (node.alternateCondition) {
+  // Petición de usuario ("que siempre salgan esos dos finales... sin tener
+  // que activar nada"): ya no es un paso manual — sin `alternateCondition`
+  // guardada, se describe la que sintetizaría `defaultAlternateCondition`
+  // (`src/domain/nodePacks.ts`), la misma que usa el recorrido real. Sin
+  // ninguna variable en el proyecto no hay ninguna que sintetizar, así que
+  // este Final solo tiene el contenido de arriba.
+  const effectiveCondition = node.alternateCondition ?? defaultAlternateCondition(project.variables)
+  if (effectiveCondition) {
     const altBody = node.alternateBody ? extractPlainText(parseRichBody(node.alternateBody)) : ''
     lines.push(
       '',
-      `Contenido alternativo (se muestra en vez del anterior si ${describeCondition(node.alternateCondition, project.variables)}):`,
+      `Contenido alternativo "con fallos" (se muestra en vez del anterior si ${describeCondition(effectiveCondition, project.variables)}; nunca lleva confeti):`,
       altBody || '(sin definir; si se diera el caso, se seguiría mostrando el contenido por defecto de arriba)',
     )
-  }
-
-  // Petición de usuario ("el confeti lo quiero... en los dos"): `celebrate`
-  // aplica a los DOS contenidos de arriba (por defecto y alternativo, si lo
-  // hay) — un único aviso al final de la sección, no uno por contenido.
-  if (node.celebrate) {
-    lines.push('', '🎉 Este Final se celebra con confeti al mostrarse (con o sin condición alternativa).')
   }
 
   return lines.join('\n')

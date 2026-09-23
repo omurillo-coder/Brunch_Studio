@@ -19,4 +19,12 @@ export class TauriHtmlBundleWriter implements HtmlBundleWriter {
       wrapInvokeError(error)
     }
   }
+
+  async writeHtmlZipBundle(path: string, html: string): Promise<void> {
+    try {
+      await invoke('export_html_zip_bundle', { path, html })
+    } catch (error) {
+      wrapInvokeError(error)
+    }
+  }
 }

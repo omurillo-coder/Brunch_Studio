@@ -29,6 +29,20 @@ export class MemoryHtmlBundleWriter implements HtmlBundleWriter {
   }
 
   async writeHtmlBundle(path: string, html: string): Promise<void> {
+    this.writeInternal(path, html)
+  }
+
+  /** Mismo `Map`/`failNextWrite` que `writeHtmlBundle` — desde este doble de
+   *  test no importa si el contenido "real" habría acabado dentro de un
+   *  zip o no, solo qué se escribió y dónde. Llama a `writeInternal`
+   *  directamente (no a `this.writeHtmlBundle`) para que ambos métodos
+   *  públicos queden espiables por separado con `vi.spyOn` — algún test
+   *  necesita comprobar CUÁL de los dos llamó `useHtmlExport.ts`. */
+  async writeHtmlZipBundle(path: string, html: string): Promise<void> {
+    this.writeInternal(path, html)
+  }
+
+  private writeInternal(path: string, html: string): void {
     if (this.shouldFail) {
       this.shouldFail = false
       throw new Error(`MemoryHtmlBundleWriter: fallo simulado al escribir "${path}".`)

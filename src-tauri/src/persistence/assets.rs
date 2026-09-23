@@ -8,10 +8,13 @@
 //! contenido (aunque venga de rutas/nombres de archivo distintos) devuelve
 //! siempre el mismo `id` sin insertar una fila nueva.
 
+use std::io::Cursor;
 use std::path::Path;
 
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine as _;
+use image::codecs::jpeg::JpegEncoder;
+use image::{GenericImageView, ImageFormat};
 use rusqlite::{Connection, OptionalExtension};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
@@ -55,6 +58,76 @@ fn max_bytes_for(asset_type: &str) -> u64 {
     } else {
         MAX_ASSET_BYTES
     }
+}
+
+/// Ancho/alto máximo (el que sea mayor) de una imagen importada, en píxeles.
+///
+/// Por qué 1920: de sobra para cualquier uso real dentro de una diapositiva
+/// (nunca ocupa toda la pantalla de un monitor grande, y en el export HTML
+/// el CSS ya limita el ancho visible de una imagen a como mucho unos
+/// cientos de píxeles — ver `--bs-color-*`/`max-width` en
+/// `src/export/exportedStyles.ts`), pero lo bastante grande para no
+/// degradar una captura de pantalla o foto de buena calidad. Una foto de
+/// cámara sin optimizar (varios miles de píxeles de lado, varios MB) se
+/// reduce a una fracción de su peso original sin pérdida apreciable a los
+/// tamaños en los que de verdad se muestra.
+const MAX_IMAGE_DIMENSION_PX: u32 = 1920;
+
+/// Calidad JPEG (0-100) usada al recodificar una imagen redimensionada.
+/// 85 es el punto habitual de "sin pérdida apreciable, tamaño ya muy por
+/// debajo del máximo" para fotografías — el mismo criterio que usan la
+/// mayoría de herramientas de optimización web.
+const JPEG_RESIZE_QUALITY: u8 = 85;
+
+/// Redimensiona `bytes` (ya identificados como `mime_type` por
+/// `detect_mime_type`) si excede `MAX_IMAGE_DIMENSION_PX` en su lado más
+/// largo, conservando la relación de aspecto. Devuelve `None` cuando no
+/// hace falta tocar nada — el llamante debe seguir usando los bytes
+/// originales tal cual en ese caso — en TRES situaciones, todas tratadas
+/// igual de forma deliberada (nunca debe romper una importación por un
+/// problema en esta optimización secundaria):
+/// - La imagen ya cabe dentro del límite: no tiene sentido recodificarla
+///   (evita perder calidad/cambiar bytes de un JPEG ya bien dimensionado).
+/// - El formato no es PNG ni JPEG: un GIF podría ser animado (redimensionar
+///   solo el primer fotograma lo rompería) y WebP se deja fuera por ahora
+///   por prudencia — ambos se importan tal cual, sin recomprimir.
+/// - Decodificar o recodificar falla por cualquier motivo (archivo con
+///   extensión engañosa, formato con alguna variante rara que la
+///   biblioteca no reconozca): mejor guardar el original que fallar la
+///   importación entera por un fallo en una optimización de tamaño.
+fn downscale_image_if_needed(bytes: &[u8], mime_type: &str) -> Option<Vec<u8>> {
+    let format = match mime_type {
+        "image/png" => ImageFormat::Png,
+        "image/jpeg" => ImageFormat::Jpeg,
+        _ => return None,
+    };
+
+    let decoded = image::load_from_memory_with_format(bytes, format).ok()?;
+    let (width, height) = decoded.dimensions();
+    if width <= MAX_IMAGE_DIMENSION_PX && height <= MAX_IMAGE_DIMENSION_PX {
+        return None;
+    }
+
+    // `resize` (a diferencia de `resize_exact`) escala al mayor tamaño que
+    // cabe dentro del recuadro `MAX_IMAGE_DIMENSION_PX × MAX_IMAGE_DIMENSION_PX`
+    // conservando la relación de aspecto original — nunca deforma la imagen.
+    let resized = decoded.resize(
+        MAX_IMAGE_DIMENSION_PX,
+        MAX_IMAGE_DIMENSION_PX,
+        image::imageops::FilterType::Lanczos3,
+    );
+
+    let mut out = Vec::new();
+    let mut cursor = Cursor::new(&mut out);
+    let encode_result = match format {
+        ImageFormat::Jpeg => {
+            let encoder = JpegEncoder::new_with_quality(&mut cursor, JPEG_RESIZE_QUALITY);
+            resized.write_with_encoder(encoder)
+        }
+        _ => resized.write_to(&mut cursor, format),
+    };
+    encode_result.ok()?;
+    Some(out)
 }
 
 /// Metadatos de un asset recién importado (o ya existente, en el caso de
@@ -140,6 +213,15 @@ fn open_existing_project(project_path: &Path) -> Result<Connection, PersistenceE
 /// `project_path`: lee sus bytes, detecta su MIME por extensión, calcula su
 /// `sha256` y lo inserta en `assets` — o, si ya existe una fila con ese
 /// mismo `sha256`, devuelve el `id` existente sin duplicar nada.
+///
+/// Si es una imagen PNG/JPEG por encima de `MAX_IMAGE_DIMENSION_PX`, se
+/// redimensiona ANTES de calcular el `sha256`/guardarla (ver
+/// `downscale_image_if_needed`): una foto de cámara sin optimizar no debe
+/// inflar sin necesidad ni el `.brunch` ni, sobre todo, cada HTML exportado
+/// (que la embebe entera como `data:` URI). El límite de tamaño de archivo
+/// de más abajo sigue aplicándose sobre el archivo ORIGINAL en disco, antes
+/// de redimensionar — sigue existiendo como tope de cordura independiente,
+/// no algo que este redimensionado deba compensar.
 pub fn import_asset(
     project_path: &Path,
     source_path: &Path,
@@ -160,6 +242,11 @@ pub fn import_asset(
     }
 
     let bytes = std::fs::read(source_path)?;
+    let bytes = if asset_type == "image" {
+        downscale_image_if_needed(&bytes, mime_type).unwrap_or(bytes)
+    } else {
+        bytes
+    };
     let sha256 = sha256_hex(&bytes);
     let filename = source_path
         .file_name()
@@ -297,6 +384,116 @@ mod tests {
         let conn = Connection::open(project_path).unwrap();
         conn.query_row("SELECT COUNT(*) FROM assets", [], |row| row.get(0))
             .unwrap()
+    }
+
+    /// Genera una imagen sintética `width × height` (patrón de color
+    /// derivado de la posición de cada píxel, sin depender de ningún
+    /// fichero binario en el repositorio) y la codifica en `format`.
+    fn make_test_image_bytes(width: u32, height: u32, format: ImageFormat) -> Vec<u8> {
+        let img = image::RgbImage::from_fn(width, height, |x, y| {
+            image::Rgb([(x % 256) as u8, (y % 256) as u8, 128])
+        });
+        let mut bytes = Vec::new();
+        image::DynamicImage::ImageRgb8(img)
+            .write_to(&mut Cursor::new(&mut bytes), format)
+            .unwrap();
+        bytes
+    }
+
+    #[test]
+    fn downscale_leaves_an_image_within_the_limit_untouched() {
+        let bytes = make_test_image_bytes(800, 600, ImageFormat::Png);
+        assert!(downscale_image_if_needed(&bytes, "image/png").is_none());
+    }
+
+    #[test]
+    fn downscale_resizes_an_oversized_png_preserving_aspect_ratio() {
+        // 2400×1000: el lado ancho es el que excede el límite (1920), así
+        // que debe ser el que fije la escala — 1920×800 (misma relación de
+        // aspecto 2.4:1 que el original).
+        let bytes = make_test_image_bytes(2400, 1000, ImageFormat::Png);
+        let resized_bytes = downscale_image_if_needed(&bytes, "image/png")
+            .expect("una imagen por encima del límite debe redimensionarse");
+
+        assert!(
+            resized_bytes.len() < bytes.len(),
+            "el resultado redimensionado debe pesar menos que el original"
+        );
+
+        let decoded = image::load_from_memory_with_format(&resized_bytes, ImageFormat::Png).unwrap();
+        let (width, height) = decoded.dimensions();
+        assert_eq!(width, MAX_IMAGE_DIMENSION_PX);
+        assert_eq!(height, 800);
+    }
+
+    #[test]
+    fn downscale_resizes_an_oversized_jpeg() {
+        let bytes = make_test_image_bytes(1000, 2400, ImageFormat::Jpeg);
+        let resized_bytes = downscale_image_if_needed(&bytes, "image/jpeg")
+            .expect("un JPEG por encima del límite debe redimensionarse");
+
+        let decoded = image::load_from_memory_with_format(&resized_bytes, ImageFormat::Jpeg).unwrap();
+        let (width, height) = decoded.dimensions();
+        // Esta vez el lado alto es el que excede el límite.
+        assert_eq!(height, MAX_IMAGE_DIMENSION_PX);
+        assert_eq!(width, 800);
+    }
+
+    #[test]
+    fn downscale_leaves_unsupported_formats_untouched() {
+        // gif (posible animación) y cualquier otro mime no reconocido se
+        // dejan tal cual — ver comentario de diseño de la función.
+        let bytes = make_test_image_bytes(3000, 3000, ImageFormat::Png);
+        assert!(downscale_image_if_needed(&bytes, "image/gif").is_none());
+    }
+
+    #[test]
+    fn downscale_tolerates_undecodable_bytes_without_panicking() {
+        // Bytes que claman ser una imagen pero no lo son: `None`, nunca
+        // pánico — `import_asset` debe poder seguir usando el original.
+        let garbage = b"esto no es una imagen de verdad".to_vec();
+        assert!(downscale_image_if_needed(&garbage, "image/png").is_none());
+    }
+
+    #[test]
+    fn import_asset_stores_a_downscaled_png_when_the_source_exceeds_the_limit() {
+        let dir = TempDir::new().unwrap();
+        let project_path = setup_project(&dir, "import-downscale-png");
+
+        let original_bytes = make_test_image_bytes(2400, 1000, ImageFormat::Png);
+        let source_path = dir.path().join("foto-enorme.png");
+        std::fs::write(&source_path, &original_bytes).unwrap();
+
+        let meta = import_asset(&project_path, &source_path).expect("debe importar");
+        let stored = get_asset(&project_path, &meta.id).expect("debe poder leerse de vuelta");
+        let stored_bytes = STANDARD.decode(stored.data_base64).unwrap();
+
+        assert!(
+            stored_bytes.len() < original_bytes.len(),
+            "el asset guardado debe pesar menos que el archivo de origen"
+        );
+        let decoded = image::load_from_memory_with_format(&stored_bytes, ImageFormat::Png).unwrap();
+        let (width, height) = decoded.dimensions();
+        assert!(width <= MAX_IMAGE_DIMENSION_PX && height <= MAX_IMAGE_DIMENSION_PX);
+    }
+
+    #[test]
+    fn import_asset_keeps_a_small_image_byte_for_byte() {
+        let dir = TempDir::new().unwrap();
+        let project_path = setup_project(&dir, "import-small-untouched");
+
+        let original_bytes = make_test_image_bytes(400, 300, ImageFormat::Png);
+        let source_path = dir.path().join("icono.png");
+        std::fs::write(&source_path, &original_bytes).unwrap();
+
+        let meta = import_asset(&project_path, &source_path).expect("debe importar");
+        let stored = get_asset(&project_path, &meta.id).expect("debe poder leerse de vuelta");
+        let stored_bytes = STANDARD.decode(stored.data_base64).unwrap();
+
+        assert_eq!(
+            stored_bytes, original_bytes,
+            "una imagen ya por debajo del límite no debe recodificarse"
+        );
     }
 
     #[test]

@@ -31,6 +31,7 @@ import finalSuccessFigureUrl from '../assets/playerIntro/final-success-figure.sv
 import finalSuccessStarUrl from '../assets/playerIntro/final-success-star.svg?url'
 import fontRegularUrl from '../assets/playerIntro/fonts/FSMillbank-Regular.otf?url'
 import fontBoldUrl from '../assets/playerIntro/fonts/FSMillbank-Bold.otf?url'
+import { defaultAlternateCondition } from '../domain'
 import type { FinalNode, ProjectDocument } from '../domain'
 
 /**
@@ -47,19 +48,23 @@ export function projectNeedsGameOverAssets(project: ProjectDocument): boolean {
 /**
  * ¿Tiene `project` algún Final que pueda mostrar de verdad su pantalla
  * ALTERNATIVA ("con fallos", ver `FinalNodeSchema.alternateCondition`)?
- * Mismo criterio que `resolveFinalContent` (`src/player/runtime.ts`):
- * hace falta la condición — un Final sin `alternateCondition` nunca activará
- * `buildFinalAlternateCard` (`exportedPlayerScript.ts`), así que no tiene
- * sentido pagar por su ilustración. Corrección de bug reportado ("me sale
- * siempre el Impresionante"): antes exigía además `alternateBody` no vacío,
- * un resto de cuando esa pantalla pintaba ese cuerpo real — ya no lo hace
- * (texto FIJO de marca), así que ese campo dejó de ser parte del gate.
- * Calculado UNA vez por cada hook de exportación y pasado en
- * `needs.finalAlternate` a `resolvePlayerIntroBrandAssets`.
+ * Mismo criterio que `resolveFinalContent` (`src/player/runtime.ts`): hace
+ * falta una condición efectiva — la guardada en el nodo, o si no hay
+ * ninguna, la que sintetiza `defaultAlternateCondition`
+ * (`src/domain/nodePacks.ts`) a partir de las variables del proyecto.
+ * Petición de usuario ("que siempre salgan esos dos finales... sin tener
+ * que activar nada"): desde que dejó de ser un paso manual, esto en la
+ * práctica equivale a "hay al menos un Final Y al menos una variable" — un
+ * Final sin ninguna variable en el proyecto no tiene sobre qué condicionar,
+ * así que no tiene sentido pagar por la ilustración de una pantalla que
+ * nunca puede alcanzarse. Calculado UNA vez por cada hook de exportación y
+ * pasado en `needs.finalAlternate` a `resolvePlayerIntroBrandAssets`.
  */
 export function projectNeedsFinalAlternateAssets(project: ProjectDocument): boolean {
   return project.graph.nodes.some(
-    (node): node is FinalNode => node.type === 'final' && Boolean(node.alternateCondition),
+    (node): node is FinalNode =>
+      node.type === 'final' &&
+      Boolean(node.alternateCondition ?? defaultAlternateCondition(project.variables)),
   )
 }
 

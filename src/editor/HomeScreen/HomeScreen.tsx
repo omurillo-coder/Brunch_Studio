@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { DEFAULT_PROJECT_TEMPLATE_ID, PROJECT_TEMPLATES, getProjectTemplate } from '../../domain'
 import type { ProjectDocument } from '../../domain'
-import { convertTweeToProject } from '../../import/twee'
 import { useAppServices } from '../../app/AppServicesContext'
 import { openExistingProject } from '../../app/openExistingProject'
 import { showAlreadyOpenElsewhereWarningIfApplicable } from '../../app/alreadyOpenElsewhereWarning'
@@ -197,6 +196,14 @@ export function HomeScreen({ onProjectOpened, initialError }: HomeScreenProps) {
         return
       }
       const source = await textFileReader.readTextFile(path)
+      // Import dinámico deliberado (no estático arriba): `convertTweeToProject`
+      // arrastra Tiptap/ProseMirror entero (ver `richText/richTextContent.ts`)
+      // solo para poder generar el JSON enriquecido de los pasajes
+      // convertidos. Importar Twee es un caso de uso secundario, no algo que
+      // se necesite en el arranque de la pantalla inicial — un import
+      // estático metía esa dependencia en el chunk que se descarga siempre,
+      // aunque nadie llegue a usar "Importar .twee" en toda la sesión.
+      const { convertTweeToProject } = await import('../../import/twee')
       const { document, warnings } = convertTweeToProject(source, fileStemFromPath(path))
       if (warnings.length > 0) {
         setPendingTwee({ document, warnings })
@@ -236,6 +243,20 @@ export function HomeScreen({ onProjectOpened, initialError }: HomeScreenProps) {
           Diseña pantallas, decisiones y recorridos, y publica la experiencia lista para usar.
         </p>
         <p className={styles.subtitle}>Crea un proyecto nuevo o abre uno existente para empezar.</p>
+
+        {/* Hallazgo de auditoría ("sin indicador visual de carga al abrir/
+            crear/importar"): antes el único cambio visible durante `busy`
+            era que los botones se deshabilitaban — con un proyecto grande o
+            disco lento, la pantalla podía parecer congelada. Un único
+            indicador genérico (no un texto distinto por botón: `busy` es
+            una única bandera compartida por abrir/crear/importar/reciente,
+            ver su declaración) basta para dejar claro que algo está
+            ocurriendo. */}
+        {busy && (
+          <p role="status" className={styles.busyIndicator}>
+            Cargando…
+          </p>
+        )}
 
         {mode === 'idle' && (
           <div className={styles.actions}>
@@ -352,7 +373,9 @@ export function HomeScreen({ onProjectOpened, initialError }: HomeScreenProps) {
             <p className={styles.subtitle}>
               Se han detectado {pendingTwee.warnings.length}{' '}
               {pendingTwee.warnings.length === 1 ? 'aviso' : 'avisos'} al importar el archivo. Revísalos
-              antes de continuar; podrás corregirlos luego en el editor.
+              antes de continuar; también quedarán anotados como "Nota interna" en cada diapositiva
+              afectada, así que podrás encontrarlos y corregirlos más adelante sin tener que
+              recordarlos ahora.
             </p>
             <ul className={styles.warningsList}>
               {pendingTwee.warnings.map((warning, index) => (

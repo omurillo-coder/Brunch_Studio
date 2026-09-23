@@ -44,6 +44,16 @@
   color: var(--bs-color-text-muted);
 }
 
+/* Hallazgo de auditoría ("sin indicador visual de carga al abrir/crear/
+   importar"): mismo tono de acento que el resto de estados "en curso" de la
+   app (p.ej. `.saveStatus` de Topbar), no un color de error/aviso — esto no
+   es un problema, es que algo está tardando lo normal. */
+.busyIndicator {
+  margin: 0 0 var(--bs-space-3);
+  font-size: var(--bs-font-size-sm);
+  color: var(--bs-color-accent);
+}
+
 .actions {
   display: flex;
   flex-direction: column;

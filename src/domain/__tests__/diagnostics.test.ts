@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import NSpell from 'nspell'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createNode, createProject, updateNode } from '../project'
+import { addVariable, createNode, createProject, updateNode } from '../project'
 import { connect } from '../graph'
 import { addResponse, updateResponse } from '../responses'
 import { addTextBlock, updateTextBlockBody } from '../content'
@@ -11,6 +11,7 @@ import {
   cycleIssueId,
   detectCycles,
   detectUnlinkedResponses,
+  detectUnusedVariables,
   spellingIssueId,
   tokenizeForSpelling,
   unlinkedResponseIssueId,
@@ -141,11 +142,11 @@ describe('detectUnlinkedResponses', () => {
 
     const issues = detectUnlinkedResponses(project)
     expect(issues).toEqual([
-      { nodeId: startId, responseId, responseText: 'Sí, quiero continuar' },
+      { nodeId: startId, responseId, responseText: 'Sí, quiero continuar', reason: 'no-target' },
     ])
   })
 
-  it('una respuesta con destino conectado no aparece', () => {
+  it('una respuesta con destino conectado y texto no aparece', () => {
     let project = createProject('P')
     project = createNode(project, 'final', { x: 100, y: 0 })
     const startId = project.graph.startNodeId
@@ -153,9 +154,43 @@ describe('detectUnlinkedResponses', () => {
     project = addResponse(project, startId)
     const [responseId] = responseIdsOf(project, startId)
     if (!responseId) throw new Error('setup inválido')
+    project = updateResponse(project, startId, responseId, { text: 'Continuar' })
     project = connect(project, startId, finalId, responseId)
 
     expect(detectUnlinkedResponses(project)).toEqual([])
+  })
+
+  it('petición de usuario (hallazgo de auditoría): una respuesta CON destino pero SIN texto sí aparece, con `reason: "empty-text"`', () => {
+    let project = createProject('P')
+    project = createNode(project, 'final', { x: 100, y: 0 })
+    const startId = project.graph.startNodeId
+    const finalId = otherNodeIdOf(project, 'final')
+    project = addResponse(project, startId)
+    const [responseId] = responseIdsOf(project, startId)
+    if (!responseId) throw new Error('setup inválido')
+    // Sin `updateResponse`: el texto se queda en '' por defecto (ver
+    // `addResponse`), a propósito para este caso.
+    project = connect(project, startId, finalId, responseId)
+
+    expect(detectUnlinkedResponses(project)).toEqual([
+      { nodeId: startId, responseId, responseText: '', reason: 'empty-text' },
+    ])
+  })
+
+  it('un texto solo con espacios cuenta como vacío (`trim`), igual que la cadena vacía', () => {
+    let project = createProject('P')
+    project = createNode(project, 'final', { x: 100, y: 0 })
+    const startId = project.graph.startNodeId
+    const finalId = otherNodeIdOf(project, 'final')
+    project = addResponse(project, startId)
+    const [responseId] = responseIdsOf(project, startId)
+    if (!responseId) throw new Error('setup inválido')
+    project = updateResponse(project, startId, responseId, { text: '   ' })
+    project = connect(project, startId, finalId, responseId)
+
+    expect(detectUnlinkedResponses(project)).toEqual([
+      { nodeId: startId, responseId, responseText: '   ', reason: 'empty-text' },
+    ])
   })
 
   it('una diapositiva "de continuar" (sin respuestas) no genera ningún aviso de este tipo', () => {
@@ -179,6 +214,99 @@ describe('detectUnlinkedResponses', () => {
     })
 
     expect(detectUnlinkedResponses(project)).toEqual([])
+  })
+})
+
+// -----------------------------------------------------------------------
+// detectUnusedVariables
+// -----------------------------------------------------------------------
+
+describe('detectUnusedVariables', () => {
+  it('una variable declarada y nunca referenciada aparece', () => {
+    let project = createProject('P')
+    project = addVariable(project, { name: 'puntos', type: 'number', initialValue: 0 })
+    const [variable] = project.variables
+
+    expect(detectUnusedVariables(project)).toEqual([
+      { variableId: variable!.id, variableName: 'puntos' },
+    ])
+  })
+
+  it('usada en `SlideNode.condition` no aparece', () => {
+    let project = createProject('P')
+    project = createNode(project, 'final', { x: 100, y: 0 })
+    project = addVariable(project, { name: 'puntos', type: 'number', initialValue: 0 })
+    const [variable] = project.variables
+    const startId = project.graph.startNodeId
+    const finalId = otherNodeIdOf(project, 'final')
+    project = updateNode(project, startId, {
+      condition: { variableId: variable!.id, operator: '>=', value: 5 },
+      elseTargetNodeId: finalId,
+    })
+    project = connect(project, startId, finalId)
+
+    expect(detectUnusedVariables(project)).toEqual([])
+  })
+
+  it('usada en `SlideNode.visitEffects` no aparece', () => {
+    let project = createProject('P')
+    project = addVariable(project, { name: 'puntos', type: 'number', initialValue: 0 })
+    const [variable] = project.variables
+    const startId = project.graph.startNodeId
+    project = updateNode(project, startId, {
+      visitEffects: [{ variableId: variable!.id, operation: 'increment', value: 1 }],
+    })
+
+    expect(detectUnusedVariables(project)).toEqual([])
+  })
+
+  it('usada en `DecisionResponse.condition` o `.effects` no aparece', () => {
+    let project = createProject('P')
+    project = addVariable(project, { name: 'a', type: 'number', initialValue: 0 })
+    project = addVariable(project, { name: 'b', type: 'number', initialValue: 0 })
+    const [varA, varB] = project.variables
+    const startId = project.graph.startNodeId
+    project = addResponse(project, startId)
+    const [responseId] = responseIdsOf(project, startId)
+    if (!responseId) throw new Error('setup inválido')
+    project = updateResponse(project, startId, responseId, {
+      text: 'Sí',
+      condition: { variableId: varA!.id, operator: '>=', value: 1 },
+      effects: [{ variableId: varB!.id, operation: 'increment', value: 1 }],
+    })
+
+    expect(detectUnusedVariables(project)).toEqual([])
+  })
+
+  it('petición de usuario (hallazgo de auditoría): sin ningún Final en el proyecto, una variable "Fallos" sin usar SÍ aparece', () => {
+    let project = createProject('P')
+    project = addVariable(project, { name: 'Fallos', type: 'number', initialValue: 0 })
+    const [variable] = project.variables
+
+    expect(detectUnusedVariables(project)).toEqual([
+      { variableId: variable!.id, variableName: 'Fallos' },
+    ])
+  })
+
+  it('con al menos un Final en el proyecto, una variable "Fallos" cuenta como usada IMPLÍCITAMENTE aunque ningún `alternateCondition` la referencie (ver `defaultAlternateCondition`)', () => {
+    let project = createProject('P')
+    project = createNode(project, 'final', { x: 100, y: 0 })
+    project = addVariable(project, { name: 'Fallos', type: 'number', initialValue: 0 })
+
+    expect(detectUnusedVariables(project)).toEqual([])
+  })
+
+  it('usada explícitamente en `FinalNode.alternateCondition` no aparece (variable con otro nombre)', () => {
+    let project = createProject('P')
+    project = createNode(project, 'final', { x: 100, y: 0 })
+    project = addVariable(project, { name: 'nivel', type: 'number', initialValue: 0 })
+    const [variable] = project.variables
+    const finalId = otherNodeIdOf(project, 'final')
+    project = updateNode(project, finalId, {
+      alternateCondition: { variableId: variable!.id, operator: '>=', value: 3 },
+    })
+
+    expect(detectUnusedVariables(project)).toEqual([])
   })
 })
 
@@ -266,6 +394,34 @@ describe('checkSpelling (diccionario mockeado)', () => {
     expect(issues.some((issue) => issue.word === 'erorrrgrafico')).toBe(true)
   })
 
+  it('hallazgo de auditoría (no debe bloquear de un tirón): con más de 200 palabras, cede el hilo al menos una vez antes de resolver', async () => {
+    vi.useFakeTimers()
+    try {
+      let project = createProject('P')
+      const startId = project.graph.startNodeId
+      project = addTextBlock(project, startId)
+      const block = project.graph.nodes[0]
+      const blockId = block && block.type === 'slide' ? block.content[0]?.id : undefined
+      if (!blockId) throw new Error('setup inválido')
+      // 250 palabras (> SPELLING_YIELD_EVERY_N_WORDS = 200, ver
+      // diagnostics.ts): al menos una cesión de hilo debe ocurrir a mitad
+      // del recorrido.
+      const longText = Array.from({ length: 250 }, () => 'hola').join(' ')
+      project = updateTextBlockBody(project, startId, blockId, longText)
+
+      const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout')
+      const resultPromise = checkSpelling(project)
+
+      await vi.advanceTimersByTimeAsync(50)
+      const issues = await resultPromise
+
+      expect(issues).toEqual([])
+      expect(setTimeoutSpy).toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('un proyecto sin ningún texto revisable no dispara la carga del diccionario', async () => {
     const project = createProject('P')
     const { loadSpanishSpellChecker } = await import('../spellingDictionary')
@@ -320,13 +476,28 @@ describe('cycleIssueId', () => {
 
 describe('unlinkedResponseIssueId', () => {
   it('es estable para el mismo nodo/respuesta', () => {
-    const issue = { nodeId: 'node-1', responseId: 'response-1', responseText: 'Sí' }
+    const issue = {
+      nodeId: 'node-1',
+      responseId: 'response-1',
+      responseText: 'Sí',
+      reason: 'no-target' as const,
+    }
     expect(unlinkedResponseIssueId(issue)).toBe(unlinkedResponseIssueId({ ...issue }))
   })
 
   it('distingue respuestas distintas, incluso del mismo nodo', () => {
-    const idA = unlinkedResponseIssueId({ nodeId: 'node-1', responseId: 'r1', responseText: '' })
-    const idB = unlinkedResponseIssueId({ nodeId: 'node-1', responseId: 'r2', responseText: '' })
+    const idA = unlinkedResponseIssueId({
+      nodeId: 'node-1',
+      responseId: 'r1',
+      responseText: '',
+      reason: 'no-target',
+    })
+    const idB = unlinkedResponseIssueId({
+      nodeId: 'node-1',
+      responseId: 'r2',
+      responseText: '',
+      reason: 'no-target',
+    })
     expect(idA).not.toBe(idB)
   })
 })

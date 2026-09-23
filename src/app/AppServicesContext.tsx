@@ -16,8 +16,10 @@ import type { AppServices } from './AppServices'
 /** Único filtro de extensión de archivo que reconoce este editor. */
 const BRUNCH_FILE_FILTERS = [{ name: 'Proyecto Brunch Studio', extensions: ['brunch'] }]
 
-/** Filtro del diálogo de guardado de la exportación a HTML autónomo. */
-const HTML_FILE_FILTERS = [{ name: 'Página web', extensions: ['html'] }]
+/** Filtro del diálogo de guardado de la exportación a HTML autónomo.
+ *  Petición de usuario ("la versión HTML quiero que me la des comprimida en
+ *  ZIP ya"): `.zip`, no `.html` — ver `writeHtmlZipBundle`. */
+const HTML_FILE_FILTERS = [{ name: 'Página web (ZIP)', extensions: ['zip'] }]
 
 /** Filtro del diálogo de guardado de la exportación a paquete SCORM. */
 const SCORM_FILE_FILTERS = [{ name: 'Paquete SCORM', extensions: ['zip'] }]
@@ -91,7 +93,7 @@ async function pickImportAssetPathWithNativeDialog(
 }
 
 async function pickExportHtmlPathWithNativeDialog(suggestedName?: string): Promise<string | null> {
-  const defaultPath = suggestedName ? `${sanitizeFileName(suggestedName)}.html` : undefined
+  const defaultPath = suggestedName ? `${sanitizeFileName(suggestedName)}.zip` : undefined
   const path = await save({ filters: HTML_FILE_FILTERS, defaultPath })
   return path ?? null
 }

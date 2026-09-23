@@ -45,6 +45,25 @@ function incompleteAssetsMessage(failedCount: number): string {
 }
 
 /**
+ * Hallazgo de auditoría ("sin aviso del tamaño estimado del HTML antes de
+ * exportar... el HTML puede llegar a varios MB sin que nadie se entere
+ * hasta enviarlo por email"): tamaño en bytes de `html` (el `index.html`
+ * SIN comprimir, antes de meterlo en el `.zip`) formateado para humanos —
+ * deliberadamente el tamaño del HTML en bruto, no el del `.zip` final: el
+ * `.zip` siempre pesa igual o menos (compresión deflate), así que esta
+ * cifra es una cota superior honesta, nunca subestima lo que el usuario va
+ * a enviar. `TextEncoder` (no `html.length`, que cuenta unidades UTF-16):
+ * el HTML puede llevar acentos/eñes que ocupan más de un byte en UTF-8.
+ */
+function formatEstimatedSize(html: string): string {
+  const bytes = new TextEncoder().encode(html).length
+  if (bytes < 1024 * 1024) {
+    return `${Math.max(1, Math.round(bytes / 1024))} KB`
+  }
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+/**
  * Mensaje de bloqueo cuando el proyecto no está listo para exportar: une en
  * una sola línea legible los textos que devuelven `validateIntroForExport`
  * (portada incompleta), `validatePendingContentForExport` (bloques de
@@ -108,13 +127,18 @@ export function useHtmlExport(filePath: string): HtmlExportState {
         finalAlternate: projectNeedsFinalAlternateAssets(project),
       })
       const html = buildHtmlBundle(project, assets, undefined, introBrandAssets)
-      await htmlBundleWriter.writeHtmlBundle(path, html)
+      // Petición de usuario ("la versión HTML quiero que me la des
+      // comprimida en ZIP ya"): `writeHtmlZipBundle`, no `writeHtmlBundle`
+      // — el `index.html` autónomo de siempre, pero dentro de un `.zip`
+      // (más fácil de enviar por correo/mensajería que un `.html` suelto).
+      await htmlBundleWriter.writeHtmlZipBundle(path, html)
 
+      const sizeSuffix = ` (${formatEstimatedSize(html)} aprox.)`
       setStatus('done')
       setMessage(
-        failedAssetIds.length > 0
+        (failedAssetIds.length > 0
           ? incompleteAssetsMessage(failedAssetIds.length)
-          : 'Experiencia exportada a HTML.',
+          : 'Experiencia exportada a HTML (comprimida en ZIP).') + sizeSuffix,
       )
     } catch {
       setStatus('error')

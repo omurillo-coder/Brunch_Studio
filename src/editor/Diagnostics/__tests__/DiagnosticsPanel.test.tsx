@@ -1,9 +1,23 @@
-import { act, fireEvent, render, screen } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { DiagnosticsPanel } from '../DiagnosticsPanel'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { DiagnosticsPanel, scheduleIdleSpellCheck } from '../DiagnosticsPanel'
 import { useProjectStore } from '../../../store'
 import { resetProjectStore } from '../../../store/testHelpers'
-import { addResponse } from '../../../domain'
+import { addResponse, updateNode } from '../../../domain'
+
+/** Hallazgo de auditoría ("el corrector se dispara al abrir cualquier
+ *  proyecto"): mismo mock de diccionario que `src/domain/__tests__/
+ *  diagnostics.test.ts` (ver su comentario) — evita depender del mecanismo
+ *  `?url`/`fetch` de Vite o cargar el diccionario español real en cada
+ *  test. Solo se usa en el describe de más abajo que sí necesita un
+ *  resultado real de `checkSpelling`; el resto de tests de este archivo no
+ *  lo tocan (proyecto sin texto revisable, ver comentario original). */
+const CORRECT_WORDS = new Set(['hola', 'mundo', 'ancla', 'continuar'])
+vi.mock('../../../domain/spellingDictionary', () => ({
+  loadSpanishSpellChecker: vi.fn(async () => ({
+    correct: (word: string) => CORRECT_WORDS.has(word.toLowerCase()),
+  })),
+}))
 
 /**
  * Desde que "Estructura del recorrido" (`validateProject`) se une al
@@ -22,7 +36,10 @@ import { addResponse } from '../../../domain'
  * derivarse SOLO de las respuestas (`deriveEdges`, `src/domain/graph.ts`);
  * conectar el Final por `targetNodeId` antes de eso lo habría dejado
  * inalcanzable en cuanto la respuesta bajo prueba se añadiera. La respuesta
- * ancla sí tiene destino, así que nunca genera ningún aviso propio.
+ * ancla sí tiene destino Y texto, así que nunca genera ningún aviso propio
+ * — ni "sin destino" ni "texto vacío" (`detectUnlinkedResponses`, `reason:
+ * 'empty-text'`, hallazgo de auditoría sobre respuestas conectadas sin
+ * texto).
  */
 function seedAnchoredFinal(): void {
   const store = useProjectStore.getState()
@@ -38,6 +55,7 @@ function seedAnchoredFinal(): void {
   const startNode = useProjectStore.getState().project.graph.nodes.find((node) => node.id === startId)
   const anchorResponseId = startNode?.type === 'slide' ? startNode.responses.at(-1)?.id : undefined
   if (!anchorResponseId) throw new Error('seedAnchoredFinal: no se creó ninguna respuesta ancla')
+  store.updateResponse(startId, anchorResponseId, { text: 'Continuar (ancla)' })
   store.connect(startId, finalId, anchorResponseId)
 }
 
@@ -282,5 +300,89 @@ describe('DiagnosticsPanel — descartar avisos (tarea "Descartar avisos en el r
     expect(badge).toBeInTheDocument()
     expect(badge).toHaveTextContent('0')
     expect(screen.getByRole('button', { name: 'Recuperar' })).toBeInTheDocument()
+  })
+})
+
+describe('scheduleIdleSpellCheck (hallazgo de auditoría: diferir el corrector a un momento ocioso del navegador)', () => {
+  afterEach(() => {
+    delete (window as { requestIdleCallback?: unknown }).requestIdleCallback
+    delete (window as { cancelIdleCallback?: unknown }).cancelIdleCallback
+  })
+
+  it('con requestIdleCallback disponible, lo usa y NO llama al callback síncronamente — solo cuando el navegador llega a un momento ocioso', () => {
+    const callback = vi.fn()
+    let idleCallback: (() => void) | undefined
+    const requestIdleCallback = vi.fn((cb: () => void) => {
+      idleCallback = cb
+      return 42
+    })
+    ;(window as unknown as { requestIdleCallback: typeof requestIdleCallback }).requestIdleCallback =
+      requestIdleCallback
+    ;(window as unknown as { cancelIdleCallback: (id: number) => void }).cancelIdleCallback = vi.fn()
+
+    scheduleIdleSpellCheck(callback)
+
+    expect(requestIdleCallback).toHaveBeenCalledTimes(1)
+    expect(callback).not.toHaveBeenCalled()
+
+    idleCallback?.()
+    expect(callback).toHaveBeenCalledTimes(1)
+  })
+
+  it('la función de cancelación devuelta llama a cancelIdleCallback con el handle que devolvió requestIdleCallback', () => {
+    const cancelIdleCallback = vi.fn()
+    ;(window as unknown as { requestIdleCallback: () => number }).requestIdleCallback = vi.fn(() => 99)
+    ;(window as unknown as { cancelIdleCallback: typeof cancelIdleCallback }).cancelIdleCallback =
+      cancelIdleCallback
+
+    const cancel = scheduleIdleSpellCheck(vi.fn())
+    cancel()
+
+    expect(cancelIdleCallback).toHaveBeenCalledWith(99)
+  })
+
+  it('sin requestIdleCallback (el caso real de este entorno de test, jsdom): usa un setTimeout de reserva, no llama síncronamente', async () => {
+    vi.useFakeTimers()
+    try {
+      const callback = vi.fn()
+      scheduleIdleSpellCheck(callback)
+      expect(callback).not.toHaveBeenCalled()
+
+      await vi.advanceTimersByTimeAsync(1)
+      expect(callback).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('la cancelación de la reserva evita que el setTimeout llegue a llamar al callback', async () => {
+    vi.useFakeTimers()
+    try {
+      const callback = vi.fn()
+      const cancel = scheduleIdleSpellCheck(callback)
+      cancel()
+
+      await vi.advanceTimersByTimeAsync(10)
+      expect(callback).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})
+
+describe('DiagnosticsPanel — el corrector diferido llega a completarse (hallazgo de auditoría)', () => {
+  it('tras esperar lo suficiente, una errata real aparece en el grupo "Ortografía" al abrir el panel', async () => {
+    let project = useProjectStore.getState().project
+    project = updateNode(project, project.graph.startNodeId, { title: 'Hola Titulboo' })
+    useProjectStore.setState({ project })
+
+    render(<DiagnosticsPanel />)
+
+    const badge = await waitFor(() => screen.getByRole('button', { name: /avisos del proyecto/ }))
+    fireEvent.click(badge)
+
+    await waitFor(() => {
+      expect(screen.getByText(/Titulboo/)).toBeInTheDocument()
+    })
   })
 })

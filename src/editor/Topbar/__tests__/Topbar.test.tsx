@@ -48,7 +48,11 @@ vi.stubGlobal(
  * `Topbar` no necesita ningún mock de `@tauri-apps/api/webviewWindow` ni de
  * `@tauri-apps/api/event`.
  */
-function renderTopbar(services: Partial<AppServices> = {}, extra?: ReactElement) {
+function renderTopbar(
+  services: Partial<AppServices> = {},
+  extra?: ReactElement,
+  onRetrySave: () => void | Promise<void> = vi.fn(),
+) {
   return render(
     <AppServicesProvider services={services}>
       {extra}
@@ -58,6 +62,7 @@ function renderTopbar(services: Partial<AppServices> = {}, extra?: ReactElement)
         onToggleLeftPanel={vi.fn()}
         variablesPanelVisible={false}
         onToggleVariablesPanel={vi.fn()}
+        onRetrySave={onRetrySave}
       />
     </AppServicesProvider>,
   )
@@ -139,7 +144,39 @@ describe('Topbar', () => {
     act(() => {
       useProjectStore.setState({ saveStatus: 'error' })
     })
-    expect(screen.getByText('Error al guardar')).toBeInTheDocument()
+    expect(
+      screen.getByText('Error al guardar: tus últimos cambios no se han escrito en el archivo.'),
+    ).toBeInTheDocument()
+  })
+
+  it('hallazgo de auditoría ("un fallo de guardado apenas se nota"): en error, se muestra un banner con rol "alert" y un botón "Reintentar" que llama a onRetrySave', () => {
+    const onRetrySave = vi.fn()
+    renderTopbar({}, undefined, onRetrySave)
+
+    act(() => {
+      useProjectStore.setState({ saveStatus: 'error' })
+    })
+
+    const banner = screen.getByRole('alert')
+    expect(banner).toHaveTextContent('Error al guardar')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
+    expect(onRetrySave).toHaveBeenCalledTimes(1)
+  })
+
+  it('el banner de error desaparece en cuanto saveStatus deja de ser "error" (p.ej. tras un reintento con éxito)', () => {
+    renderTopbar()
+
+    act(() => {
+      useProjectStore.setState({ saveStatus: 'error' })
+    })
+    expect(screen.getByRole('alert')).toBeInTheDocument()
+
+    act(() => {
+      useProjectStore.setState({ saveStatus: 'saving' })
+    })
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getByText('Guardando…')).toBeInTheDocument()
   })
 
   it('deshabilita Deshacer/Rehacer cuando no hay historial', () => {
@@ -265,6 +302,7 @@ describe('Topbar', () => {
           onToggleLeftPanel={onToggleLeftPanel}
           variablesPanelVisible={false}
           onToggleVariablesPanel={vi.fn()}
+          onRetrySave={vi.fn()}
         />
       </AppServicesProvider>,
     )
@@ -285,6 +323,7 @@ describe('Topbar', () => {
           onToggleLeftPanel={vi.fn()}
           variablesPanelVisible={false}
           onToggleVariablesPanel={vi.fn()}
+          onRetrySave={vi.fn()}
         />
       </AppServicesProvider>,
     )
@@ -303,6 +342,7 @@ describe('Topbar', () => {
           onToggleLeftPanel={vi.fn()}
           variablesPanelVisible
           onToggleVariablesPanel={onToggleVariablesPanel}
+          onRetrySave={vi.fn()}
         />
       </AppServicesProvider>,
     )
@@ -377,9 +417,9 @@ describe('Topbar — Exportar HTML', () => {
     seedCompleteIntro()
   })
 
-  it('pide la ruta, genera el HTML y lo escribe', async () => {
+  it('pide la ruta, genera el HTML y lo escribe comprimido en ZIP', async () => {
     const htmlBundleWriter = new MemoryHtmlBundleWriter()
-    const pickExportHtmlPath = vi.fn(async () => '/tmp/experiencia.html')
+    const pickExportHtmlPath = vi.fn(async () => '/tmp/experiencia.zip')
     renderTopbar({
       pickExportHtmlPath,
       htmlBundleWriter,
@@ -390,20 +430,20 @@ describe('Topbar — Exportar HTML', () => {
     fireEvent.click(screen.getByText('Exportar HTML'))
 
     await waitFor(() => {
-      expect(screen.getByText('Experiencia exportada a HTML.')).toBeInTheDocument()
+      expect(screen.getByText(/Experiencia exportada a HTML \(comprimida en ZIP\)\./)).toBeInTheDocument()
     })
 
     // El nombre del proyecto se propone como nombre de archivo.
     expect(pickExportHtmlPath).toHaveBeenCalledWith('Untitled')
-    expect(htmlBundleWriter.writtenPaths()).toEqual(['/tmp/experiencia.html'])
-    expect(htmlBundleWriter.read('/tmp/experiencia.html')).toContain('<!doctype html>')
+    expect(htmlBundleWriter.writtenPaths()).toEqual(['/tmp/experiencia.zip'])
+    expect(htmlBundleWriter.read('/tmp/experiencia.zip')).toContain('<!doctype html>')
   })
 
   it('el aviso de éxito flota bajo el botón "Exportar" y desaparece ~200ms después de los 5 segundos (fundido de salida)', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     try {
       const htmlBundleWriter = new MemoryHtmlBundleWriter()
-      const pickExportHtmlPath = vi.fn(async () => '/tmp/experiencia.html')
+      const pickExportHtmlPath = vi.fn(async () => '/tmp/experiencia.zip')
       renderTopbar({
         pickExportHtmlPath,
         htmlBundleWriter,
@@ -414,13 +454,13 @@ describe('Topbar — Exportar HTML', () => {
       fireEvent.click(screen.getByText('Exportar HTML'))
 
       await waitFor(() => {
-        expect(screen.getByText('Experiencia exportada a HTML.')).toBeInTheDocument()
+        expect(screen.getByText(/Experiencia exportada a HTML \(comprimida en ZIP\)\./)).toBeInTheDocument()
       })
 
       // Flota bajo el botón "Exportar" (`.exportMessages`, hermano de
       // `.exportMenu` dentro del mismo `.exportMenuWrapper`), no como un
       // elemento más de la fila de botones de la barra superior.
-      const message = screen.getByText('Experiencia exportada a HTML.')
+      const message = screen.getByText(/Experiencia exportada a HTML \(comprimida en ZIP\)\./)
       expect(message.closest('[class*="exportMenuWrapper"]')).not.toBeNull()
 
       await act(async () => {
@@ -430,13 +470,13 @@ describe('Topbar — Exportar HTML', () => {
       // A los 5000ms exactos entra en la fase de salida (`data-phase`
       // `leaving`, fundido de opacidad vía CSS) pero el nodo sigue montado
       // — ya no desaparece de golpe como antes de la fase de salida.
-      expect(screen.getByText('Experiencia exportada a HTML.')).toBeInTheDocument()
+      expect(screen.getByText(/Experiencia exportada a HTML \(comprimida en ZIP\)\./)).toBeInTheDocument()
 
       await act(async () => {
         await vi.advanceTimersByTimeAsync(200)
       })
 
-      expect(screen.queryByText('Experiencia exportada a HTML.')).not.toBeInTheDocument()
+      expect(screen.queryByText(/Experiencia exportada a HTML \(comprimida en ZIP\)\./)).not.toBeInTheDocument()
     } finally {
       vi.useRealTimers()
     }
@@ -472,7 +512,7 @@ describe('Topbar — Exportar HTML', () => {
     const htmlBundleWriter = new MemoryHtmlBundleWriter()
     htmlBundleWriter.failNextWrite()
     renderTopbar({
-      pickExportHtmlPath: async () => '/tmp/experiencia.html',
+      pickExportHtmlPath: async () => '/tmp/experiencia.zip',
       htmlBundleWriter,
       assetRepository: new MemoryAssetRepository(),
     })

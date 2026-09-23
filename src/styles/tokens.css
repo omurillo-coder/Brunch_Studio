@@ -24,7 +24,16 @@
   --bs-color-border-strong: #c9c9cf;
   --bs-color-text: #1b1b1f;
   --bs-color-text-muted: #6b6b74;
-  --bs-color-text-faint: #97979f;
+  /* Hallazgo de auditoría: el tono anterior (#97979f) solo daba ~2.9:1 sobre
+     blanco/`--bs-color-bg`, por debajo del mínimo AA (4.5:1) para texto
+     normal — y se usaba para texto real (p.ej. la etiqueta "Diapositiva N"
+     en `LeftPanel`, el texto de estado de guardado en `Topbar`), no solo
+     para elementos puramente decorativos. Oscurecido a #6f6f78: 4.98:1
+     sobre `--bs-color-surface`, 4.57:1 sobre `--bs-color-bg` — AA en ambos
+     fondos reales de la app, con margen. Mismo valor replicado en
+     `src/export/exportedStyles.ts` (dual-runtime, ver su comentario de
+     cabecera). */
+  --bs-color-text-faint: #6f6f78;
   /* Acento corporativo iLERNA: turquesa #00AEC7.
      Accesibilidad: el blanco puro sobre #00AEC7 solo da 2.67:1 (por debajo
      de AA incluso para texto grande), así que el texto sobre acento
@@ -196,7 +205,12 @@
     --bs-color-border-strong: #45454c;
     --bs-color-text: #ededef;
     --bs-color-text-muted: #a1a1aa;
-    --bs-color-text-faint: #71717a;
+    /* Mismo hallazgo de auditoría que el bloque claro de arriba: #71717a
+       solo daba ~3.2:1 sobre `--bs-color-surface` oscuro. Oscurecido (más
+       claro en términos absolutos, ya que aquí el texto va sobre fondo
+       oscuro) a #93939b: 5.14:1 sobre `--bs-color-surface`, 5.58:1 sobre
+       `--bs-color-bg` — AA con margen en ambos. */
+    --bs-color-text-faint: #93939b;
     /* Mismo turquesa iLERNA aclarado para fondos oscuros (#2CC7DE), con un
        hover todavía más claro (#5AD6E8) y texto muy oscuro encima:
        8.13:1 en reposo y 9.62:1 en hover. */

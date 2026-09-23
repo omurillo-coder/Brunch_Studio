@@ -119,6 +119,7 @@ function reviewProject(metadataId: string): ProjectDocument {
 
 const METADATA_ID_A = 'dddddddd-0000-4000-8000-000000000001'
 const METADATA_ID_B = 'dddddddd-0000-4000-8000-000000000002'
+const EXTRA_FINAL_ID = 'cccccccc-0000-4000-8000-000000000008'
 
 const emptyAssets: ExportAssetMap = {}
 
@@ -126,6 +127,34 @@ const TEST_PENGUIN_DATA_URI = 'data:image/png;base64,AAAA'
 
 function buildReviewHtml(metadataId: string): string {
   return buildHtmlBundle(reviewProject(metadataId), emptyAssets, {
+    welcomeText: TEACHER_REVIEW_WELCOME_TEXT,
+    completionText: TEACHER_REVIEW_COMPLETION_TEXT,
+    penguinDataUri: TEST_PENGUIN_DATA_URI,
+  })
+}
+
+/** Mismo proyecto que `reviewProject`, pero con un 6º nodo añadido — simula
+ *  al diseñador reestructurando el proyecto (mismo `metadata.id`, un nodo
+ *  más) DESPUÉS de que un profesor ya hubiera revisado parcial o totalmente
+ *  la versión anterior. No hace falta conectarlo al recorrido: el
+ *  denominador de `reviewPercent` cuenta TODOS los nodos del proyecto,
+ *  conectados o no (ver `allNodesByNumber` en `exportedPlayerScript.ts`). */
+function reviewProjectWithExtraNode(metadataId: string): ProjectDocument {
+  const base = reviewProject(metadataId)
+  const extra: FinalNode = {
+    id: EXTRA_FINAL_ID,
+    number: 6,
+    type: 'final',
+    variant: 'general',
+    position: { x: 800, y: 0 },
+    title: 'Final C (añadido después)',
+    body: '',
+  }
+  return { ...base, graph: { ...base.graph, nodes: [...base.graph.nodes, extra] } }
+}
+
+function buildReviewHtmlWithExtraNode(metadataId: string): string {
+  return buildHtmlBundle(reviewProjectWithExtraNode(metadataId), emptyAssets, {
     welcomeText: TEACHER_REVIEW_WELCOME_TEXT,
     completionText: TEACHER_REVIEW_COMPLETION_TEXT,
     penguinDataUri: TEST_PENGUIN_DATA_URI,
@@ -372,6 +401,63 @@ describe('buildHtmlBundle con opciones de revisión — comportamiento en jsdom'
     expect(currentCard().querySelector('.reviewSlideLabel')?.textContent).toBe('Diapositiva 5')
   })
 
+  describe('hallazgo de auditoría: el overlay de felicitación es un diálogo accesible (foco + Escape)', () => {
+    function reachCompletion(): void {
+      clickButtonWithText('Continuar', currentCard()) // 1
+      clickButtonWithText('Continuar') // 2
+      clickButtonWithText('Continuar') // 3
+      clickButtonWithText('Ir al final A') // 4
+      clickButtonWithText('Diapositiva 5') // 5 — llega al 100%
+    }
+
+    it('lleva `role="dialog"`/`aria-modal`, mueve el foco a "Continuar" al abrirse, y lo devuelve al cerrarse', () => {
+      runExportedBundle(buildReviewHtml(METADATA_ID_A))
+      reachCompletion()
+
+      const overlay = document.querySelector<HTMLElement>('.reviewOverlayBackdrop')
+      expect(overlay?.getAttribute('role')).toBe('dialog')
+      expect(overlay?.getAttribute('aria-modal')).toBe('true')
+
+      const continueButton = overlay?.querySelector('button') as HTMLButtonElement
+      expect(document.activeElement).toBe(continueButton)
+
+      continueButton.focus()
+      continueButton.click()
+      // Sin ningún disparador concreto que restaurar (la felicitación
+      // aparece sola, no la abre un botón), el foco vuelve al propio botón
+      // "Continuar" que se acaba de pulsar — nunca se pierde hacia
+      // `document.body`.
+      expect(document.activeElement).not.toBe(document.body)
+    })
+
+    it('la tecla Escape también cierra el overlay (antes solo lo cerraba el botón "Continuar")', () => {
+      runExportedBundle(buildReviewHtml(METADATA_ID_A))
+      reachCompletion()
+
+      const overlay = document.querySelector<HTMLElement>('.reviewOverlayBackdrop')
+      expect(overlay?.style.display).toBe('flex')
+
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+
+      expect(overlay?.style.display).toBe('none')
+    })
+
+    it('mientras está abierto, Tab/Shift+Tab no se escapa del diálogo — se queda en el botón "Continuar"', () => {
+      runExportedBundle(buildReviewHtml(METADATA_ID_A))
+      reachCompletion()
+
+      const overlay = document.querySelector<HTMLElement>('.reviewOverlayBackdrop')
+      const continueButton = overlay?.querySelector('button') as HTMLButtonElement
+      expect(document.activeElement).toBe(continueButton)
+
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }))
+      expect(document.activeElement).toBe(continueButton)
+
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true }))
+      expect(document.activeElement).toBe(continueButton)
+    })
+  })
+
   it('el progreso persiste en localStorage namespaced por metadata.id', () => {
     runExportedBundle(buildReviewHtml(METADATA_ID_A))
     clickButtonWithText('Continuar', currentCard())
@@ -403,5 +489,51 @@ describe('buildHtmlBundle con opciones de revisión — comportamiento en jsdom'
     // Y el progreso del primero sigue intacto en su propia clave.
     const rawA = window.localStorage.getItem(`brunch-teacher-review:${METADATA_ID_A}`)
     expect(JSON.parse(rawA!).visited).toHaveLength(3)
+  })
+
+  it('descarta del progreso los ids de nodo que ya no existen tras reestructurar el proyecto (bug real: podía superar el 100%)', () => {
+    // Progreso "envenenado" con un id que nunca existió en `reviewProject`
+    // (5 nodos reales) — simula visitar una versión anterior con más nodos.
+    window.localStorage.setItem(
+      `brunch-teacher-review:${METADATA_ID_A}`,
+      JSON.stringify({
+        visited: [INTRO_ID, SLIDE_ID, DECISION_ID, FINAL_A_ID, FINAL_B_ID, 'nodo-que-ya-no-existe'],
+        completed: false,
+      }),
+    )
+
+    runExportedBundle(buildReviewHtml(METADATA_ID_A))
+
+    // Sin el arreglo, esto sería `120% revisado` (6 visitados / 5 reales).
+    expect(indicatorButton().textContent).toBe('100% revisado')
+
+    // El id obsoleto se descarta también en el localStorage persistido, no
+    // solo en memoria — así la próxima carga ya no lo arrastra tampoco.
+    const raw = window.localStorage.getItem(`brunch-teacher-review:${METADATA_ID_A}`)
+    expect(JSON.parse(raw!).visited).toEqual(
+      expect.arrayContaining([INTRO_ID, SLIDE_ID, DECISION_ID, FINAL_A_ID, FINAL_B_ID]),
+    )
+    expect(JSON.parse(raw!).visited).toHaveLength(5)
+  })
+
+  it('si el diseñador añade una diapositiva nueva tras un progreso ya completado, deja de contar como completo', () => {
+    // El profesor ya había llegado al 100% de la versión anterior (5 nodos).
+    window.localStorage.setItem(
+      `brunch-teacher-review:${METADATA_ID_A}`,
+      JSON.stringify({
+        visited: [INTRO_ID, SLIDE_ID, DECISION_ID, FINAL_A_ID, FINAL_B_ID],
+        completed: true,
+      }),
+    )
+
+    // El diseñador añade un 6º nodo y reexporta con el MISMO metadata.id.
+    runExportedBundle(buildReviewHtmlWithExtraNode(METADATA_ID_A))
+
+    // Ya no está completo: hay una diapositiva nueva sin revisar. 5/6 = 83%,
+    // no el 100% que el progreso guardado decía.
+    expect(indicatorButton().textContent).toBe('83% revisado')
+
+    const raw = window.localStorage.getItem(`brunch-teacher-review:${METADATA_ID_A}`)
+    expect(JSON.parse(raw!).completed).toBe(false)
   })
 })

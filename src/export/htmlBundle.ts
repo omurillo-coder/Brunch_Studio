@@ -3,6 +3,7 @@ import {
   CICLOS,
   cicloOutputName,
   DEFAULT_CONTINUE_LABEL,
+  DEFAULT_IMAGE_ALT,
   FINAL_ALTERNATE_BODY_LINE_1,
   FINAL_ALTERNATE_BODY_LINE_2,
   FINAL_ALTERNATE_HEADING,
@@ -28,6 +29,7 @@ import {
 } from './exportedPlayerScript'
 import { EXPORTED_STYLES } from './exportedStyles'
 import type { PlayerIntroBrandAssets } from './introBrandAssets'
+import { sanitizeRichHtml } from './sanitizeRichHtml'
 
 /**
  * ---------------------------------------------------------------------------
@@ -104,7 +106,7 @@ const EXPORTED_TEXTS: ExportedTexts = {
   pointsSuffix: ' puntos',
   retry: 'Reintentar',
   deadEnd: 'Esta parte de la experiencia no tiene una continuación configurada.',
-  nodeImageAlt: 'Imagen de esta pantalla',
+  nodeImageAlt: DEFAULT_IMAGE_ALT,
   introHeading: INTRO_HEADING,
   introSubtitlePrefix: INTRO_SUBTITLE_PREFIX,
   introSubtitleAccent: INTRO_SUBTITLE_ACCENT,
@@ -268,7 +270,13 @@ function renderNodeBodies(project: ProjectDocument): Record<string, string> {
     for (const block of node.content) {
       if (block.type !== 'text') continue
       if (!block.body.trim()) continue
-      bodyHtml[block.id] = generateHTML(parseRichBody(block.body), RICH_TEXT_EXTENSIONS)
+      // Hallazgo de auditoría ("sin sanitización propia del HTML
+      // enriquecido"): `sanitizeRichHtml` (ver su comentario) es una
+      // defensa explícita en profundidad, además de (no en vez de) que
+      // `generateHTML` ya serialice de forma segura por diseño.
+      bodyHtml[block.id] = sanitizeRichHtml(
+        generateHTML(parseRichBody(block.body), RICH_TEXT_EXTENSIONS),
+      )
     }
   }
   return bodyHtml

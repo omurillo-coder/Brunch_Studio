@@ -1,5 +1,11 @@
 import type { Edge as XyEdge, Node as XyNode } from '@xyflow/react'
-import { asignaturaWorkspaceName, CICLOS, deriveEdges, RESPONSE_LETTERS } from '../../domain'
+import {
+  asignaturaWorkspaceName,
+  CICLOS,
+  defaultAlternateCondition,
+  deriveEdges,
+  RESPONSE_LETTERS,
+} from '../../domain'
 import type {
   CanvasBadge,
   DecisionResponse,
@@ -10,6 +16,7 @@ import type {
   ProjectDocument,
   SlideColor,
   SlideNode,
+  VariableDef,
 } from '../../domain'
 import { extractPlainText, parseRichBody } from '../richText/richTextContent'
 import { IN_HANDLE_ID, OUT_HANDLE_ID, parseResponseHandleId, responseHandleId } from './handles'
@@ -151,6 +158,45 @@ export interface CanvasNodeData extends BaseCanvasNodeData, Record<string, unkno
    * reducida) para dar contraste sin ocultarlo.
    */
   isDimmed: boolean
+  /**
+   * Petición de usuario ("me gustaría que en el nodo donde aplica salga un
+   * doble contorno... para que sepa que en esa pantalla se han usado
+   * variables"): `true` cuando ESTE nodo lee o escribe alguna variable del
+   * proyecto — alimenta el doble contorno de `.cardUsesVariables`
+   * (`NodeCard.module.css`). Ver `nodeUsesVariables` para el criterio
+   * exacto por tipo de nodo (siempre `false` para `intro`, que no tiene
+   * ningún campo de condición/efecto).
+   */
+  usesVariables: boolean
+}
+
+/**
+ * ¿Lee o escribe `node` alguna variable del proyecto? Criterio por tipo:
+ * - `intro`: siempre `false` — `IntroNodeSchema` no tiene `condition` ni
+ *   `visitEffects`.
+ * - `slide`: `true` si tiene `condition` (enrutado condicional de
+ *   "continuar"), `visitEffects` con al menos un efecto, o alguna
+ *   `response` con `condition`/`effects` propios.
+ * - `final`: `true` si tiene una `alternateCondition` guardada, O si
+ *   `defaultAlternateCondition` (`src/domain/nodePacks.ts`) sintetizaría
+ *   una a partir de `projectVariables` (variable "Fallos") — MISMO
+ *   criterio que `resolveFinalContent` (`src/player/runtime.ts`): desde la
+ *   petición de usuario "que siempre salgan esos dos finales... sin tener
+ *   que activar nada", un Final con una variable "Fallos" en el proyecto
+ *   YA lee esa variable en el recorrido real aunque el documento no tenga
+ *   nada guardado — el indicador debe reflejar eso, no solo lo
+ *   explícitamente configurado.
+ */
+function nodeUsesVariables(node: DomainNode, projectVariables: VariableDef[]): boolean {
+  if (node.type === 'intro') return false
+  if (node.type === 'final') {
+    return Boolean(node.alternateCondition ?? defaultAlternateCondition(projectVariables))
+  }
+  if (node.condition) return true
+  if (node.visitEffects && node.visitEffects.length > 0) return true
+  return node.responses.some(
+    (response) => Boolean(response.condition) || Boolean(response.effects && response.effects.length > 0),
+  )
 }
 
 /** Ordena las respuestas por letra (A→D), igual que el Inspector y el
@@ -349,6 +395,13 @@ interface FlowNodeCacheEntry {
   isHighlighted: boolean
   isDimmed: boolean
   hasNoOutgoing: boolean
+  /** Referencia de `project.variables` usada para calcular `usesVariables`
+   *  de un Final SIN `alternateCondition` guardada (ver `nodeUsesVariables`)
+   *  — a diferencia del resto de insumos, esto no depende solo de `node`,
+   *  así que necesita su propia entrada en la caché (immer conserva la
+   *  MISMA referencia mientras las variables no cambien, así que `===`
+   *  basta, igual criterio que `node`). */
+  projectVariables: VariableDef[]
   result: CanvasFlowNode
 }
 
@@ -420,6 +473,7 @@ export function toFlowNodes(
     const hasNoOutgoing =
       (node.type === 'slide' || node.type === 'intro') && !nodesWithOutgoing.has(node.id)
     const isDimmed = hasSelection && !isSelected && !isHighlighted
+    const usesVariables = nodeUsesVariables(node, project.variables)
 
     const cached = cache?.get(node.id)
     if (
@@ -429,7 +483,8 @@ export function toFlowNodes(
       cached.isSelected === isSelected &&
       cached.isHighlighted === isHighlighted &&
       cached.isDimmed === isDimmed &&
-      cached.hasNoOutgoing === hasNoOutgoing
+      cached.hasNoOutgoing === hasNoOutgoing &&
+      cached.projectVariables === project.variables
     ) {
       return cached.result
     }
@@ -444,6 +499,7 @@ export function toFlowNodes(
         hasNoOutgoing,
         isHighlighted,
         isDimmed,
+        usesVariables,
       },
       initialWidth: INITIAL_NODE_WIDTH,
       initialHeight: INITIAL_NODE_HEIGHT,
@@ -455,6 +511,7 @@ export function toFlowNodes(
       isHighlighted,
       isDimmed,
       hasNoOutgoing,
+      projectVariables: project.variables,
       result: flowNode,
     })
     return flowNode

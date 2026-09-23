@@ -1,11 +1,11 @@
 import { deriveEdges } from './graph'
+import { FALLOS_VARIABLE_NAME } from './nodePacks'
 import { loadSpanishSpellChecker } from './spellingDictionary'
-import { extractPlainText, parseRichBody } from '../editor/richText/richTextContent'
 import type { ProjectDocument } from './schemas'
 
 /**
  * "Rinconcito de avisos" del lienzo (ver `src/editor/Diagnostics/
- * DiagnosticsPanel.tsx`): tres comprobaciones adicionales sobre el grafo,
+ * DiagnosticsPanel.tsx`): comprobaciones adicionales sobre el grafo,
  * deliberadamente SEPARADAS de `validateProject` (`src/domain/
  * validation.ts`) en vez de añadidas ahí:
  *
@@ -18,7 +18,13 @@ import type { ProjectDocument } from './schemas'
  *   forma de salida distinta (incluye `responseText`, pensada para listarse
  *   en el panel de avisos con el texto de la respuesta en vez de solo su
  *   id) — no sustituye a `validateProject`, es una vista adicional del mismo
- *   dato para un consumidor distinto.
+ *   dato para un consumidor distinto. También detecta una segunda forma de
+ *   respuesta problemática que `validateProject` no cubre: texto vacío
+ *   aunque SÍ tenga destino conectado (ver su comentario, campo `reason`).
+ * - `detectUnusedVariables`: hallazgo de auditoría — una variable declarada
+ *   y nunca referenciada por ninguna condición/efecto del grafo. Tampoco
+ *   encaja en `validateProject` (no es un problema de alcanzabilidad del
+ *   grafo, sino de la lista de variables del proyecto).
  * - `checkSpelling`: no tiene relación con la validez del grafo en absoluto
  *   (es sobre el TEXTO de las diapositivas), así que no tenía cabida en
  *   `validation.ts` de ningún modo.
@@ -159,6 +165,7 @@ export interface UnlinkedResponseIssue {
   nodeId: string
   responseId: string
   responseText: string
+  reason: 'no-target' | 'empty-text'
 }
 
 /**
@@ -172,15 +179,23 @@ export function unlinkedResponseIssueId(issue: UnlinkedResponseIssue): string {
 }
 
 /**
- * Respuestas de decisión SIN `targetNodeId`, una entrada por respuesta.
- *
- * Más fino que `SLIDE_WITHOUT_TARGET`/`RESPONSE_WITHOUT_TARGET` de
- * `validateProject` (ver comentario de cabecera del módulo): esta función
- * existe para el panel de avisos, que quiere mostrar el TEXTO de cada
- * respuesta suelta, no solo su id. Una diapositiva "de continuar" (sin
- * `responses`) nunca aparece aquí — no tiene respuestas que recorrer, ni
- * falta que hace: su propio destino de "Continuar" ya lo cubre
- * `SLIDE_WITHOUT_TARGET`.
+ * Respuestas de decisión con uno de dos problemas — `reason` distingue cuál
+ * (una respuesta puede en teoría tener ambos a la vez; se reporta como
+ * `'no-target'`, el más grave de los dos, sin generar dos avisos separados
+ * para la misma respuesta):
+ * - `'no-target'`: sin `targetNodeId`, una entrada por respuesta. Más fino
+ *   que `SLIDE_WITHOUT_TARGET`/`RESPONSE_WITHOUT_TARGET` de `validateProject`
+ *   (ver comentario de cabecera del módulo): esta función existe para el
+ *   panel de avisos, que quiere mostrar el TEXTO de cada respuesta suelta,
+ *   no solo su id. Una diapositiva "de continuar" (sin `responses`) nunca
+ *   aparece aquí — no tiene respuestas que recorrer, ni falta que hace: su
+ *   propio destino de "Continuar" ya lo cubre `SLIDE_WITHOUT_TARGET`.
+ * - `'empty-text'`: petición de usuario (hallazgo de auditoría — "extender
+ *   el chequeo de opciones sin vincular para incluir texto vacío aunque haya
+ *   destino"): una respuesta SÍ conectada pero con `text` en blanco es un
+ *   botón vacío en el Player/export — un problema real que
+ *   `RESPONSE_WITHOUT_TARGET`/`'no-target'` no detecta, precisamente porque
+ *   esta respuesta SÍ tiene destino.
  */
 export function detectUnlinkedResponses(project: ProjectDocument): UnlinkedResponseIssue[] {
   const issues: UnlinkedResponseIssue[] = []
@@ -192,17 +207,79 @@ export function detectUnlinkedResponses(project: ProjectDocument): UnlinkedRespo
       // Petición de usuario: `actsAsExit` (milestone "+1 fallo con Game
       // Over") nunca tiene `targetNodeId` A PROPÓSITO — actúa como el
       // botón Salir, no es una respuesta a la que le falte conectar algo.
-      if (!response.targetNodeId && !response.actsAsExit) {
-        issues.push({
-          nodeId: node.id,
-          responseId: response.id,
-          responseText: response.text,
-        })
-      }
+      const missingTarget = !response.targetNodeId && !response.actsAsExit
+      const emptyText = response.text.trim() === ''
+      if (!missingTarget && !emptyText) continue
+
+      issues.push({
+        nodeId: node.id,
+        responseId: response.id,
+        responseText: response.text,
+        reason: missingTarget ? 'no-target' : 'empty-text',
+      })
     }
   }
 
   return issues
+}
+
+// ---------------------------------------------------------------------------
+// Variables sin usar
+// ---------------------------------------------------------------------------
+
+export interface UnusedVariableIssue {
+  variableId: string
+  variableName: string
+}
+
+/**
+ * Identificador ESTABLE de un `UnusedVariableIssue` (ver `cycleIssueId` para
+ * el criterio general).
+ */
+export function unusedVariableIssueId(issue: UnusedVariableIssue): string {
+  return `unusedVariable:${issue.variableId}`
+}
+
+/**
+ * Variables declaradas en `project.variables` que ninguna condición ni
+ * ningún efecto del grafo referencia por `variableId` — declaradas y
+ * olvidadas, sin ningún uso real en el recorrido.
+ *
+ * Recorre las cuatro formas en que una `variableId` puede aparecer:
+ * `SlideNode.condition`/`visitEffects`, `DecisionResponse.condition`/
+ * `effects`. `FinalNode.alternateCondition` se suma aparte: caso especial
+ * porque, si el proyecto tiene algún Final, la variable llamada "Fallos" se
+ * usa IMPLÍCITAMENTE aunque ningún `alternateCondition` la referencie
+ * todavía (ver `defaultAlternateCondition`/`FALLOS_VARIABLE_NAME` en
+ * `nodePacks.ts`, petición de usuario "que siempre salgan esos dos
+ * finales... que no haga falta que yo le dé al botón") — contarla como "sin
+ * usar" en ese caso sería un falso positivo.
+ */
+export function detectUnusedVariables(project: ProjectDocument): UnusedVariableIssue[] {
+  const usedIds = new Set<string>()
+
+  for (const node of project.graph.nodes) {
+    if (node.type === 'slide') {
+      if (node.condition) usedIds.add(node.condition.variableId)
+      for (const effect of node.visitEffects ?? []) usedIds.add(effect.variableId)
+      for (const response of node.responses) {
+        if (response.condition) usedIds.add(response.condition.variableId)
+        for (const effect of response.effects ?? []) usedIds.add(effect.variableId)
+      }
+    } else if (node.type === 'final' && node.alternateCondition) {
+      usedIds.add(node.alternateCondition.variableId)
+    }
+  }
+
+  const hasFinal = project.graph.nodes.some((node) => node.type === 'final')
+  if (hasFinal) {
+    const fallos = project.variables.find((variable) => variable.name === FALLOS_VARIABLE_NAME)
+    if (fallos) usedIds.add(fallos.id)
+  }
+
+  return project.variables
+    .filter((variable) => !usedIds.has(variable.id))
+    .map((variable) => ({ variableId: variable.id, variableName: variable.name }))
 }
 
 // ---------------------------------------------------------------------------
@@ -244,8 +321,20 @@ interface ReviewableText {
  *
  * Los bloques `image`/`audio` no tienen texto propio que revisar, así que se
  * ignoran sin más (no son ni siquiera candidatos).
+ *
+ * Import dinámico deliberado de `richText/richTextContent` (no estático
+ * arriba del archivo): esa dependencia arrastra Tiptap/ProseMirror entero,
+ * y `diagnostics.ts` se re-exporta desde el barrel `src/domain/index.ts`
+ * que prácticamente todo el proyecto importa — incluida la pantalla inicial
+ * (`HomeScreen`), que nunca corrige ortografía. Un import estático aquí
+ * metía Tiptap en CUALQUIER chunk que necesitara algo de `domain`, aunque
+ * nunca llegara a llamarse `checkSpelling` (única llamante de esta
+ * función, ya asíncrona por el diccionario — ver su comentario). Con el
+ * import dinámico, Tiptap solo se descarga la primera vez que de verdad se
+ * ejecuta una revisión ortográfica.
  */
-function collectReviewableTexts(project: ProjectDocument): ReviewableText[] {
+async function collectReviewableTexts(project: ProjectDocument): Promise<ReviewableText[]> {
+  const { extractPlainText, parseRichBody } = await import('../editor/richText/richTextContent')
   const sources: ReviewableText[] = []
 
   function addIfNonEmpty(nodeId: string, text: string): void {
@@ -305,6 +394,27 @@ export function tokenizeForSpelling(text: string): string[] {
 }
 
 /**
+ * Hallazgo de auditoría ("la revisión ortográfica recorre todo el proyecto
+ * de forma síncrona"): cada `SPELLING_YIELD_EVERY_N_WORDS` palabras
+ * comprobadas, `checkSpelling` cede el hilo principal brevemente (un
+ * `setTimeout(0)`, la forma portable de ceder una macrotarea tanto en
+ * navegador como en el entorno de test) antes de seguir — sin esto, un
+ * proyecto con mucho texto podía notarse como un bloqueo breve de un tirón,
+ * pese a que la función ya era `async` (esa `async` solo cubría la carga del
+ * diccionario, ver su comentario; el bucle en sí corría de un tirón, sin
+ * ceder nunca). 200 es un punto intermedio: bastante grande para no generar
+ * cientos de cesiones en un proyecto normal (coste de por sí, cada
+ * `setTimeout` es al menos una vuelta del bucle de eventos), bastante
+ * pequeño para que ninguna vuelta sin ceder tome más de un puñado de
+ * milisegundos.
+ */
+const SPELLING_YIELD_EVERY_N_WORDS = 200
+
+function yieldToMainThread(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0))
+}
+
+/**
  * Comprueba la ortografía de todo el texto revisable del proyecto contra el
  * diccionario de español (`loadSpanishSpellChecker`, cacheado en memoria
  * para toda la sesión — ver ese módulo).
@@ -312,7 +422,9 @@ export function tokenizeForSpelling(text: string): string[] {
  * Async porque cargar el diccionario tiene coste (ver
  * `spellingDictionary.ts`); quien la llama (`DiagnosticsPanel`) es
  * responsable de no dispararla en cada tecla/render, solo bajo demanda (ver
- * comentario de ese componente).
+ * comentario de ese componente). El propio bucle de comprobación TAMBIÉN
+ * cede el hilo periódicamente — ver `yieldToMainThread`/
+ * `SPELLING_YIELD_EVERY_N_WORDS` arriba.
  *
  * Deduplica por (nodo, palabra en minúsculas): la misma errata repetida
  * varias veces dentro del mismo nodo (p.ej. en dos bloques de texto
@@ -321,15 +433,22 @@ export function tokenizeForSpelling(text: string): string[] {
  * de ocurrencias.
  */
 export async function checkSpelling(project: ProjectDocument): Promise<SpellingIssue[]> {
-  const sources = collectReviewableTexts(project)
+  const sources = await collectReviewableTexts(project)
   if (sources.length === 0) return []
 
   const speller = await loadSpanishSpellChecker()
   const seen = new Set<string>()
   const issues: SpellingIssue[] = []
+  let wordsSinceYield = 0
 
   for (const source of sources) {
     for (const word of tokenizeForSpelling(source.text)) {
+      wordsSinceYield += 1
+      if (wordsSinceYield >= SPELLING_YIELD_EVERY_N_WORDS) {
+        wordsSinceYield = 0
+        await yieldToMainThread()
+      }
+
       if (speller.correct(word)) continue
 
       const key = `${source.nodeId}:${word.toLowerCase()}`

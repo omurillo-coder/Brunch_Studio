@@ -14,6 +14,7 @@
 mod assets;
 mod error;
 mod export;
+mod path_safety;
 mod repository;
 mod schema;
 mod scorm;
@@ -21,7 +22,8 @@ mod text_file;
 
 pub use assets::{gc_orphan_assets, get_asset, import_asset, AssetDataDto, AssetMetaDto};
 pub use error::PersistenceError;
-pub use export::write_html_bundle;
+pub use export::{write_html_bundle, write_html_zip_bundle};
+pub use path_safety::{validate_absolute_path, validate_target_path};
 pub use repository::{create_project_file, open_project_file, save_project_file};
 pub use scorm::write_scorm_package;
 pub use text_file::read_text_file;

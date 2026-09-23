@@ -164,6 +164,40 @@
   outline-offset: 2px;
 }
 
+/* Petición de usuario ("que en el nodo donde aplica salga un doble
+   contorno en el exterior para que sepa que en esa pantalla se han usado
+   variables"): `data.usesVariables` en `adapter.ts`/`cardClassName`
+   (`nodeTypes.tsx`) — la diapositiva tiene una condición de enrutado, un
+   efecto al visitarla, o alguna respuesta con condición/efectos propios;
+   para un Final, que su variante alternativa ("con fallos") dependa de
+   verdad de una variable, configurada a mano o no (ver
+   `nodeUsesVariables` en `adapter.ts`).
+
+   Deliberadamente un PSEUDO-ELEMENTO (`::after`), no `outline`/`box-shadow`
+   en `.card` directamente: esos dos canales YA están repartidos entre el
+   resto de indicadores de esta hoja (`border-color`/`box-shadow` para
+   selección/aviso/resaltado; `outline` para `.cardFinal`/`.cardIntro`/
+   `.cardGameOver`) — un tercer indicador en cualquiera de los dos se
+   pisaría con alguno de ellos en cuanto coincidieran en el mismo nodo (un
+   Final que además usa variables es, de hecho, el caso más común desde la
+   petición "que siempre salgan esos dos finales"). Un pseudo-elemento
+   aparte, más hacia fuera que cualquiera de esos anillos, se pinta SIEMPRE
+   sin conflicto con ninguno.
+
+   `border: 4px double`: el propio valor `double` de CSS ya dibuja dos
+   líneas paralelas con un hueco entre ellas dentro de ese ancho — el
+   "doble contorno" pedido con una sola declaración, sin tener que apilar
+   dos elementos. `.card` ya es `position: relative` (ver arriba), así que
+   este pseudo-elemento no necesita fijarlo de nuevo. */
+.cardUsesVariables::after {
+  content: '';
+  position: absolute;
+  inset: -8px;
+  border: 4px double var(--bs-color-accent);
+  border-radius: calc(var(--bs-radius-md) + 8px);
+  pointer-events: none;
+}
+
 /* Tarea "Contraste de texto" — BUG REAL reportado por el usuario ("no se lee
    el texto al colorear una diapositiva"), diagnosticado y arreglado de
    verdad en esta pasada (la anterior solo calculó el contraste WCAG sobre

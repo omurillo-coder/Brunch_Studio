@@ -1,7 +1,7 @@
 import { addResponse, updateResponse } from './responses'
 import { addVariable, createNode, updateNode } from './project'
 import { connect } from './graph'
-import type { NodePosition, ProjectDocument } from './schemas'
+import type { NodePosition, ProjectDocument, VariableCondition, VariableDef } from './schemas'
 
 /**
  * ---------------------------------------------------------------------------
@@ -59,7 +59,11 @@ import type { NodePosition, ProjectDocument } from './schemas'
  * se reutiliza tal cual (nunca se duplica ni se resetea su valor inicial).
  */
 
-const FALLOS_VARIABLE_NAME = 'Fallos'
+/** Exportado (no solo de uso interno de este archivo): `defaultAlternateCondition`,
+ *  más abajo, necesita el mismo nombre exacto para reconocer "la variable de
+ *  fallos" de un proyecto sin depender de que se haya creado a través de
+ *  este pack — un proyecto puede tener una variable "Fallos" creada a mano. */
+export const FALLOS_VARIABLE_NAME = 'Fallos'
 
 /** Devuelve el id de la variable "Fallos" del proyecto, creándola primero
  *  (número, valor inicial 0) si todavía no existe una con ese nombre exacto
@@ -179,4 +183,57 @@ export function addGameOverPack(project: ProjectDocument, position: NodePosition
   next = connect(next, slide1Id, gameOverId, response2Id)
 
   return next
+}
+
+/**
+ * ---------------------------------------------------------------------------
+ * Condición por defecto de la variante alternativa de un Final ("con fallos")
+ * ---------------------------------------------------------------------------
+ *
+ * Petición de usuario ("que siempre salgan esos dos finales, con fallos y
+ * sin fallos... que no haga falta darle a ningún botón"): un Final con una
+ * variable "Fallos" en el proyecto ya no necesita que el diseñador
+ * configure manualmente su `FinalNodeSchema.alternateCondition` para que la
+ * variante "con fallos" sea alcanzable — si el nodo no tiene ninguna
+ * guardada, `resolveFinalContent` (`src/player/runtime.ts`) y su traducción
+ * en `exportedPlayerScript.ts` (`finalUsesAlternateContent`) usan ESTA
+ * función para sintetizar una sobre la marcha, sin escribir nada en el
+ * documento. El Inspector (`FinalAlternateSection`) también la usa como
+ * PRIMER candidato para lo que muestra por defecto — con un candidato
+ * adicional propio (la primera variable del proyecto) solo como punto de
+ * partida EDITABLE cuando no hay variable "Fallos", nunca como algo que se
+ * active en el recorrido real sin que el diseñador lo toque a propósito
+ * (ver el comentario de `FinalAlternateSection` para el porqué de esa
+ * distinción).
+ *
+ * Criterio de selección de la variable — DELIBERADAMENTE ESTRICTO: solo una
+ * llamada EXACTAMENTE "Fallos" (la que crea "+1 fallo con Game Over",
+ * `FALLOS_VARIABLE_NAME` arriba, también si el diseñador la creó a mano con
+ * ese mismo nombre). Nunca "la primera variable que haya" — un proyecto
+ * puede usar variables para enrutado condicional que no tiene NADA que ver
+ * con fallos (p.ej. un flag de "activar"/"omitir"); activar automáticamente
+ * la variante "con fallos" sobre una variable así sería secuestrar su
+ * significado sin que el diseñador lo pidiera. Sin una variable "Fallos" en
+ * el proyecto, `undefined` — el Final se queda con su contenido por
+ * defecto ("TOP") sin más, mismo aviso que ya mostraba el Inspector; si el
+ * diseñador quiere una condición sobre OTRA variable, la edición manual del
+ * editor de condición del Inspector lo sigue permitiendo (ver
+ * `FinalAlternateSection`), solo que entonces sí queda escrita de verdad en
+ * el documento en cuanto la toca, no sintetizada aquí.
+ *
+ * Criterio de la condición en sí: `Fallos > 0` ("hubo al menos un fallo") —
+ * a diferencia del antiguo valor de partida del botón "+ Añadir variante
+ * alternativa" (`==` al valor inicial de la variable, siempre trivialmente
+ * cierto desde el principio), este SÍ empieza en falso (una variable
+ * "Fallos" arranca en `0`) y solo se activa cuando de verdad ha pasado
+ * algo — el comportamiento que de verdad se busca al activarse sin
+ * configuración.
+ */
+export function defaultAlternateCondition(variables: VariableDef[]): VariableCondition | undefined {
+  const variable = variables.find((candidate) => candidate.name === FALLOS_VARIABLE_NAME)
+  if (!variable) return undefined
+  if (variable.type === 'boolean') {
+    return { variableId: variable.id, operator: '==', value: true }
+  }
+  return { variableId: variable.id, operator: '>', value: 0 }
 }

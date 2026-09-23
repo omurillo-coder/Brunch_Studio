@@ -43,6 +43,16 @@ pub enum PersistenceError {
     Io(String),
     /// Error de SQLite genérico no cubierto por las variantes anteriores.
     Sqlite(String),
+    /// Hallazgo de auditoría ("los comandos de Tauri no validan que las
+    /// rutas caigan dentro de una carpeta permitida"): la ruta recibida por
+    /// un comando no es absoluta, o su extensión no encaja con lo que ese
+    /// comando debería tocar (ver `path_safety::validate_target_path`).
+    /// Nunca debería ocurrir en uso normal (todas las rutas llegan de un
+    /// diálogo nativo del SO) — es una defensa en profundidad frente a un
+    /// IPC comprometido, no una restricción a "una única carpeta de
+    /// proyecto" (esta app permite abrir/guardar en cualquier ruta a
+    /// propósito).
+    InvalidPath(String),
 }
 
 impl fmt::Display for PersistenceError {
@@ -75,6 +85,7 @@ impl fmt::Display for PersistenceError {
             }
             PersistenceError::Io(message) => write!(f, "error de E/S: {message}"),
             PersistenceError::Sqlite(message) => write!(f, "error de SQLite: {message}"),
+            PersistenceError::InvalidPath(message) => write!(f, "ruta no válida: {message}"),
         }
     }
 }

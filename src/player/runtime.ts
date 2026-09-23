@@ -1,4 +1,9 @@
-import { applyVariableEffects, evaluateCondition, resolveSlideTarget } from '../domain'
+import {
+  applyVariableEffects,
+  defaultAlternateCondition,
+  evaluateCondition,
+  resolveSlideTarget,
+} from '../domain'
 import type {
   DecisionResponse,
   FinalNode,
@@ -6,6 +11,7 @@ import type {
   Node,
   ProjectDocument,
   SlideNode,
+  VariableDef,
   VariableState,
 } from '../domain'
 
@@ -106,13 +112,13 @@ export type PlayerView =
       resolvedBody: string
       /**
        * Milestone "+1 fallo con Game Over", petición de usuario ("Final
-       * Perfecto con confeti", ampliada después: "el confeti lo quiero si
-       * llegas al final sin fallos y con fallos, en los dos"): `true`
-       * cuando debe celebrarse con confeti esta vista — directamente
-       * `node.celebrate`, sea cual sea el contenido resuelto (por defecto
-       * o alternativo). Se sigue calculando aquí (no en quien pinta la
-       * vista) por consistencia con el resto de este tipo, aunque ya no
-       * dependa de `usedAlternate`.
+       * Perfecto con confeti", ampliada después y luego SIMPLIFICADA a una
+       * regla fija: "el confeti... ponlo siempre en el Final TOP"): `true`
+       * únicamente cuando NO se usó el contenido alternativo — el Final por
+       * defecto ("TOP") siempre celebra, el "con fallos" nunca. Ya no
+       * depende de ningún flag por nodo (`node.celebrate` quedó sin uso,
+       * ver `resolveFinalContent`); se sigue calculando aquí, no en quien
+       * pinta la vista, por consistencia con el resto de este tipo.
        */
       celebrate: boolean
       /**
@@ -290,12 +296,25 @@ function orderResponses(
  * condición pero nunca escribió nada en "Contenido alternativo" del
  * Inspector (ya no hay motivo visible para hacerlo). El gate real es solo
  * la condición.
+ *
+ * Petición de usuario ampliada ("que siempre salgan esos dos finales... sin
+ * tener que activar nada"): `node.alternateCondition` ya no es un paso
+ * manual — si no está configurada, se usa `defaultAlternateCondition`
+ * (`src/domain/nodePacks.ts`) para sintetizar una razonable a partir de las
+ * variables del proyecto, así que la variante "con fallos" es alcanzable
+ * desde el primer momento en cualquier proyecto con al menos una variable,
+ * sin que el diseñador tenga que hacer nada. `celebrate` deja de leer
+ * `node.celebrate` (petición de usuario: "quita el check del confeti...
+ * ponlo siempre en el Final TOP") — el confeti pasa a ser una regla fija:
+ * siempre en el contenido por defecto, nunca en el alternativo.
  */
 function resolveFinalContent(
   node: FinalNode,
   variables: VariableState,
+  projectVariables: VariableDef[],
 ): { body: string; usedAlternate: boolean } {
-  if (node.alternateCondition && evaluateCondition(variables, node.alternateCondition)) {
+  const condition = node.alternateCondition ?? defaultAlternateCondition(projectVariables)
+  if (condition && evaluateCondition(variables, condition)) {
     return { body: node.alternateBody ?? '', usedAlternate: true }
   }
   return { body: node.body, usedAlternate: false }
@@ -374,12 +393,15 @@ export function getView(project: ProjectDocument, state: PlayerState): PlayerVie
   }
 
   if (node.type === 'final') {
-    const { body, usedAlternate } = resolveFinalContent(node, state.variables)
+    const { body, usedAlternate } = resolveFinalContent(node, state.variables, project.variables)
     return {
       kind: 'final',
       node,
       resolvedBody: body,
-      celebrate: node.celebrate === true,
+      // Petición de usuario ("el confeti... ponlo siempre en el Final TOP"):
+      // regla fija, ya no un flag por nodo (`node.celebrate` se ignora) —
+      // ver el comentario de `resolveFinalContent`.
+      celebrate: !usedAlternate,
       usedAlternate,
     }
   }

@@ -91,6 +91,22 @@ describe('convertTweeToProject', () => {
     expect(inicio.responses[1]?.targetNodeId).toBe(derecha?.id)
     expect(inicio.responses[1]?.letter).toBe('B')
     expect(warnings).toHaveLength(0)
+    // Hallazgo de auditoría: sin ningún aviso, `internalNote` queda
+    // `undefined` (nunca una cadena vacía) — mismo criterio "ausente = sin
+    // nota" que el resto del dominio.
+    expect(inicio.internalNote).toBeUndefined()
+  })
+
+  it('hallazgo de auditoría: un pasaje con más de un aviso los combina en `internalNote`, uno por línea', () => {
+    const source =
+      ':: Inicio\n(set: $vida to 10) [[A]]\n[[B]]\n[[C]]\n[[D]]\n[[Fantasma]]\n\n' +
+      ':: A\nFin.\n\n:: B\nFin.\n\n:: C\nFin.\n\n:: D\nFin.'
+    const { document } = convertTweeToProject(source, 'Historia')
+    const inicio = document.graph.nodes.find((n) => n.title === 'Inicio') as SlideNode
+
+    expect(inicio.internalNote).toContain('lógica de Twine')
+    expect(inicio.internalNote).toContain('descartado')
+    expect(inicio.internalNote?.split('\n')).toHaveLength(2)
   })
 
   it('un pasaje con más de 4 enlaces usa los 4 primeros y avisa de los descartados', () => {
@@ -104,6 +120,11 @@ describe('convertTweeToProject', () => {
     expect(inicio.responses).toHaveLength(4)
     expect(inicio.responses.map((r) => r.text)).toEqual(['A', 'B', 'C', 'D'])
     expect(warnings.some((w) => w.includes('Inicio') && w.includes('descartado'))).toBe(true)
+    // Hallazgo de auditoría ("los avisos de importación Twee se muestran
+    // una vez y desaparecen"): el mismo aviso también queda como nota
+    // interna del nodo afectado, para encontrarlo después de cerrar el
+    // diálogo de importación.
+    expect(inicio.internalNote).toContain('descartado')
   })
 
   it('reconoce las cuatro notaciones de enlace equivalentes', () => {
@@ -172,6 +193,9 @@ describe('convertTweeToProject', () => {
     const inicio = document.graph.nodes.find((n) => n.title === 'Inicio') as SlideNode
     expect(inicio.targetNodeId).toBeUndefined()
     expect(warnings.some((w) => w.includes('Fantasma') && w.includes('Inicio'))).toBe(true)
+    // Hallazgo de auditoría: mismo criterio que el test de "más de 4
+    // enlaces" — el aviso persiste como nota interna del nodo.
+    expect(inicio.internalNote).toContain('Fantasma')
   })
 
   it('detecta una macro Harlowe en un pasaje y avisa sin borrar el texto', () => {
@@ -181,6 +205,8 @@ describe('convertTweeToProject', () => {
     expect(warnings.some((w) => w.includes('ConVariable'))).toBe(true)
     if (nodo?.type !== 'slide') throw new Error('esperaba una diapositiva')
     expect(bodyText(slideBody(nodo))).toContain('(set: $vida to 10)')
+    // Hallazgo de auditoría: mismo criterio que los dos tests anteriores.
+    expect(nodo.internalNote).toContain('lógica de Twine')
   })
 
   it('detecta una macro SugarCube en otro pasaje y avisa por separado', () => {

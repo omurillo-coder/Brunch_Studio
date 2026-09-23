@@ -797,6 +797,55 @@ export function duplicateNode(
 // `src/domain/schemas.ts`). Nunca tocan `project.graph` salvo `deleteVariable`,
 // que limpia referencias colgantes (ver más abajo).
 
+/**
+ * Limpia cualquier referencia colgante a `variableId` repartida por el
+ * grafo: `condition` de una diapositiva "de continuar", `condition`/
+ * `effects` de una respuesta de decisión, `visitEffects` de una diapositiva,
+ * y `alternateCondition`/`alternateBody` (los dos a la vez) de un Final.
+ *
+ * Compartida por dos llamantes con el mismo problema de fondo:
+ * - `deleteVariable`: la variable deja de existir del todo.
+ * - `updateVariable`: la variable SIGUE existiendo pero cambia de `type` —
+ *   una condición/efecto guardado con el tipo anterior (p.ej. `> 5` sobre lo
+ *   que ahora es una booleana) queda igual de incoherente que si la
+ *   variable se hubiera borrado, así que se limpia con el mismo criterio en
+ *   vez de dejarlo apuntando a un tipo que ya no es el suyo sin ningún
+ *   aviso — ver el comentario de diseño de `updateVariable`.
+ */
+function clearDanglingVariableReferences(project: ProjectDocument, variableId: string): void {
+  for (const node of project.graph.nodes) {
+    if (node.type === 'final') {
+      if (node.alternateCondition?.variableId === variableId) {
+        node.alternateCondition = undefined
+        node.alternateBody = undefined
+      }
+      continue
+    }
+
+    if (node.type !== 'slide') continue
+
+    if (node.condition?.variableId === variableId) {
+      node.condition = undefined
+    }
+    if (node.visitEffects) {
+      const remainingVisitEffects = node.visitEffects.filter(
+        (effect) => effect.variableId !== variableId,
+      )
+      node.visitEffects = remainingVisitEffects.length > 0 ? remainingVisitEffects : undefined
+    }
+
+    for (const response of node.responses) {
+      if (response.condition?.variableId === variableId) {
+        response.condition = undefined
+      }
+      if (response.effects) {
+        const remaining = response.effects.filter((effect) => effect.variableId !== variableId)
+        response.effects = remaining.length > 0 ? remaining : undefined
+      }
+    }
+  }
+}
+
 function findVariableIndex(project: ProjectDocument, variableId: string): number {
   return project.variables.findIndex((variable) => variable.id === variableId)
 }
@@ -908,6 +957,17 @@ export interface UpdateVariablePatch {
  *
  * No permite cambiar `id` (no forma parte del patch, igual que en el resto
  * del dominio).
+ *
+ * Si `patch.type` cambia de verdad el tipo de la variable (no si se repite
+ * el mismo), limpia cualquier condición/efecto del grafo que la
+ * referenciara — mismo criterio y misma función (`clearDanglingVariableReferences`)
+ * que usa `deleteVariable`: una condición `> 5` guardada cuando la variable
+ * era "número" queda igual de incoherente si pasa a ser "sí/no", así que no
+ * tiene sentido dejarla colgando con el tipo antiguo sin ningún aviso. Hoy
+ * ningún punto de la UI deja cambiar el `type` de una variable ya creada
+ * (ver el comentario de diseño de `VariablesPanel.tsx`), pero esta función
+ * de dominio es pública y no debe depender de esa convención de la UI para
+ * ser segura.
  */
 export function updateVariable(
   project: ProjectDocument,
@@ -931,19 +991,26 @@ export function updateVariable(
     assertValueMatchesType(resultingType, resultingInitialValue)
   }
 
+  const typeActuallyChanges = patch.type !== undefined && patch.type !== current.type
+
   return produce(project, (draft) => {
     const draftVariable = draft.variables[index]
     if (!draftVariable) return
     if (name !== undefined) draftVariable.name = name
     if (patch.type !== undefined) draftVariable.type = patch.type
     if (patch.initialValue !== undefined) draftVariable.initialValue = patch.initialValue
+    if (typeActuallyChanges) {
+      clearDanglingVariableReferences(draft, variableId)
+    }
     touchUpdatedAt(draft)
   })
 }
 
 /**
  * Elimina una variable del proyecto y limpia cualquier referencia colgante
- * hacia ella repartida por el grafo:
+ * hacia ella repartida por el grafo (`clearDanglingVariableReferences`,
+ * compartida también con `updateVariable` cuando cambia el `type` de una
+ * variable que se conserva — ver su comentario):
  * - `condition` de una diapositiva "de continuar", si referenciaba esta
  *   variable, se borra (vuelve a `undefined`).
  * - `condition` de una respuesta de decisión, igual.
@@ -984,39 +1051,7 @@ export function deleteVariable(project: ProjectDocument, variableId: string): Pr
 
   return produce(project, (draft) => {
     draft.variables = draft.variables.filter((variable) => variable.id !== variableId)
-
-    for (const node of draft.graph.nodes) {
-      if (node.type === 'final') {
-        if (node.alternateCondition?.variableId === variableId) {
-          node.alternateCondition = undefined
-          node.alternateBody = undefined
-        }
-        continue
-      }
-
-      if (node.type !== 'slide') continue
-
-      if (node.condition?.variableId === variableId) {
-        node.condition = undefined
-      }
-      if (node.visitEffects) {
-        const remainingVisitEffects = node.visitEffects.filter(
-          (effect) => effect.variableId !== variableId,
-        )
-        node.visitEffects = remainingVisitEffects.length > 0 ? remainingVisitEffects : undefined
-      }
-
-      for (const response of node.responses) {
-        if (response.condition?.variableId === variableId) {
-          response.condition = undefined
-        }
-        if (response.effects) {
-          const remaining = response.effects.filter((effect) => effect.variableId !== variableId)
-          response.effects = remaining.length > 0 ? remaining : undefined
-        }
-      }
-    }
-
+    clearDanglingVariableReferences(draft, variableId)
     touchUpdatedAt(draft)
   })
 }

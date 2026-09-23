@@ -305,12 +305,29 @@ export function convertTweeToProject(source: string, fallbackName: string): Conv
     nameToId.set(passage.name, createId())
   }
 
-  function resolveTarget(target: string, sourcePassageName: string): string | undefined {
+  // Hallazgo de auditoría ("los avisos de importación Twee se muestran una
+  // vez y desaparecen... si el usuario no toma nota, no hay forma de volver
+  // a encontrar qué diapositivas quedaron a medias"): además de acumularse
+  // en `warnings` (la lista global que ve HomeScreen antes de crear el
+  // proyecto), cada aviso ATRIBUIBLE a un pasaje concreto se escribe TAMBIÉN
+  // como `internalNote` de ESE nodo — campo que ya existe (`Nota interna, no
+  // se exporta`, visible en el Inspector y recortado en la propia tarjeta
+  // del lienzo, ver `NodeCard`/`adapter.ts`), así que no hace falta ningún
+  // campo de esquema nuevo ni ninguna UI nueva: el aviso queda plantado
+  // justo en la diapositiva a la que se refiere, encontrable mucho después
+  // de cerrar el diálogo de importación. `resolveTarget` recibe ahora el
+  // array de avisos DE ESE NODO (no el global) para poder añadir a los dos
+  // sitios a la vez.
+  function resolveTarget(
+    target: string,
+    sourcePassageName: string,
+    nodeWarnings: string[],
+  ): string | undefined {
     const targetId = nameToId.get(target)
     if (!targetId) {
-      warnings.push(
-        `El enlace a "${target}" del pasaje "${sourcePassageName}" no encontró ningún pasaje con ese nombre; esa conexión se deja sin destino.`,
-      )
+      const message = `El enlace a "${target}" del pasaje "${sourcePassageName}" no encontró ningún pasaje con ese nombre; esa conexión se deja sin destino.`
+      warnings.push(message)
+      nodeWarnings.push(message)
     }
     return targetId
   }
@@ -321,10 +338,12 @@ export function convertTweeToProject(source: string, fallbackName: string): Conv
       throw new Error(`Fallo interno al importar: no se generó id para el pasaje "${passage.name}".`)
     }
 
+    const nodeWarnings: string[] = []
+
     if (containsTwineLogic(passage.body)) {
-      warnings.push(
-        `El pasaje "${passage.name}" parece contener lógica de Twine (variables o condiciones) que no se puede importar; revísalo manualmente.`,
-      )
+      const message = `El pasaje "${passage.name}" parece contener lógica de Twine (variables o condiciones) que no se puede importar; revísalo manualmente.`
+      warnings.push(message)
+      nodeWarnings.push(message)
     }
 
     const { plainText, links } = extractLinks(passage.body)
@@ -335,11 +354,24 @@ export function convertTweeToProject(source: string, fallbackName: string): Conv
     }
     const common = { id, number: index + 1, position, title: passage.name }
 
+    // `internalNote` se añade siempre DESPUÉS de cualquier llamada a
+    // `resolveTarget`/chequeo que pueda empujar a `nodeWarnings` (última
+    // propiedad de cada objeto devuelto más abajo, o calculada tras
+    // construir `responses`): los objetos literales de JS evalúan sus
+    // propiedades en el orden escrito, así que para el momento en que se
+    // evalúa `internalNote`, `nodeWarnings` ya refleja TODOS los avisos de
+    // este nodo, no solo los detectados antes de este punto.
     if (links.length === 0) {
       // Un pasaje sin enlaces se convierte en un nodo `final`, que sigue
       // teniendo un único `body` (a diferencia de `slide`, ver
       // `src/domain/schemas.ts`) — el texto del pasaje va directo ahí.
-      const final: FinalNode = { ...common, type: 'final', body, variant: 'general' }
+      const final: FinalNode = {
+        ...common,
+        type: 'final',
+        body,
+        variant: 'general',
+        internalNote: nodeWarnings.length > 0 ? nodeWarnings.join('\n') : undefined,
+      }
       return final
     }
 
@@ -355,10 +387,11 @@ export function convertTweeToProject(source: string, fallbackName: string): Conv
       const slide: SlideNode = {
         ...common,
         type: 'slide',
-        targetNodeId: resolveTarget(link.target, passage.name),
+        targetNodeId: resolveTarget(link.target, passage.name, nodeWarnings),
         continueLabel: resolveContinueLabel(link.display, link.target),
         responses: [],
         content: [{ id: createId(), type: 'text', body }],
+        internalNote: nodeWarnings.length > 0 ? nodeWarnings.join('\n') : undefined,
       }
       return slide
     }
@@ -366,11 +399,11 @@ export function convertTweeToProject(source: string, fallbackName: string): Conv
     let usedLinks = links
     if (links.length > MAX_RESPONSES) {
       const discarded = links.length - MAX_RESPONSES
-      warnings.push(
-        `El pasaje "${passage.name}" tiene más de ${MAX_RESPONSES} enlaces; solo se han usado los ${MAX_RESPONSES} primeros y se ${
-          discarded === 1 ? 'ha descartado 1 enlace adicional' : `han descartado ${discarded} enlaces adicionales`
-        }.`,
-      )
+      const message = `El pasaje "${passage.name}" tiene más de ${MAX_RESPONSES} enlaces; solo se han usado los ${MAX_RESPONSES} primeros y se ${
+        discarded === 1 ? 'ha descartado 1 enlace adicional' : `han descartado ${discarded} enlaces adicionales`
+      }.`
+      warnings.push(message)
+      nodeWarnings.push(message)
       usedLinks = links.slice(0, MAX_RESPONSES)
     }
 
@@ -386,7 +419,7 @@ export function convertTweeToProject(source: string, fallbackName: string): Conv
         imageAssetId: undefined,
         audioAssetId: undefined,
         points: undefined,
-        targetNodeId: resolveTarget(link.target, passage.name),
+        targetNodeId: resolveTarget(link.target, passage.name, nodeWarnings),
       }
     })
 
@@ -397,6 +430,7 @@ export function convertTweeToProject(source: string, fallbackName: string): Conv
       continueLabel: undefined,
       responses,
       content: [{ id: createId(), type: 'text', body }],
+      internalNote: nodeWarnings.length > 0 ? nodeWarnings.join('\n') : undefined,
     }
     return slide
   })

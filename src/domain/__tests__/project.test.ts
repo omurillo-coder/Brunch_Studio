@@ -1032,6 +1032,84 @@ describe('updateVariable', () => {
     const project = createProject('P')
     expect(() => updateVariable(project, 'no-existe', { name: 'x' })).toThrow()
   })
+
+  it('cambiar type de verdad limpia condition/effects/visitEffects/alternateCondition que la referenciaban (mismo criterio que deleteVariable)', () => {
+    let p = addVariable(createProject('P'), { name: 'Fallos', type: 'number', initialValue: 0 })
+    const varId = p.variables[0]?.id
+    if (!varId) throw new Error('setup inválido')
+
+    const startId = p.graph.startNodeId
+    p = updateNode(p, startId, {
+      condition: { variableId: varId, operator: '>', value: 0 },
+      visitEffects: [{ variableId: varId, operation: 'increment', value: 1 }],
+    })
+    p = addResponse(p, startId)
+    const responseId = (p.graph.nodes.find((n) => n.id === startId) as SlideNode).responses[0]?.id
+    if (!responseId) throw new Error('setup inválido')
+    p = updateResponse(p, startId, responseId, {
+      condition: { variableId: varId, operator: '==', value: 1 },
+      effects: [{ variableId: varId, operation: 'set', value: 1 }],
+    })
+    p = createNode(p, 'final', { x: 0, y: 0 }, { body: 'Perfecto' })
+    const finalId = otherNodeIdOf(p, 'final')
+    p = updateNode(p, finalId, {
+      alternateCondition: { variableId: varId, operator: '>', value: 0 },
+      alternateBody: 'Con fallos',
+    })
+
+    p = updateVariable(p, varId, { type: 'boolean', initialValue: false })
+
+    const slide = p.graph.nodes.find((n) => n.id === startId) as SlideNode
+    expect(slide.condition).toBeUndefined()
+    expect(slide.visitEffects).toBeUndefined()
+    expect(slide.responses[0]?.condition).toBeUndefined()
+    expect(slide.responses[0]?.effects).toBeUndefined()
+    const final = p.graph.nodes.find((n) => n.id === finalId)
+    expect(final?.type === 'final' ? final.alternateCondition : 'missing').toBeUndefined()
+    expect(final?.type === 'final' ? final.alternateBody : 'missing').toBeUndefined()
+    // La propia variable sí cambió de tipo — la limpieza no lo deshace.
+    expect(p.variables[0]).toMatchObject({ type: 'boolean', initialValue: false })
+  })
+
+  it('cambiar solo name/initialValue (sin tocar type) NO limpia ninguna condición ni efecto', () => {
+    let p = addVariable(createProject('P'), { name: 'Fallos', type: 'number', initialValue: 0 })
+    const varId = p.variables[0]?.id
+    if (!varId) throw new Error('setup inválido')
+    const startId = p.graph.startNodeId
+    p = updateNode(p, startId, { condition: { variableId: varId, operator: '>', value: 0 } })
+
+    p = updateVariable(p, varId, { name: 'Errores', initialValue: 3 })
+
+    const slide = p.graph.nodes.find((n) => n.id === startId) as SlideNode
+    expect(slide.condition).toEqual({ variableId: varId, operator: '>', value: 0 })
+  })
+
+  it('pasar type con el mismo valor que ya tenía (patch redundante) tampoco limpia nada', () => {
+    let p = addVariable(createProject('P'), { name: 'Fallos', type: 'number', initialValue: 0 })
+    const varId = p.variables[0]?.id
+    if (!varId) throw new Error('setup inválido')
+    const startId = p.graph.startNodeId
+    p = updateNode(p, startId, { condition: { variableId: varId, operator: '>', value: 0 } })
+
+    p = updateVariable(p, varId, { type: 'number', initialValue: 5 })
+
+    const slide = p.graph.nodes.find((n) => n.id === startId) as SlideNode
+    expect(slide.condition).toEqual({ variableId: varId, operator: '>', value: 0 })
+  })
+
+  it('cambiar el type de una variable no afecta a condiciones/efectos que referencian OTRA variable', () => {
+    let p = addVariable(createProject('P'), { name: 'a', type: 'number', initialValue: 0 })
+    p = addVariable(p, { name: 'b', type: 'number', initialValue: 0 })
+    const [varA, varB] = p.variables
+    if (!varA || !varB) throw new Error('setup inválido')
+    const startId = p.graph.startNodeId
+    p = updateNode(p, startId, { condition: { variableId: varB.id, operator: '>', value: 0 } })
+
+    p = updateVariable(p, varA.id, { type: 'boolean', initialValue: false })
+
+    const slide = p.graph.nodes.find((n) => n.id === startId) as SlideNode
+    expect(slide.condition).toEqual({ variableId: varB.id, operator: '>', value: 0 })
+  })
 })
 
 describe('deleteVariable', () => {

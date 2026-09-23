@@ -5,8 +5,10 @@ import {
   cycleIssueId,
   detectCycles,
   detectUnlinkedResponses,
+  detectUnusedVariables,
   spellingIssueId,
   unlinkedResponseIssueId,
+  unusedVariableIssueId,
   validateProject,
   validationIssueId,
 } from '../../domain'
@@ -15,6 +17,7 @@ import type {
   Node,
   SpellingIssue,
   UnlinkedResponseIssue,
+  UnusedVariableIssue,
   ValidationIssue,
 } from '../../domain'
 import { useDismissedDiagnosticIds, useProject, useProjectStore } from '../../store'
@@ -93,6 +96,30 @@ type SpellingState =
   | { status: 'done'; issues: SpellingIssue[] }
   | { status: 'error'; message: string }
 
+/**
+ * Hallazgo de auditoría ("el corrector ortográfico se dispara al abrir
+ * cualquier proyecto... incondicionalmente al montar el panel"): programa
+ * `callback` para el próximo momento ocioso del navegador
+ * (`window.requestIdleCallback`) en vez de llamarlo síncronamente en el
+ * efecto de montaje — así no compite por el hilo principal con el resto del
+ * render inicial del editor. `requestIdleCallback` no existe en todos los
+ * entornos (Safari lo añadió tarde; jsdom, el entorno de test de este
+ * proyecto, no lo implementa en absoluto): con `setTimeout(callback, 1)`
+ * como reserva se preserva el mismo comportamiento observable (se dispara
+ * una vez, pronto, sin bloquear) sin depender de una API que puede faltar.
+ * Devuelve una función de cancelación, para el `return` de limpieza del
+ * `useEffect` que lo usa — si el panel se desmonta antes de que llegue el
+ * momento ocioso, no debe disparar el escaneo de un componente ya fuera.
+ */
+export function scheduleIdleSpellCheck(callback: () => void): () => void {
+  if (typeof window.requestIdleCallback === 'function') {
+    const handle = window.requestIdleCallback(() => callback())
+    return () => window.cancelIdleCallback(handle)
+  }
+  const timeoutId = setTimeout(callback, 1)
+  return () => clearTimeout(timeoutId)
+}
+
 /** Mismo criterio de formato que `LeftPanel` para el nombre visible de un
  *  nodo: número + "Ref. oculta" (o el aviso de que no tiene). */
 function nodeLabel(node: Node | undefined): string {
@@ -120,6 +147,7 @@ export function DiagnosticsPanel() {
 
   const allCycles = useMemo(() => detectCycles(project), [project])
   const allUnlinkedResponses = useMemo(() => detectUnlinkedResponses(project), [project])
+  const allUnusedVariables = useMemo(() => detectUnusedVariables(project), [project])
   // `RESPONSE_WITHOUT_TARGET` se excluye aquí: ya se muestra, con mejor
   // detalle, en "Opciones sin vincular" (`allUnlinkedResponses` arriba) —
   // ver el comentario de cabecera de este componente.
@@ -129,8 +157,8 @@ export function DiagnosticsPanel() {
   )
   // Los avisos DESCARTADOS se filtran de la lista/contador aquí, en un único
   // punto (en vez de repetir el filtro en cada grupo) — `cycles`/
-  // `unlinkedResponses`/`structureIssues`/`spellingIssues` (más abajo) ya
-  // son "los avisos que de verdad se muestran".
+  // `unlinkedResponses`/`unusedVariables`/`structureIssues`/`spellingIssues`
+  // (más abajo) ya son "los avisos que de verdad se muestran".
   const cycles = useMemo(
     () => allCycles.filter((cycle) => !dismissedSet.has(cycleIssueId(cycle))),
     [allCycles, dismissedSet],
@@ -138,6 +166,10 @@ export function DiagnosticsPanel() {
   const unlinkedResponses = useMemo(
     () => allUnlinkedResponses.filter((issue) => !dismissedSet.has(unlinkedResponseIssueId(issue))),
     [allUnlinkedResponses, dismissedSet],
+  )
+  const unusedVariables = useMemo(
+    () => allUnusedVariables.filter((issue) => !dismissedSet.has(unusedVariableIssueId(issue))),
+    [allUnusedVariables, dismissedSet],
   )
   const structureIssues = useMemo(
     () => allStructureIssues.filter((issue) => !dismissedSet.has(validationIssueId(issue))),
@@ -167,8 +199,18 @@ export function DiagnosticsPanel() {
   // posteriores del proyecto requieren el botón manual "Revisar ortografía"
   // para reflejarse (ese sí usa siempre el `project` más reciente, ver
   // arriba).
+  //
+  // Hallazgo de auditoría ("el corrector se dispara al abrir cualquier
+  // proyecto"): en vez de llamar a `runSpellCheck` directamente en el efecto
+  // de montaje (que compite por el hilo principal con el resto del render
+  // inicial del editor, justo cuando más importa que sea fluido),
+  // `scheduleIdleSpellCheck` la difiere a un momento ocioso del navegador —
+  // sigue disparándose automáticamente y una sola vez (SIN esto, un proyecto
+  // cuyo único aviso fuese ortográfico no tendría ninguna insignia visible
+  // que pulsar para arrancarla a mano, ver comentario de cabecera), solo que
+  // ya no compite con el primer pintado.
   useEffect(() => {
-    runSpellCheck()
+    return scheduleIdleSpellCheck(runSpellCheck)
     // Deliberadamente sin `runSpellCheck` en las deps: solo debe correr una
     // vez, no cada vez que `project` cambia y por tanto recrea la función.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -185,7 +227,11 @@ export function DiagnosticsPanel() {
     (issue) => !dismissedSet.has(spellingIssueId(issue)),
   )
   const total =
-    cycles.length + unlinkedResponses.length + structureIssues.length + spellingIssues.length
+    cycles.length +
+    unlinkedResponses.length +
+    unusedVariables.length +
+    structureIssues.length +
+    spellingIssues.length
   const dismissedCount = dismissedIds.length
 
   function goToNode(nodeId: string): void {
@@ -239,6 +285,16 @@ export function DiagnosticsPanel() {
                 nodeById={nodeById}
                 onSelect={goToNode}
               />
+            ))}
+          </DiagnosticsGroup>
+
+          <DiagnosticsGroup
+            title="Variables sin usar"
+            empty="Todas las variables están en uso"
+            items={unusedVariables.length}
+          >
+            {unusedVariables.map((issue) => (
+              <UnusedVariableRow key={unusedVariableIssueId(issue)} issue={issue} />
             ))}
           </DiagnosticsGroup>
 
@@ -386,13 +442,32 @@ function UnlinkedResponseRow({
 }) {
   const label = nodeLabel(nodeById.get(issue.nodeId))
   const responseText = issue.responseText.trim() || '(sin texto)'
-  const text = `${label}: la respuesta "${responseText}" no tiene destino conectado`
+  const text =
+    issue.reason === 'empty-text'
+      ? `${label}: una respuesta con destino conectado no tiene texto`
+      : `${label}: la respuesta "${responseText}" no tiene destino conectado`
   return (
     <div className={styles.issueRowWrapper}>
       <button type="button" className={styles.issueRow} onClick={() => onSelect(issue.nodeId)}>
         {text}
       </button>
       <DismissButton diagnosticId={unlinkedResponseIssueId(issue)} label={text} />
+    </div>
+  )
+}
+
+/**
+ * Fila de un aviso de "Variables sin usar" (`detectUnusedVariables`):
+ * mismo criterio que `StructureIssueRow` sin `nodeId` — una variable no
+ * pertenece a ningún nodo concreto del lienzo, así que se pinta como texto
+ * no interactivo (sin botón "ir a"), pero sigue pudiendo descartarse.
+ */
+function UnusedVariableRow({ issue }: { issue: UnusedVariableIssue }) {
+  const text = `"${issue.variableName}" está declarada pero no se usa en ninguna condición ni efecto`
+  return (
+    <div className={styles.issueRowWrapper}>
+      <p className={styles.issueRow}>{text}</p>
+      <DismissButton diagnosticId={unusedVariableIssueId(issue)} label={text} />
     </div>
   )
 }

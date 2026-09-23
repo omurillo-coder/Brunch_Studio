@@ -93,7 +93,7 @@ beforeEach(() => {
 
 describe('useHtmlExport — bloqueo con la diapositiva de Inicio incompleta', () => {
   it('sin ningún nodo intro, bloquea sin abrir el selector de guardado ni escribir nada', async () => {
-    const pickExportHtmlPath = vi.fn(async () => '/tmp/experiencia.html')
+    const pickExportHtmlPath = vi.fn(async () => '/tmp/experiencia.zip')
     const htmlBundleWriter = new MemoryHtmlBundleWriter()
     const { result } = renderUseHtmlExport({
       pickExportHtmlPath,
@@ -115,7 +115,7 @@ describe('useHtmlExport — bloqueo con la diapositiva de Inicio incompleta', ()
     act(() => {
       useProjectStore.getState().createNode('intro', { x: -300, y: 0 })
     })
-    const pickExportHtmlPath = vi.fn(async () => '/tmp/experiencia.html')
+    const pickExportHtmlPath = vi.fn(async () => '/tmp/experiencia.zip')
     const { result } = renderUseHtmlExport({
       pickExportHtmlPath,
       htmlBundleWriter: new MemoryHtmlBundleWriter(),
@@ -148,7 +148,7 @@ describe('useHtmlExport — bloqueo con la diapositiva de Inicio incompleta', ()
       })
     })
     const { result } = renderUseHtmlExport({
-      pickExportHtmlPath: async () => '/tmp/experiencia.html',
+      pickExportHtmlPath: async () => '/tmp/experiencia.zip',
       htmlBundleWriter: new MemoryHtmlBundleWriter(),
       assetRepository: new MemoryAssetRepository(),
     })
@@ -184,7 +184,7 @@ describe('useHtmlExport — bloqueo con la diapositiva de Inicio incompleta', ()
       })
     })
 
-    const pickExportHtmlPath = vi.fn(async () => '/tmp/experiencia.html')
+    const pickExportHtmlPath = vi.fn(async () => '/tmp/experiencia.zip')
     const htmlBundleWriter = new MemoryHtmlBundleWriter()
     const { result } = renderUseHtmlExport({
       pickExportHtmlPath,
@@ -204,7 +204,7 @@ describe('useHtmlExport — bloqueo con la diapositiva de Inicio incompleta', ()
 
   it('con la portada completa, exporta con normalidad (pide ruta, genera y escribe)', async () => {
     seedCompleteIntro()
-    const pickExportHtmlPath = vi.fn(async () => '/tmp/experiencia.html')
+    const pickExportHtmlPath = vi.fn(async () => '/tmp/experiencia.zip')
     const htmlBundleWriter = new MemoryHtmlBundleWriter()
     const { result } = renderUseHtmlExport({
       pickExportHtmlPath,
@@ -217,9 +217,34 @@ describe('useHtmlExport — bloqueo con la diapositiva de Inicio incompleta', ()
     })
 
     expect(result.current.status).toBe('done')
-    expect(result.current.message).toBe('Experiencia exportada a HTML.')
+    // Hallazgo de auditoría ("sin aviso del tamaño estimado del HTML antes
+    // de exportar"): el mensaje ahora incluye un tamaño aproximado — no se
+    // fija el número exacto aquí (depende del contenido generado, no es lo
+    // que este test quiere fijar), solo que el texto base y el sufijo
+    // siguen presentes. Ver el describe dedicado más abajo para el formato
+    // exacto.
+    expect(result.current.message).toMatch(/^Experiencia exportada a HTML \(comprimida en ZIP\)\. \(.+ aprox\.\)$/)
     expect(pickExportHtmlPath).toHaveBeenCalledTimes(1)
-    expect(htmlBundleWriter.writtenPaths()).toEqual(['/tmp/experiencia.html'])
+    expect(htmlBundleWriter.writtenPaths()).toEqual(['/tmp/experiencia.zip'])
+  })
+
+  it('petición de usuario ("la versión HTML quiero que me la des comprimida en ZIP ya"): usa writeHtmlZipBundle, no writeHtmlBundle', async () => {
+    seedCompleteIntro()
+    const htmlBundleWriter = new MemoryHtmlBundleWriter()
+    const zipSpy = vi.spyOn(htmlBundleWriter, 'writeHtmlZipBundle')
+    const plainSpy = vi.spyOn(htmlBundleWriter, 'writeHtmlBundle')
+    const { result } = renderUseHtmlExport({
+      pickExportHtmlPath: async () => '/tmp/experiencia.zip',
+      htmlBundleWriter,
+      assetRepository: new MemoryAssetRepository(),
+    })
+
+    await act(async () => {
+      await result.current.exportHtml()
+    })
+
+    expect(zipSpy).toHaveBeenCalledTimes(1)
+    expect(plainSpy).not.toHaveBeenCalled()
   })
 
   /** Corrección de revisión de código: `setMessage(null)` seguido de
@@ -234,7 +259,7 @@ describe('useHtmlExport — bloqueo con la diapositiva de Inicio incompleta', ()
    *  `waitForRenderFlush`. */
   it('en un SEGUNDO intento bloqueado, el hook pasa por message: null de verdad antes de fijar el mensaje de bloqueo (para que ExportToast pueda desmontarse y remontarse)', async () => {
     const { result } = renderUseHtmlExport({
-      pickExportHtmlPath: vi.fn(async () => '/tmp/experiencia.html'),
+      pickExportHtmlPath: vi.fn(async () => '/tmp/experiencia.zip'),
       htmlBundleWriter: new MemoryHtmlBundleWriter(),
       assetRepository: new MemoryAssetRepository(),
     })
@@ -260,5 +285,64 @@ describe('useHtmlExport — bloqueo con la diapositiva de Inicio incompleta', ()
     })
     expect(result.current.status).toBe('error')
     expect(result.current.message).toContain('El proyecto no tiene diapositiva de Inicio.')
+  })
+})
+
+describe('useHtmlExport — hallazgo de auditoría: aviso del tamaño estimado del HTML exportado', () => {
+  it('un proyecto pequeño muestra el tamaño en KB', async () => {
+    seedCompleteIntro()
+    const pickExportHtmlPath = vi.fn(async () => '/tmp/experiencia.zip')
+    const { result } = renderUseHtmlExport({
+      pickExportHtmlPath,
+      htmlBundleWriter: new MemoryHtmlBundleWriter(),
+      assetRepository: new MemoryAssetRepository(),
+    })
+
+    await act(async () => {
+      await result.current.exportHtml()
+    })
+
+    expect(result.current.status).toBe('done')
+    expect(result.current.message).toMatch(/\(\d+ KB aprox\.\)$/)
+  })
+
+  it('un proyecto con mucho texto (>1 MB de HTML generado) muestra el tamaño en MB, no en KB', async () => {
+    // Captura el id de la diapositiva ANTES de `seedCompleteIntro()`: crear
+    // el nodo `intro` reasigna `graph.startNodeId` a él (mismo motivo que
+    // en `editorToExportIntegration.test.tsx`), así que después de esa
+    // llamada `startNodeId` ya no identifica una diapositiva de tipo
+    // `slide`.
+    const startId = useProjectStore.getState().project.graph.startNodeId
+    seedCompleteIntro()
+    act(() => {
+      useProjectStore.getState().addTextBlock(startId)
+    })
+    const blockId = (
+      useProjectStore.getState().project.graph.nodes.find((node) => node.id === startId) as {
+        content: { id: string }[]
+      }
+    ).content[0]?.id
+    if (!blockId) throw new Error('setup inválido: no se creó el bloque de texto')
+    // Un párrafo de texto de sobra para superar 1 MB de HTML generado (el
+    // propio texto ya son >1 MB de caracteres, sin contar el marcado que
+    // `generateHTML` añade alrededor).
+    const hugeText = 'x'.repeat(1_200_000)
+    act(() => {
+      useProjectStore.getState().updateTextBlockBody(startId, blockId, hugeText)
+    })
+
+    const pickExportHtmlPath = vi.fn(async () => '/tmp/experiencia.zip')
+    const { result } = renderUseHtmlExport({
+      pickExportHtmlPath,
+      htmlBundleWriter: new MemoryHtmlBundleWriter(),
+      assetRepository: new MemoryAssetRepository(),
+    })
+
+    await act(async () => {
+      await result.current.exportHtml()
+    })
+
+    expect(result.current.status).toBe('done')
+    expect(result.current.message).toMatch(/\(\d+\.\d MB aprox\.\)$/)
   })
 })

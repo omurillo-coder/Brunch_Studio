@@ -213,24 +213,24 @@ describe('buildAiReviewDocument (petición de usuario: "que este archivo lo pudi
     expect(section).toContain('- B) "No, me rindo." → sale de la experiencia')
   })
 
-  it('un Final con celebrate y variante alternativa describe ambos contenidos, con un único aviso de confeti para los dos', () => {
+  it('un Final con variante alternativa describe ambos contenidos: confeti fijo en el de arriba, nunca en el alternativo', () => {
     const doc = buildAiReviewDocument(sampleProject())
     const section = sectionOf(doc, '## Final 4')
 
     expect(section).toContain('Caso resuelto sin incidencias.')
+    expect(section).toContain('🎉 Este contenido (el de arriba, "Final TOP") se celebra siempre con confeti.')
     expect(section).toContain(
-      '🎉 Este Final se celebra con confeti al mostrarse (con o sin condición alternativa).',
+      'Contenido alternativo "con fallos" (se muestra en vez del anterior si Puntos > 0; nunca lleva confeti):',
     )
-    expect(section).toContain('Contenido alternativo (se muestra en vez del anterior si Puntos > 0):')
     expect(section).toContain('Además, conseguiste puntos extra.')
   })
 
-  it('un Final sin body ni celebrate ni alternativo se pinta "(sin contenido)", sin secciones de más', () => {
+  it('un Final sin body ni alternativo se pinta "(sin contenido)", con el aviso fijo de confeti pero sin sección alternativa', () => {
     const doc = buildAiReviewDocument(sampleProject())
     const section = sectionOf(doc, '## Final 5')
 
     expect(section).toContain('(sin contenido)')
-    expect(section).not.toContain('🎉')
+    expect(section).toContain('🎉 Este contenido (el de arriba, "Final TOP") se celebra siempre con confeti.')
     expect(section).not.toContain('Contenido alternativo')
   })
 

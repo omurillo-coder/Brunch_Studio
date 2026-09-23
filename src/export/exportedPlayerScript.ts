@@ -50,7 +50,10 @@
  * de en un `<iframe>`).
  *
  * Ciclo de vida:
- *  - Al cargar el script: se busca la API; si aparece, `Initialize("")`.
+ *  - Al cargar el script: se busca la API; si aparece, `Initialize("")`. Si
+ *    NO aparece todavía (hallazgo de auditoría: algunos LMS la exponen de
+ *    forma perezosa), se reintenta con backoff creciente unos segundos
+ *    antes de rendirse — ver `scheduleFindAPIRetry` más abajo.
  *  - Al llegar a un Final: `SetValue("cmi.completion_status", "completed")`.
  *    SCORM 2004 separa el estado de FINALIZACIÓN (`cmi.completion_status`)
  *    del de SUPERACIÓN (`cmi.success_status`, valores `passed`/`failed`/
@@ -95,7 +98,28 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
     return;
   }
 
-  var bundle = JSON.parse(bundleElement.textContent || '{}');
+  // Hallazgo de auditoría ("JSON.parse del bundle embebido sin try/catch"):
+  // si el HTML exportado se corrompe en tránsito (proxy corporativo, edición
+  // manual accidental, un adjunto de email truncado…), esta línea lanzaba
+  // sin capturarse — sin ningún script global que lo atrape, el navegador
+  // deja la página en blanco, sin ningún mensaje para quien la abre. Con el
+  // try/catch, el mismo fallo se convierte en un mensaje legible dentro de
+  // #brunch-root en vez de una pantalla en blanco silenciosa.
+  var bundle;
+  try {
+    bundle = JSON.parse(bundleElement.textContent || '{}');
+  } catch (error) {
+    var errorMessage = document.createElement('p');
+    errorMessage.textContent =
+      'No se ha podido cargar esta experiencia: el archivo parece estar dañado o incompleto.';
+    errorMessage.style.margin = '48px auto';
+    errorMessage.style.maxWidth = '480px';
+    errorMessage.style.padding = '0 16px';
+    errorMessage.style.textAlign = 'center';
+    errorMessage.style.fontFamily = 'system-ui, sans-serif';
+    root.appendChild(errorMessage);
+    return;
+  }
   var project = bundle.project;
   var bodyHtml = bundle.bodyHtml || {};
   var assetUris = bundle.assetUris || {};
@@ -199,7 +223,7 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
     return null;
   }
 
-  var scormAPI = findAPI();
+  var scormAPI = null;
   var scormInitialized = false;
 
   /** Llama a fn sobre la API SCORM protegida en su propio try/catch: un
@@ -225,6 +249,38 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
     });
   }
 
+  /** Hallazgo de auditoría: "la búsqueda de la API SCORM no reintenta". Un
+   *  primer \`findAPI()\` síncrono al cargar el script (como había antes) da
+   *  por perdida la sesión LMS para siempre si \`API_1484_11\` todavía no
+   *  existe en ESE instante exacto — patrón real en varios LMS, que exponen
+   *  la API de forma perezosa (tras terminar de montar su propio iframe).
+   *
+   *  \`scheduleFindAPIRetry\` reintenta con backoff creciente
+   *  (\`FIND_API_RETRY_BASE_MS * intento\`) hasta \`MAX_FIND_API_RETRIES\`
+   *  veces antes de rendirse — mientras tanto, \`scormAPI\` sigue \`null\` y
+   *  cualquier llamada SCORM que ocurra en ese hueco (p.ej. llegar a un
+   *  Final muy rápido) es un no-op silencioso vía \`callScormSafely\`, ni más
+   *  ni menos que el comportamiento ya existente para "no hay LMS en
+   *  absoluto" — no hace falta encolar nada, solo perder ese aviso
+   *  concreto si el LMS tarda en aparecer Y el alumno termina antes.
+   */
+  var MAX_FIND_API_RETRIES = 8;
+  var FIND_API_RETRY_BASE_MS = 400;
+
+  function scheduleFindAPIRetry(attempt) {
+    if (attempt > MAX_FIND_API_RETRIES) {
+      return;
+    }
+    setTimeout(function () {
+      scormAPI = findAPI();
+      if (scormAPI) {
+        scormInitialize();
+        return;
+      }
+      scheduleFindAPIRetry(attempt + 1);
+    }, FIND_API_RETRY_BASE_MS * attempt);
+  }
+
   /** Se llama al alcanzar un Final: informa cmi.completion_status
    *  "completed" y, si hay puntuación, cmi.score.raw tal cual (sin
    *  normalizar a 0-100). No fija cmi.success_status: ver cabecera del
@@ -242,16 +298,31 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
     });
   }
 
+  /** Hallazgo de auditoría ("Terminate('') de SCORM puede llamarse dos
+   *  veces"): pulsar "Salir" en el Final y luego cerrar la pestaña
+   *  disparaba esta función dos veces sobre la misma sesión — inofensivo
+   *  gracias al try/catch de \`callScormSafely\`, pero algunos LMS estrictos
+   *  registran una segunda \`Terminate\` de la misma sesión como error.
+   *  \`scormInitialized = false\` tras el primer intento (siempre, no solo
+   *  si \`Terminate\` "tuvo éxito" — SCORM no da forma fiable de saberlo
+   *  desde aquí, y reintentar una \`Terminate\` que ya se envió es peor que
+   *  no reintentarla) hace que cualquier llamada posterior sea un no-op. */
   function scormFinish() {
     if (!scormAPI || !scormInitialized) {
       return;
     }
+    scormInitialized = false;
     callScormSafely(function (api) {
       api.Terminate('');
     });
   }
 
-  scormInitialize();
+  scormAPI = findAPI();
+  if (scormAPI) {
+    scormInitialize();
+  } else {
+    scheduleFindAPIRetry(1);
+  }
   window.addEventListener('beforeunload', scormFinish);
 
   // -------------------------------------------------------------------------
@@ -427,6 +498,35 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
     return ordered;
   }
 
+  /** Traducción literal de \`FALLOS_VARIABLE_NAME\`/\`defaultAlternateCondition\`
+   *  (\`src/domain/nodePacks.ts\`) — ver el comentario de esa función para el
+   *  porqué completo. Resumen: un Final con una variable "Fallos" en el
+   *  proyecto ya no exige configurar a mano su variante "con fallos" — sin
+   *  \`node.alternateCondition\` guardada, se sintetiza "Fallos > 0" sobre la
+   *  marcha, sin escribir nada en el documento. DELIBERADAMENTE sin caer a
+   *  "la primera variable que haya" si no existe una "Fallos" — activar la
+   *  variante alternativa sobre una variable de OTRO uso (p.ej. un flag de
+   *  enrutado condicional que no tiene nada que ver con fallos) secuestraría
+   *  su significado sin que nadie lo pidiera. */
+  var FALLOS_VARIABLE_NAME = 'Fallos';
+
+  function defaultAlternateCondition(variables) {
+    var variable = null;
+    for (var i = 0; i < variables.length; i += 1) {
+      if (variables[i].name === FALLOS_VARIABLE_NAME) {
+        variable = variables[i];
+        break;
+      }
+    }
+    if (!variable) {
+      return null;
+    }
+    if (variable.type === 'boolean') {
+      return { variableId: variable.id, operator: '==', value: true };
+    }
+    return { variableId: variable.id, operator: '>', value: 0 };
+  }
+
   /** Equivalente de \`resolveFinalContent\` (\`src/player/runtime.ts\`,
    *  milestone "+1 fallo con Game Over") adaptado a este runtime: decide
    *  SOLO qué DISEÑO de Final usar — \`buildFinalAlternateCard\` ("con
@@ -446,9 +546,15 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
    *  alternativa en cualquier proyecto donde el diseñador configuró la
    *  condición pero nunca escribió nada en "Contenido alternativo" del
    *  Inspector (ya no hay motivo visible para hacerlo). El gate real es
-   *  solo la condición. */
+   *  solo la condición.
+   *
+   *  Petición de usuario ampliada ("que siempre salgan esos dos finales...
+   *  sin tener que activar nada"): si el nodo no tiene
+   *  \`alternateCondition\` guardada, se usa \`defaultAlternateCondition\` de
+   *  más arriba. */
   function finalUsesAlternateContent(node, variables) {
-    return Boolean(node.alternateCondition) && evaluateCondition(variables, node.alternateCondition);
+    var condition = node.alternateCondition || defaultAlternateCondition(project.variables);
+    return Boolean(condition) && evaluateCondition(variables, condition);
   }
 
   /** Traducción literal de \`Confetti\` (\`src/player/PlayerScreen.tsx\`,
@@ -703,7 +809,41 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
     return 'mediaNormal';
   }
 
+  /** Hallazgo de auditoría ("el lightbox y el overlay de felicitación no
+   *  atrapan el foco"): patrón de foco compartido por CUALQUIER overlay
+   *  modal de este script con un único elemento enfocable dentro (el
+   *  lightbox solo tiene el botón "×"; el overlay de felicitación solo su
+   *  botón "Continuar" — ninguno de los dos tiene más de un control
+   *  interactivo) — traducción del mismo patrón que \`Lightbox\` en
+   *  \`src/player/PlayerScreen.tsx\`: \`onOpen\` guarda qué tenía el foco antes
+   *  y lo mueve a \`focusTarget\`; \`onClose\` lo devuelve; \`trapTab\` vuelve a
+   *  enfocar \`focusTarget\` en cualquier Tab/Shift+Tab en vez de dejar que el
+   *  navegador escape hacia la página de detrás. Un único helper en vez de
+   *  repetir esta lógica dos veces: el mismo motivo por el que
+   *  \`callScormSafely\`/\`el\` son funciones compartidas en vez de código
+   *  duplicado por sitio de uso. */
+  function createSingleFocusTrap(focusTarget) {
+    var previouslyFocused = null;
+    return {
+      onOpen: function () {
+        previouslyFocused = document.activeElement;
+        focusTarget.focus();
+      },
+      onClose: function () {
+        if (previouslyFocused && typeof previouslyFocused.focus === 'function') {
+          previouslyFocused.focus();
+        }
+        previouslyFocused = null;
+      },
+      trapTab: function (event) {
+        event.preventDefault();
+        focusTarget.focus();
+      },
+    };
+  }
+
   var lightboxOverlay = null;
+  var lightboxFocusTrap = null;
 
   /** Imagen ampliada a pantalla completa (petición de usuario: "las imágenes
    *  ampliables en la salida") — traducción literal de \`Lightbox\` en
@@ -738,6 +878,7 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
 
     document.body.appendChild(backdrop);
     lightboxOverlay = { backdrop: backdrop, image: image };
+    lightboxFocusTrap = createSingleFocusTrap(closeButton);
     return lightboxOverlay;
   }
 
@@ -747,17 +888,29 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
     lightbox.image.alt = alt;
     lightbox.backdrop.setAttribute('aria-label', alt);
     lightbox.backdrop.style.display = 'flex';
+    lightboxFocusTrap.onOpen();
   }
 
   function closeLightbox() {
-    if (lightboxOverlay) {
+    if (lightboxOverlay && lightboxOverlay.backdrop.style.display !== 'none') {
       lightboxOverlay.backdrop.style.display = 'none';
+      lightboxFocusTrap.onClose();
     }
   }
 
   document.addEventListener('keydown', function (event) {
     if (event.key === 'Escape') {
       closeLightbox();
+      closeCompletionOverlay();
+      return;
+    }
+    if (event.key !== 'Tab') {
+      return;
+    }
+    if (lightboxOverlay && lightboxOverlay.backdrop.style.display !== 'none') {
+      lightboxFocusTrap.trapTab(event);
+    } else if (completionOverlay && completionOverlay.style.display !== 'none') {
+      completionFocusTrap.trapTab(event);
     }
   });
 
@@ -788,9 +941,14 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
       if (!imageUri) {
         return;
       }
+      // Petición de usuario: texto alternativo personalizado por imagen
+      // (\`block.alt\`, editable desde el Inspector) — si no se ha rellenado,
+      // se usa el genérico \`texts.nodeImageAlt\`. Mismo criterio que
+      // \`ContentBlockView\` en \`src/player/PlayerScreen.tsx\`.
+      var alt = trimmed(block.alt) ? block.alt : texts.nodeImageAlt;
       var image = el('img', 'media ' + imageSizeClassName(block.size));
       image.src = imageUri;
-      image.alt = texts.nodeImageAlt;
+      image.alt = alt;
       // Petición de usuario ("un botón... para hacer no ampliable la
       // imagen"): \`block.expandable === false\` (marcado explícito desde el
       // Inspector) es la ÚNICA forma de desactivarla; \`undefined\` (nunca
@@ -802,9 +960,9 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
       }
       var expandButton = el('button', 'expandableImage');
       expandButton.type = 'button';
-      expandButton.setAttribute('aria-label', 'Ampliar imagen: ' + texts.nodeImageAlt);
+      expandButton.setAttribute('aria-label', 'Ampliar imagen: ' + alt);
       expandButton.addEventListener('click', function () {
-        openLightbox(imageUri, texts.nodeImageAlt);
+        openLightbox(imageUri, alt);
       });
       expandButton.appendChild(image);
       card.appendChild(expandButton);
@@ -1429,29 +1587,23 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
       // pantalla de con fallos"): se usa SOLO cuando se resolvió al
       // contenido alternativo — el contenido por defecto ("Final TOP")
       // tiene su propia pantalla bespoke hermana, \`buildFinalSuccessCard\`,
-      // más abajo.
+      // más abajo. Nunca lleva confeti (petición de usuario: "quita el
+      // check del confeti... ponlo siempre en el Final TOP" — regla fija,
+      // ya no un flag \`node.celebrate\` por nodo).
       if (usedAlternate) {
-        var altCard = buildFinalAlternateCard(state.totalPoints);
-        if (view.node.celebrate === true) {
-          altCard.appendChild(buildConfetti());
-        }
-        return altCard;
+        return buildFinalAlternateCard(state.totalPoints);
       }
 
       // Final "Perfecto"/"Final TOP" (contenido por defecto, sin fallos):
       // pantalla bespoke propia (\`buildFinalSuccessCard\`, mismo shape que
       // \`buildFinalAlternateCard\` de más arriba), sustituye al antiguo
       // layout genérico de \`.card\`/\`.title\`/\`.points\` (ver mockup
-      // "¡Impresionante!" entregado por Content Factory).
+      // "¡Impresionante!" entregado por Content Factory). Confeti SIEMPRE
+      // aquí (petición de usuario, ver comentario de arriba) — traducción
+      // literal de \`view.celebrate\` en \`src/player/runtime.ts\`/
+      // \`PlayerScreen.tsx\`, que ya no depende de ningún dato del nodo.
       var successCard = buildFinalSuccessCard(state.totalPoints);
-      // Confeti (milestone "+1 fallo con Game Over", petición de usuario
-      // ampliada después: "si llegas al final sin fallos y con fallos, en
-      // los dos"): traducción literal de \`view.celebrate\` en
-      // \`src/player/runtime.ts\`/\`PlayerScreen.tsx\` — sobre CUALQUIER
-      // contenido de este Final, el por defecto y el alternativo.
-      if (view.node.celebrate === true) {
-        successCard.appendChild(buildConfetti());
-      }
+      successCard.appendChild(buildConfetti());
       return successCard;
     }
 
@@ -1514,16 +1666,59 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
     }
   }
 
-  var reviewProgress = reviewMode ? loadReviewProgress() : { visited: [], completed: false };
   // Todos los nodos del proyecto, por \`number\` ascendente — Inicio + todas
   // las diapositivas + TODOS los finales, cada uno cuenta igual (mismo
-  // criterio que el denominador del progreso, ver \`reviewPercent\`).
+  // criterio que el denominador del progreso, ver \`reviewPercent\`). Se
+  // calcula ANTES de cargar el progreso guardado porque \`reconcileReviewProgress\`
+  // (justo debajo) lo necesita para saber qué ids siguen existiendo.
   var allNodesByNumber = reviewMode
     ? project.graph.nodes.slice().sort(function (a, b) {
         return a.number - b.number;
       })
     : [];
   var totalReviewNodeCount = allNodesByNumber.length;
+
+  /** El progreso guardado en \`localStorage\` puede venir de una versión
+   *  ANTERIOR del proyecto: mismo \`metadata.id\` (nunca cambia al reexportar,
+   *  ver \`reviewStorageKey\`), pero el diseñador borró/añadió diapositivas y
+   *  reexportó. Sin esta reconciliación, \`visited\` seguiría arrastrando ids
+   *  que ya no existen en el grafo actual — \`reviewPercent\` podría superar
+   *  el 100% (numerador con ids obsoletos, denominador ya reducido), y
+   *  \`maybeShowCompletion\` podría disparar la pantalla de felicitación sin
+   *  que el profesor haya visto ni una sola de las diapositivas nuevas.
+   *
+   *  Se filtra \`visited\` contra el conjunto de ids actuales y, si el
+   *  proyecto ya no cubre todo lo que estaba marcado como visitado, se
+   *  fuerza \`completed: false\` (aunque ya se hubiera mostrado la
+   *  felicitación antes) — hay contenido nuevo por revisar, así que no
+   *  sigue "completo". Si algo cambió, se persiste de inmediato para que el
+   *  progreso guardado ya refleje la versión actual desde la primera carga,
+   *  no solo a partir de la siguiente visita. */
+  function reconcileReviewProgress(progress) {
+    var currentIds = {};
+    for (var i = 0; i < allNodesByNumber.length; i += 1) {
+      currentIds[allNodesByNumber[i].id] = true;
+    }
+    var reconciledVisited = progress.visited.filter(function (id) {
+      return Object.prototype.hasOwnProperty.call(currentIds, id);
+    });
+    var stillFullyCovered =
+      totalReviewNodeCount > 0 && reconciledVisited.length >= totalReviewNodeCount;
+    var reconciledCompleted = stillFullyCovered ? progress.completed : false;
+
+    var changed =
+      reconciledVisited.length !== progress.visited.length ||
+      reconciledCompleted !== progress.completed;
+    var reconciled = { visited: reconciledVisited, completed: reconciledCompleted };
+    if (changed) {
+      saveReviewProgress(reconciled);
+    }
+    return reconciled;
+  }
+
+  var reviewProgress = reviewMode
+    ? reconcileReviewProgress(loadReviewProgress())
+    : { visited: [], completed: false };
 
   function isNodeVisited(nodeId) {
     return reviewProgress.visited.indexOf(nodeId) !== -1;
@@ -1585,17 +1780,27 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
 
   var welcomeDismissed = false;
   var completionOverlay = null;
+  var completionFocusTrap = null;
 
   /** Construye (una única vez) el overlay de felicitación al 100%: texto fijo
    *  + imagen del pingüino (ya embebida como \`data:\` URI en tiempo de
    *  exportación, ver \`teacherReview.penguinDataUri\`) + "Continuar", que solo
    *  cierra el overlay — deja seguir navegando con normalidad por si el
-   *  profesor quiere revisar algo de nuevo. */
+   *  profesor quiere revisar algo de nuevo.
+   *
+   *  Hallazgo de auditoría ("ni siquiera es un diálogo accesible, y no cierra
+   *  con Escape"): \`role="dialog"\`/\`aria-modal\` + el mismo
+   *  \`createSingleFocusTrap\` que ya usa el lightbox (ver su comentario) —
+   *  \`showCompletionOverlay\`/\`closeCompletionOverlay\` mueven/devuelven el
+   *  foco, y el listener global de \`Escape\` (junto al del lightbox, más
+   *  arriba) también la cierra. */
   function ensureCompletionOverlay() {
     if (completionOverlay) {
       return completionOverlay;
     }
     var overlay = el('div', 'reviewOverlayBackdrop');
+    overlay.setAttribute('role', 'dialog');
+    overlay.setAttribute('aria-modal', 'true');
     var card = el('section', 'card');
 
     var message = el('p', 'body');
@@ -1612,19 +1817,26 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
     var button = el('button', 'primaryButton');
     button.type = 'button';
     button.textContent = texts.defaultContinueLabel;
-    button.addEventListener('click', function () {
-      overlay.style.display = 'none';
-    });
+    button.addEventListener('click', closeCompletionOverlay);
     card.appendChild(button);
 
     overlay.appendChild(card);
     document.body.appendChild(overlay);
     completionOverlay = overlay;
+    completionFocusTrap = createSingleFocusTrap(button);
     return overlay;
   }
 
   function showCompletionOverlay() {
     ensureCompletionOverlay().style.display = 'flex';
+    completionFocusTrap.onOpen();
+  }
+
+  function closeCompletionOverlay() {
+    if (completionOverlay && completionOverlay.style.display !== 'none') {
+      completionOverlay.style.display = 'none';
+      completionFocusTrap.onClose();
+    }
   }
 
   /** Si el progreso ACABA de llegar al 100% (y todavía no se había mostrado
@@ -1719,6 +1931,54 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
     }
   }
 
+  // ---------------------------------------------------------------------
+  // Accesibilidad: foco + anuncio al cambiar de pantalla (petición de
+  // usuario: "el HTML exportado no mueve el foco ni anuncia nada al
+  // cambiar de pantalla"). Cada \`render()\` sustituye TODO el contenido de
+  // \`root\` de golpe (\`root.textContent = ''\` + \`appendChild\`) — sin nada
+  // de esto, alguien que navega con teclado se queda con el foco en el
+  // limbo (el botón que acaba de pulsar ya no existe) y alguien con lector
+  // de pantalla no se entera de que la pantalla cambió.
+  // ---------------------------------------------------------------------
+
+  /** \`root\` (el \`<main class="stage">\` del documento) es SIEMPRE el mismo
+   *  elemento — solo cambian sus hijos en cada \`render()\` — así que basta
+   *  con hacerlo focusable una única vez, no en cada pintado. \`tabIndex =
+   *  -1\`: focusable por script, pero sin entrar en el orden de tabulación
+   *  normal (no es un control interactivo en sí mismo, solo el punto de
+   *  aterrizaje del foco tras cada cambio de pantalla). */
+  root.tabIndex = -1;
+
+  var routeAnnouncer = null;
+
+  /** Región visualmente oculta pero expuesta a lectores de pantalla
+   *  (\`aria-live="polite"\`): quien pinta cada pantalla nunca sabe de
+   *  antemano qué encabezado tendrá cada tipo de tarjeta (portada,
+   *  diapositiva, decisión, Final, Game Over…), así que en vez de intentar
+   *  repetir aquí ese texto, se anuncia un mensaje genérico — el foco
+   *  movido a \`root\` (ver \`focusStageAndAnnounce\`) ya deja que el lector de
+   *  pantalla siga leyendo el contenido real desde ahí. */
+  function ensureRouteAnnouncer() {
+    if (routeAnnouncer) {
+      return routeAnnouncer;
+    }
+    var live = el('div', 'srOnly');
+    live.setAttribute('role', 'status');
+    live.setAttribute('aria-live', 'polite');
+    document.body.appendChild(live);
+    routeAnnouncer = live;
+    return routeAnnouncer;
+  }
+
+  /** Se llama al final de CADA rama de \`render()\` que pinta una pantalla
+   *  nueva (bienvenida del modo revisión, o la vista normal) — nunca a
+   *  medio pintar, para que el lector de pantalla encuentre ya el
+   *  contenido definitivo al llegar el foco. */
+  function focusStageAndAnnounce() {
+    root.focus();
+    ensureRouteAnnouncer().textContent = 'Contenido de la pantalla actualizado.';
+  }
+
   var state = getInitialState();
 
   function render() {
@@ -1727,6 +1987,7 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
     if (reviewMode && !welcomeDismissed) {
       root.appendChild(buildWelcomeCard());
       updateReviewIndicator();
+      focusStageAndAnnounce();
       return;
     }
 
@@ -1753,6 +2014,12 @@ export const EXPORTED_PLAYER_SCRIPT = `(function () {
       reviewAnchor.appendChild(buildReviewSlideLabel(view.node.number));
     }
     root.appendChild(card);
+    // Antes de \`maybeShowCompletion()\` (no después): esa función puede abrir
+    // el overlay de felicitación, que mueve el foco a SU botón "Continuar"
+    // (ver \`createSingleFocusTrap\`/\`showCompletionOverlay\`) — si
+    // \`focusStageAndAnnounce()\` (que hace \`root.focus()\`) corriera después,
+    // le robaría el foco de vuelta al overlay recién abierto.
+    focusStageAndAnnounce();
 
     if (reviewMode) {
       updateReviewIndicator();

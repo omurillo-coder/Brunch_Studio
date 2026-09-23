@@ -229,12 +229,12 @@ export interface ProjectStoreActions {
    *  de imagen ya creado pero "pendiente de subir" — ver `attachImageAsset`
    *  en `src/domain/content.ts`. */
   attachImageAsset: (slideNodeId: string, blockId: string, assetId: string) => void
-  /** Petición de usuario: ampliable/tamaño de un bloque de imagen — ver
+  /** Petición de usuario: ampliable/tamaño/alt de un bloque de imagen — ver
    *  `updateImageBlockOptions` en `src/domain/content.ts`. */
   updateImageBlockOptions: (
     slideNodeId: string,
     blockId: string,
-    patch: { expandable?: boolean | null; size?: ImageSize | null },
+    patch: { expandable?: boolean | null; size?: ImageSize | null; alt?: string | null },
   ) => void
   addAudioBlock: (slideNodeId: string, assetId: string, index?: number) => void
   addVideoBlock: (slideNodeId: string, assetId: string, index?: number) => void

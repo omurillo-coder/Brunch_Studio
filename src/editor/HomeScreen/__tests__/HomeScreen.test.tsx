@@ -129,6 +129,30 @@ describe('HomeScreen', () => {
     expect(useProjectStore.getState().project.metadata.name).toBe('existente')
   })
 
+  it('hallazgo de auditoría: mientras "Abrir proyecto" está en curso, se muestra un indicador de carga; al cancelar, desaparece', async () => {
+    const repository = new MemoryProjectRepository()
+    let resolvePick: (path: string | null) => void = () => {}
+    const pickOpenProjectPath = vi.fn(
+      () =>
+        new Promise<string | null>((resolve) => {
+          resolvePick = resolve
+        }),
+    )
+    renderHomeScreen({ repository, pickOpenProjectPath })
+
+    expect(screen.queryByText('Cargando…')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByText('Abrir proyecto'))
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Cargando…')
+
+    // Cancelar (el usuario cierra el diálogo nativo sin elegir archivo) es
+    // el camino que SÍ reactiva los botones tras terminar — el camino de
+    // éxito navega a `EditorScreen` en la app real (desmonta esta pantalla
+    // entera), no hay "quitar el indicador" que comprobar ahí.
+    resolvePick(null)
+    await vi.waitFor(() => expect(screen.queryByText('Cargando…')).not.toBeInTheDocument())
+  })
+
   it('"Abrir proyecto" con un nombre guardado desincronizado del archivo (renombrado fuera de la app) corrige metadata.name al nombre real del archivo', async () => {
     const repository = new MemoryProjectRepository()
     const staleName = createProject('Nombre antiguo, antes de renombrar el archivo')

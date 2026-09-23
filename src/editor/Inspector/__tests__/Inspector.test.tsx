@@ -1096,6 +1096,16 @@ describe('Inspector — editor de bloques de contenido de una diapositiva (miles
     expect(sizeSelect.value).toBe('normal')
   })
 
+  it('petición de usuario (texto alternativo personalizado): un bloque de imagen YA adjunta muestra el campo, vacío por defecto', async () => {
+    renderSlideWithAttachedImage()
+
+    const altInput = (await screen.findByLabelText(
+      'Texto alternativo (para lectores de pantalla)',
+    )) as HTMLInputElement
+    expect(altInput.value).toBe('')
+    expect(altInput.placeholder).toBe('Imagen de esta pantalla')
+  })
+
   it('un bloque de imagen pendiente de subir (sin assetId) no muestra estos controles', () => {
     const id = createEmptySlide()
     act(() => {
@@ -1106,6 +1116,9 @@ describe('Inspector — editor de bloques de contenido de una diapositiva (miles
 
     expect(screen.queryByRole('button', { name: /ampliable/ })).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Tamaño')).not.toBeInTheDocument()
+    expect(
+      screen.queryByLabelText('Texto alternativo (para lectores de pantalla)'),
+    ).not.toBeInTheDocument()
   })
 
   it('pulsar el botón alterna "Hacer no ampliable"/"Hacer ampliable" y fija `expandable` en el bloque (`null` = vuelve a ampliable por defecto)', async () => {
@@ -1130,6 +1143,20 @@ describe('Inspector — editor de bloques de contenido de una diapositiva (miles
     fireEvent.change(sizeSelect, { target: { value: 'normal' } })
     const restored = slideNode(id).content[0]
     expect(restored?.type === 'image' ? restored.size : 'missing').toBeUndefined()
+  })
+
+  it('escribir un texto alternativo y hacer blur lo fija en el bloque; vaciarlo y hacer blur lo borra (null)', async () => {
+    const id = renderSlideWithAttachedImage()
+
+    const altInput = await screen.findByLabelText('Texto alternativo (para lectores de pantalla)')
+    fireEvent.change(altInput, { target: { value: 'Diagrama del proceso de fabricación' } })
+    fireEvent.blur(altInput)
+    expect(slideNode(id).content[0]).toMatchObject({ alt: 'Diagrama del proceso de fabricación' })
+
+    fireEvent.change(altInput, { target: { value: '' } })
+    fireEvent.blur(altInput)
+    const restored = slideNode(id).content[0]
+    expect(restored?.type === 'image' ? restored.alt : 'missing').toBeUndefined()
   })
 })
 
@@ -1911,112 +1938,97 @@ describe('Inspector — efecto al visitar una diapositiva (milestone "+1 fallo c
   })
 })
 
-describe('Inspector — variante alternativa de un Final (milestone "+1 fallo con Game Over")', () => {
-  it('sin variables en el proyecto, muestra un aviso en vez del botón "+ Añadir variante alternativa"', () => {
+describe('Inspector — variante alternativa de un Final (petición de usuario: "que siempre salgan esos dos finales... sin tener que activar nada")', () => {
+  function selectNewFinal(): string {
+    let finalId = ''
     act(() => {
       useProjectStore.getState().createNode('final', { x: 0, y: 0 })
+      const id = useProjectStore.getState().project.graph.nodes.find((n) => n.type === 'final')?.id
+      if (!id) throw new Error('setup inválido')
+      finalId = id
+      useProjectStore.getState().selectNode(id)
     })
-    const finalId = useProjectStore.getState().project.graph.nodes.find((n) => n.type === 'final')?.id
-    if (!finalId) throw new Error('setup inválido')
-    act(() => {
-      useProjectStore.getState().selectNode(finalId)
-    })
+    return finalId
+  }
+
+  it('sin variables en el proyecto, muestra un aviso en vez de un editor de condición', () => {
+    selectNewFinal()
     render(<Inspector filePath={TEST_FILE_PATH} />)
 
-    // Sin variables, la sección se reduce al aviso (sin la etiqueta
-    // "Variante alternativa", que solo aparece con el editor real).
     expect(screen.getByText(/Todavía no hay variables en el proyecto/)).toBeInTheDocument()
-    expect(
-      screen.queryByRole('button', { name: '+ Añadir variante alternativa' }),
-    ).not.toBeInTheDocument()
-    // Petición de usuario ("Final Perfecto... con confeti"): la casilla de
-    // confeti SÍ sigue disponible aunque no haya variables — celebra
-    // cualquier contenido de este Final, no depende de tener una variante
-    // alternativa.
-    expect(
-      screen.getByRole('checkbox', { name: /Mostrar confeti al llegar a este Final/ }),
-    ).toBeInTheDocument()
+    expect(screen.queryByLabelText('Variable')).not.toBeInTheDocument()
+    // Petición de usuario ("quita el check del confeti"): ya no existe
+    // ningún control de confeti en el Inspector, con o sin variables.
+    expect(screen.queryByRole('checkbox', { name: /confeti/i })).not.toBeInTheDocument()
   })
 
-  it('petición de usuario ("el confeti lo quiero... en los dos"): la casilla de confeti fija/limpia `celebrate`', () => {
-    act(() => {
-      useProjectStore.getState().createNode('final', { x: 0, y: 0 })
-    })
-    const finalId = useProjectStore.getState().project.graph.nodes.find((n) => n.type === 'final')?.id
-    if (!finalId) throw new Error('setup inválido')
-    act(() => {
-      useProjectStore.getState().selectNode(finalId)
-    })
-    render(<Inspector filePath={TEST_FILE_PATH} />)
-
-    const checkbox = screen.getByRole('checkbox', {
-      name: /Mostrar confeti al llegar a este Final/,
-    })
-    expect(checkbox).not.toBeChecked()
-
-    fireEvent.click(checkbox)
-    expect(
-      useProjectStore
-        .getState()
-        .project.graph.nodes.find((n) => n.id === finalId && n.type === 'final'),
-    ).toMatchObject({ celebrate: true })
-    expect(checkbox).toBeChecked()
-
-    fireEvent.click(checkbox)
-    expect(
-      useProjectStore
-        .getState()
-        .project.graph.nodes.find((n) => n.id === finalId && n.type === 'final'),
-    ).toMatchObject({ celebrate: false })
-  })
-
-  it('"+ Añadir variante alternativa" fija una condición por defecto y muestra el editor de contenido alternativo', () => {
+  it('con una variable "Fallos" en el proyecto, un Final recién creado YA muestra la condición "Fallos > 0" activa, sin ningún botón que pulsar', () => {
     act(() => {
       useProjectStore.getState().addVariable({ name: 'Fallos', type: 'number', initialValue: 0 })
-      useProjectStore.getState().createNode('final', { x: 0, y: 0 })
     })
-    const finalId = useProjectStore.getState().project.graph.nodes.find((n) => n.type === 'final')?.id
-    if (!finalId) throw new Error('setup inválido')
-    act(() => {
-      useProjectStore.getState().selectNode(finalId)
-    })
+    const finalId = selectNewFinal()
     render(<Inspector filePath={TEST_FILE_PATH} />)
 
-    fireEvent.click(screen.getByRole('button', { name: '+ Añadir variante alternativa' }))
+    // Sin haber pulsado nada, el documento no tiene una alternateCondition
+    // guardada todavía (se sintetiza sobre la marcha, no se escribe sola)
+    // — pero el editor YA la muestra rellena con ese valor.
+    const nodeBefore = useProjectStore.getState().project.graph.nodes.find((n) => n.id === finalId)
+    expect(nodeBefore?.type === 'final' ? nodeBefore.alternateCondition : 'missing').toBeUndefined()
+
+    expect(screen.getByRole('combobox', { name: 'Variable' })).toHaveValue(
+      useProjectStore.getState().project.variables[0]?.id,
+    )
+    expect(screen.getByRole('combobox', { name: 'Operador' })).toHaveValue('>')
+    expect(screen.getByRole('spinbutton', { name: 'Valor' })).toHaveValue(0)
+    // Ni "+ Añadir"/"Quitar": la condición no es una opción que activar.
+    expect(screen.queryByRole('button', { name: /variante alternativa/i })).not.toBeInTheDocument()
+  })
+
+  it('editar la condición (p.ej. el operador) la persiste de verdad en alternateCondition', () => {
+    act(() => {
+      useProjectStore.getState().addVariable({ name: 'Fallos', type: 'number', initialValue: 0 })
+    })
+    const finalId = selectNewFinal()
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Operador' }), {
+      target: { value: '>=' },
+    })
 
     const nodeAfter = useProjectStore.getState().project.graph.nodes.find((n) => n.id === finalId)
     expect(nodeAfter?.type === 'final' ? nodeAfter.alternateCondition : undefined).toEqual({
       variableId: expect.any(String),
-      operator: '==',
+      operator: '>=',
       value: 0,
     })
-    expect(screen.getByText('Contenido alternativo')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Quitar variante alternativa' })).toBeInTheDocument()
   })
 
-  it('quitar la variante limpia tanto la condición como el contenido alternativo', () => {
+  it('sin variable "Fallos" pero con OTRAS variables, ofrece un punto de partida editable que NO está activo todavía', () => {
     act(() => {
-      useProjectStore.getState().addVariable({ name: 'Fallos', type: 'number', initialValue: 0 })
-      useProjectStore.getState().createNode('final', { x: 0, y: 0 })
+      useProjectStore.getState().addVariable({ name: 'flag', type: 'boolean', initialValue: true })
     })
-    const finalId = useProjectStore.getState().project.graph.nodes.find((n) => n.type === 'final')?.id
-    if (!finalId) throw new Error('setup inválido')
-    const variableId = useProjectStore.getState().project.variables[0]?.id
-    if (!variableId) throw new Error('setup inválido')
-    act(() => {
-      useProjectStore.getState().updateNode(finalId, {
-        alternateCondition: { variableId, operator: '>', value: 0 },
-        alternateBody: 'Con fallos',
-      })
-      useProjectStore.getState().selectNode(finalId)
-    })
+    const finalId = selectNewFinal()
     render(<Inspector filePath={TEST_FILE_PATH} />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Quitar variante alternativa' }))
+    // El editor sí muestra algo que editar (la primera variable)...
+    expect(screen.getByRole('combobox', { name: 'Variable' })).toBeInTheDocument()
+    // ...pero el documento sigue sin ninguna condición guardada: no se
+    // activa por el mero hecho de mostrarse.
+    const node = useProjectStore.getState().project.graph.nodes.find((n) => n.id === finalId)
+    expect(node?.type === 'final' ? node.alternateCondition : 'missing').toBeUndefined()
+    expect(
+      screen.getByText(/Todavía no hay ninguna variable "Fallos" en el proyecto/),
+    ).toBeInTheDocument()
+  })
 
-    const nodeAfter = useProjectStore.getState().project.graph.nodes.find((n) => n.id === finalId)
-    expect(nodeAfter?.type === 'final' ? nodeAfter.alternateCondition : undefined).toBeUndefined()
-    expect(nodeAfter?.type === 'final' ? nodeAfter.alternateBody : undefined).toBeUndefined()
+  it('el editor de contenido alternativo (uso interno) sigue disponible, siempre visible junto a la condición', () => {
+    act(() => {
+      useProjectStore.getState().addVariable({ name: 'Fallos', type: 'number', initialValue: 0 })
+    })
+    selectNewFinal()
+    render(<Inspector filePath={TEST_FILE_PATH} />)
+
+    expect(screen.getByText(/Contenido alternativo/)).toBeInTheDocument()
   })
 })
 

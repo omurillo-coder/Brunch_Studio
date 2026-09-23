@@ -34,6 +34,34 @@ function renderHarness(repository: ProjectRepository, filePath = '/tmp/autosave-
   )
 }
 
+/** Igual que `Harness`, pero además expone el `flushPendingSave` devuelto
+ *  por el hook a través de `onReady` — necesario para los tests que
+ *  simulan lo que hace `useWindowCloseGuard` al elegir "Guardar y salir". */
+function HarnessWithFlush({
+  filePath,
+  onReady,
+}: {
+  filePath: string
+  onReady: (flushPendingSave: () => Promise<void>) => void
+}) {
+  const { flushPendingSave } = useAutosave(filePath)
+  onReady(flushPendingSave)
+  return null
+}
+
+function renderHarnessWithFlush(
+  repository: ProjectRepository,
+  filePath = '/tmp/autosave-test.brunch',
+) {
+  let flushPendingSave: () => Promise<void> = async () => {}
+  const result = render(
+    <AppServicesProvider services={{ repository }}>
+      <HarnessWithFlush filePath={filePath} onReady={(fn) => (flushPendingSave = fn)} />
+    </AppServicesProvider>,
+  )
+  return { ...result, flushPendingSave: () => flushPendingSave() }
+}
+
 /** Repositorio de pega: mismos métodos que `ProjectRepository`, todos mockeados. */
 function createStubRepository(overrides: Partial<ProjectRepository> = {}): ProjectRepository & {
   saveProject: Mock
@@ -194,6 +222,49 @@ describe('useAutosave — debounce y guardado', () => {
 
     expect(repository.saveProject).toHaveBeenCalledTimes(2)
     expect(useProjectStore.getState().saveStatus).toBe('saved')
+  })
+
+  it('flushPendingSave reintenta tras un guardado fallido, aunque no quede ningún temporizador pendiente (bug real: "Guardar y salir" no reintentaba nada)', async () => {
+    const saveProject = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('disco lleno'))
+      .mockResolvedValue(undefined)
+    const repository = createStubRepository({ saveProject })
+    const { flushPendingSave } = renderHarnessWithFlush(repository)
+
+    act(() => {
+      useProjectStore.getState().createNode('final', { x: 0, y: 0 })
+    })
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AUTOSAVE_DEBOUNCE_MS)
+    })
+
+    // El guardado programado ya falló y consumió su temporizador: sin el
+    // arreglo, `flushPendingSave` vería `timer === null` y no haría nada.
+    expect(repository.saveProject).toHaveBeenCalledTimes(1)
+    expect(useProjectStore.getState().saveStatus).toBe('error')
+
+    await act(async () => {
+      await flushPendingSave()
+    })
+
+    expect(repository.saveProject).toHaveBeenCalledTimes(2)
+    expect(useProjectStore.getState().saveStatus).toBe('saved')
+  })
+
+  it('flushPendingSave no hace ninguna llamada adicional si ya está todo guardado', async () => {
+    const repository = createStubRepository()
+    const { flushPendingSave } = renderHarnessWithFlush(repository)
+
+    // Estado inicial tras montar: `saveStatus` consumido a 'saved', sin
+    // ningún cambio real todavía.
+    expect(useProjectStore.getState().saveStatus).toBe('saved')
+
+    await act(async () => {
+      await flushPendingSave()
+    })
+
+    expect(repository.saveProject).not.toHaveBeenCalled()
   })
 })
 

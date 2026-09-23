@@ -94,6 +94,31 @@
   padding: var(--bs-space-6);
 }
 
+/* `PlayerScreen.tsx` mueve el foco aquí (`stageRef.current?.focus()`) tras
+   cada cambio de vista, para quien navega con teclado o lector de pantalla.
+   No es un control interactivo en sí mismo (`tabIndex={-1}`, fuera del
+   orden de tabulación normal), así que no le hace falta el anillo de foco
+   visible de un botón/enlace real — mismo criterio que `.stage:focus` en
+   `exportedStyles.ts`. */
+.stage:focus {
+  outline: none;
+}
+
+/* Visualmente oculto pero expuesto a lectores de pantalla (patrón estándar
+   "sr-only"): la región `aria-live="polite"` que anuncia cada cambio de
+   pantalla (`announcerRef`) no debe verse ni ocupar espacio. */
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* Fundido de entrada al cambiar de vista (intro/continuar/decisión/final,
    ver `PlayerScreen.tsx`): cada cambio de vista remonta un `.card` nuevo
    (por `key={view.node.id}` o simplemente porque React desmonta la rama
@@ -197,9 +222,14 @@
   max-height: 320px;
 }
 
+/* Petición de usuario ("haz más obvio el salto de Normal a Grande"): 640px
+   (el doble de `.mediaNormal`, no 1.5×) — con `max-width: 100%` en las dos,
+   el límite anterior (480px) apenas se notaba en una imagen apaisada (el
+   ancho de la tarjeta la limitaba primero); este salto sí se percibe
+   incluso en imágenes anchas. */
 .mediaLarge {
   max-width: 100%;
-  max-height: 480px;
+  max-height: 640px;
 }
 
 /* Envoltorio `<button>` de una imagen ampliable (ver `PlayerImage` en

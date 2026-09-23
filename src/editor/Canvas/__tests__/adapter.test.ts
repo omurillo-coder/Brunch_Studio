@@ -4,6 +4,7 @@ import {
   addImageBlock,
   addResponse,
   addTextBlock,
+  addVariable,
   addVideoBlock,
   asignaturaWorkspaceName,
   CICLOS,
@@ -12,6 +13,7 @@ import {
   createProject,
   disconnect,
   updateNode,
+  updateResponse,
   updateTextBlockBody,
 } from '../../../domain'
 import type { ProjectDocument } from '../../../domain'
@@ -204,6 +206,105 @@ describe('toFlowNodes — hasNoOutgoing (punto 1: destacar nodos sin salida)', (
     const finalId = otherNodeIdOf(project, 'final')
     const flowNodes = toFlowNodes(project, [])
     expect(flowNodes.find((n) => n.id === finalId)?.data.hasNoOutgoing).toBe(false)
+  })
+})
+
+describe('toFlowNodes — usesVariables (petición de usuario: "doble contorno... se han usado variables")', () => {
+  it('una diapositiva sin condición/efectos no se marca', () => {
+    const project = createProject('P')
+    const startId = project.graph.startNodeId
+    const flowNodes = toFlowNodes(project, [])
+    expect(flowNodes.find((n) => n.id === startId)?.data.usesVariables).toBe(false)
+  })
+
+  it('una diapositiva "de continuar" con condition se marca', () => {
+    let project = addVariable(createProject('P'), { name: 'x', type: 'number', initialValue: 0 })
+    const varId = project.variables[0]!.id
+    const startId = project.graph.startNodeId
+    project = updateNode(project, startId, { condition: { variableId: varId, operator: '>', value: 0 } })
+
+    const flowNodes = toFlowNodes(project, [])
+    expect(flowNodes.find((n) => n.id === startId)?.data.usesVariables).toBe(true)
+  })
+
+  it('una diapositiva con visitEffects se marca', () => {
+    let project = addVariable(createProject('P'), { name: 'x', type: 'number', initialValue: 0 })
+    const varId = project.variables[0]!.id
+    const startId = project.graph.startNodeId
+    project = updateNode(project, startId, {
+      visitEffects: [{ variableId: varId, operation: 'increment', value: 1 }],
+    })
+
+    const flowNodes = toFlowNodes(project, [])
+    expect(flowNodes.find((n) => n.id === startId)?.data.usesVariables).toBe(true)
+  })
+
+  it('una diapositiva cuya ÚNICA respuesta con condition/effects propios se marca', () => {
+    let project = addVariable(createProject('P'), { name: 'x', type: 'number', initialValue: 0 })
+    const varId = project.variables[0]!.id
+    const startId = project.graph.startNodeId
+    project = addResponse(project, startId)
+    const responseId = firstResponseId(project, startId)
+    project = updateResponse(project, startId, responseId, {
+      effects: [{ variableId: varId, operation: 'set', value: 1 }],
+    })
+
+    const flowNodes = toFlowNodes(project, [])
+    expect(flowNodes.find((n) => n.id === startId)?.data.usesVariables).toBe(true)
+  })
+
+  it('un Final con alternateCondition guardada se marca', () => {
+    let project = addVariable(createProject('P'), { name: 'x', type: 'number', initialValue: 0 })
+    const varId = project.variables[0]!.id
+    project = createNode(project, 'final', { x: 100, y: 0 })
+    const finalId = otherNodeIdOf(project, 'final')
+    project = updateNode(project, finalId, {
+      alternateCondition: { variableId: varId, operator: '>', value: 0 },
+    })
+
+    const flowNodes = toFlowNodes(project, [])
+    expect(flowNodes.find((n) => n.id === finalId)?.data.usesVariables).toBe(true)
+  })
+
+  it('petición de usuario ampliada ("que siempre salgan esos dos finales"): un Final SIN alternateCondition guardada pero con una variable "Fallos" en el proyecto TAMBIÉN se marca', () => {
+    let project = addVariable(createProject('P'), { name: 'Fallos', type: 'number', initialValue: 0 })
+    project = createNode(project, 'final', { x: 100, y: 0 })
+    const finalId = otherNodeIdOf(project, 'final')
+    // Deliberadamente SIN updateNode(finalId, { alternateCondition: ... }).
+
+    const flowNodes = toFlowNodes(project, [])
+    expect(flowNodes.find((n) => n.id === finalId)?.data.usesVariables).toBe(true)
+  })
+
+  it('un Final sin alternateCondition y sin variable "Fallos" (aunque haya OTRAS variables) no se marca', () => {
+    let project = addVariable(createProject('P'), { name: 'contador', type: 'number', initialValue: 0 })
+    project = createNode(project, 'final', { x: 100, y: 0 })
+    const finalId = otherNodeIdOf(project, 'final')
+
+    const flowNodes = toFlowNodes(project, [])
+    expect(flowNodes.find((n) => n.id === finalId)?.data.usesVariables).toBe(false)
+  })
+
+  it('un nodo `intro` nunca se marca, aunque el proyecto tenga variables', () => {
+    let project = addVariable(createProject('P'), { name: 'x', type: 'number', initialValue: 0 })
+    project = createNode(project, 'intro', { x: -100, y: 0 })
+    const introId = introNodeId(project)
+
+    const flowNodes = toFlowNodes(project, [])
+    expect(flowNodes.find((n) => n.id === introId)?.data.usesVariables).toBe(false)
+  })
+
+  it('añadir la variable "Fallos" al proyecto activa usesVariables en un Final ya existente, sin tocar el nodo (invalida la caché)', () => {
+    let project = createNode(createProject('P'), 'final', { x: 100, y: 0 })
+    const finalId = otherNodeIdOf(project, 'final')
+    const cache: FlowNodeCache = new Map()
+
+    const before = toFlowNodes(project, [], cache)
+    expect(before.find((n) => n.id === finalId)?.data.usesVariables).toBe(false)
+
+    project = addVariable(project, { name: 'Fallos', type: 'number', initialValue: 0 })
+    const after = toFlowNodes(project, [], cache)
+    expect(after.find((n) => n.id === finalId)?.data.usesVariables).toBe(true)
   })
 })
 

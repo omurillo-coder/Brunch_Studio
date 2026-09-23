@@ -20,4 +20,15 @@ export interface HtmlBundleWriter {
    * promesa si la escritura falla.
    */
   writeHtmlBundle(path: string, html: string): Promise<void>
+
+  /**
+   * Igual que `writeHtmlBundle`, pero empaqueta `html` como un `.zip` con
+   * una única entrada en la raíz, `index.html` — petición de usuario ("la
+   * versión HTML quiero que me la des comprimida en ZIP ya"): lo usa el
+   * flujo "Exportar HTML" (`useHtmlExport.ts`) en vez de `writeHtmlBundle`,
+   * un `.zip` es más fácil de enviar por correo/mensajería que un `.html`
+   * suelto. El resto de exportaciones que producen un `index.html`
+   * autónomo (revisión profes) siguen usando `writeHtmlBundle` tal cual.
+   */
+  writeHtmlZipBundle(path: string, html: string): Promise<void>
 }

@@ -100,12 +100,20 @@ export const AUTOSAVE_DEBOUNCE_MS = 700
  * ---------------------------------------------------------------------------
  * El valor devuelto por el hook expone `flushPendingSave`, pensado para
  * quien vaya a desmontar/ocultar el editor (el botón "Cerrar proyecto" de
- * `Topbar`, vía `EditorScreen`) y necesite garantizar que no queda ningún
- * cambio dentro de la ventana de debounce sin escribir todavía. A
- * diferencia del atajo `Ctrl+S`/`Cmd+S` (que siempre fuerza una escritura),
- * `flushPendingSave` solo escribe si de verdad hay un guardado programado
- * pendiente (`timer !== null`): si ya está todo guardado (`idle`/`saved`) no
- * hace ninguna llamada innecesaria al repositorio.
+ * `Topbar`, y el guardián de cierre de ventana `useWindowCloseGuard` cuando
+ * el usuario elige "Guardar y salir") y necesite garantizar que no queda
+ * ningún cambio sin escribir todavía. A diferencia del atajo `Ctrl+S`/`Cmd+S`
+ * (que siempre fuerza una escritura), `flushPendingSave` solo escribe si hay
+ * algo de verdad pendiente: un guardado programado dentro de la ventana de
+ * debounce (`timer !== null`) O el último intento terminó en error
+ * (`saveStatus === 'error'`) — este segundo caso es igual de importante: sin
+ * él, "Guardar y salir" tras un fallo de guardado no reintentaba nada (el
+ * temporizador ya se había limpiado al fallar) y la ventana se cerraba
+ * igualmente, perdiendo en silencio el trabajo que el usuario creía haber
+ * guardado. Si ya está todo guardado (`idle`/`saved`) o hay una escritura en
+ * curso ahora mismo (`saving` sin temporizador pendiente: ya está en vuelo,
+ * duplicarla arriesgaría dos escrituras concurrentes al mismo fichero), no
+ * hace ninguna llamada adicional al repositorio.
  *
 
  * ---------------------------------------------------------------------------
@@ -129,9 +137,9 @@ export const AUTOSAVE_DEBOUNCE_MS = 700
 export interface UseAutosaveResult {
   /**
    * Si hay un guardado programado pendiente (un cambio reciente todavía
-   * dentro de la ventana de debounce), lo fuerza de inmediato y espera a que
-   * termine. Si no hay nada pendiente, no hace nada. Ver comentario de
-   * diseño de más arriba.
+   * dentro de la ventana de debounce) o el último intento de guardado
+   * falló, lo fuerza de inmediato y espera a que termine. Si no hay nada
+   * pendiente, no hace nada. Ver comentario de diseño de más arriba.
    */
   flushPendingSave: () => Promise<void>
 }
@@ -231,7 +239,9 @@ export function useAutosave(filePath: string): UseAutosaveResult {
     window.addEventListener('keydown', handleKeyDown)
 
     flushPendingSaveRef.current = async () => {
-      if (timer === null) return
+      const hasPendingTimer = timer !== null
+      const lastSaveFailed = useProjectStore.getState().saveStatus === 'error'
+      if (!hasPendingTimer && !lastSaveFailed) return
       await flushSave()
     }
 

@@ -961,11 +961,10 @@ describe('runtime del Player: variante alternativa de un Final ("Final Ok"/"Fina
     }
   })
 
-  describe('celebrate (milestone "+1 fallo con Game Over", petición de usuario: "Final Perfecto con confeti", ampliada después: "si llegas al final sin fallos y con fallos, en los dos")', () => {
-    it('celebrate true + contenido por defecto (condición falsa) -> celebrate: true', () => {
+  describe('celebrate (milestone "+1 fallo con Game Over", petición de usuario ampliada y luego SIMPLIFICADA a una regla fija: "quita el check del confeti... ponlo siempre en el Final TOP")', () => {
+    it('contenido por defecto (condición falsa o ausente) -> celebrate: true, SIEMPRE, sin ninguna configuración', () => {
       const { project: base, counter } = withTwoVariables()
-      let { project, finalId } = buildFinalWithAlternate(counter)
-      project = updateNode(project, finalId, { celebrate: true })
+      const { project, finalId } = buildFinalWithAlternate(counter)
       const merged = { ...project, variables: base.variables }
 
       const state = { currentNodeId: finalId, totalPoints: null, variables: { [counter.id]: 0 }, shuffledResponseIds: null }
@@ -977,10 +976,9 @@ describe('runtime del Player: variante alternativa de un Final ("Final Ok"/"Fina
       }
     })
 
-    it('petición de usuario ("en los dos"): celebrate true + contenido ALTERNATIVO (condición verdadera) -> celebrate: true TAMBIÉN', () => {
+    it('petición de usuario ("ponlo siempre en el TOP"): contenido ALTERNATIVO (condición verdadera) -> celebrate: false, SIEMPRE', () => {
       const { project: base, counter } = withTwoVariables()
-      let { project, finalId } = buildFinalWithAlternate(counter)
-      project = updateNode(project, finalId, { celebrate: true })
+      const { project, finalId } = buildFinalWithAlternate(counter)
       const merged = { ...project, variables: base.variables }
 
       const state = { currentNodeId: finalId, totalPoints: null, variables: { [counter.id]: 5 }, shuffledResponseIds: null }
@@ -988,23 +986,106 @@ describe('runtime del Player: variante alternativa de un Final ("Final Ok"/"Fina
       expect(view.kind).toBe('final')
       if (view.kind === 'final') {
         expect(view.resolvedBody).toBe('Cuerpo alternativo')
-        expect(view.celebrate).toBe(true)
+        expect(view.celebrate).toBe(false)
       }
     })
 
-    it('sin celebrate (undefined/false), nunca celebra aunque se muestre el contenido por defecto', () => {
+    it('el campo `celebrate` heredado de un documento antiguo se ignora por completo, en cualquier valor', () => {
       let project = createProject('P')
       project = createNode(project, 'final', { x: 200, y: 0 }, { body: 'Cuerpo por defecto' })
       const finalId = project.graph.nodes.find((node) => node.type === 'final')!.id
+      project = updateNode(project, finalId, { celebrate: false })
 
       const state = getInitialState(project)
       const withFinal = { ...state, currentNodeId: finalId }
       const view = getView(project, withFinal)
       expect(view.kind).toBe('final')
       if (view.kind === 'final') {
-        expect(view.celebrate).toBe(false)
+        // Contenido por defecto (sin variante alternativa configurada):
+        // celebra igual, aunque el nodo diga `celebrate: false`.
+        expect(view.celebrate).toBe(true)
       }
     })
+  })
+})
+
+describe('runtime del Player: variante alternativa AUTOMÁTICA de un Final (petición de usuario: "que siempre salgan esos dos finales... sin tener que activar nada")', () => {
+  it('con una variable "Fallos" > 0 en el proyecto, un Final SIN alternateCondition guardada activa igualmente la variante "con fallos"', () => {
+    let project = createProject('P')
+    project = addVariable(project, { name: 'Fallos', type: 'number', initialValue: 0 })
+    const fallosId = project.variables[0]!.id
+    project = createNode(project, 'final', { x: 200, y: 0 }, { body: 'Cuerpo por defecto' })
+    const finalId = project.graph.nodes.find((node) => node.type === 'final')!.id
+    // Deliberadamente SIN updateNode(finalId, { alternateCondition: ... }).
+
+    const state = { currentNodeId: finalId, totalPoints: null, variables: { [fallosId]: 1 }, shuffledResponseIds: null }
+    const view = getView(project, state)
+    expect(view.kind).toBe('final')
+    if (view.kind === 'final') {
+      expect(view.usedAlternate).toBe(true)
+      expect(view.celebrate).toBe(false)
+    }
+  })
+
+  it('con "Fallos" en 0 (valor inicial), el mismo Final sin configurar se queda en el contenido por defecto', () => {
+    let project = createProject('P')
+    project = addVariable(project, { name: 'Fallos', type: 'number', initialValue: 0 })
+    const fallosId = project.variables[0]!.id
+    project = createNode(project, 'final', { x: 200, y: 0 }, { body: 'Cuerpo por defecto' })
+    const finalId = project.graph.nodes.find((node) => node.type === 'final')!.id
+
+    const state = { currentNodeId: finalId, totalPoints: null, variables: { [fallosId]: 0 }, shuffledResponseIds: null }
+    const view = getView(project, state)
+    expect(view.kind).toBe('final')
+    if (view.kind === 'final') {
+      expect(view.usedAlternate).toBe(false)
+      expect(view.celebrate).toBe(true)
+    }
+  })
+
+  it('sin ninguna variable llamada "Fallos" (otras variables sí presentes), NO se activa nada automáticamente: no secuestra una variable de otro uso', () => {
+    let project = createProject('P')
+    project = addVariable(project, { name: 'flag', type: 'boolean', initialValue: true })
+    const flagId = project.variables[0]!.id
+    project = createNode(project, 'final', { x: 200, y: 0 }, { body: 'Cuerpo por defecto' })
+    const finalId = project.graph.nodes.find((node) => node.type === 'final')!.id
+
+    // `flag` ya vale `true` — si el auto-default cayera a "la primera
+    // variable que haya" (comportamiento antiguo, ya retirado), esto
+    // activaría la variante alternativa sin que nadie lo pidiera.
+    const state = { currentNodeId: finalId, totalPoints: null, variables: { [flagId]: true }, shuffledResponseIds: null }
+    const view = getView(project, state)
+    expect(view.kind).toBe('final')
+    if (view.kind === 'final') {
+      expect(view.usedAlternate).toBe(false)
+    }
+  })
+
+  it('un alternateCondition guardado explícitamente sigue teniendo prioridad sobre el default automático', () => {
+    let project = createProject('P')
+    project = addVariable(project, { name: 'Fallos', type: 'number', initialValue: 0 })
+    project = addVariable(project, { name: 'contador', type: 'number', initialValue: 0 })
+    const [fallosVar, counterVar] = project.variables as [VariableDef, VariableDef]
+    project = createNode(project, 'final', { x: 200, y: 0 }, { body: 'Cuerpo por defecto' })
+    const finalId = project.graph.nodes.find((node) => node.type === 'final')!.id
+    // Condición explícita sobre OTRA variable, no "Fallos".
+    project = updateNode(project, finalId, {
+      alternateCondition: { variableId: counterVar.id, operator: '>=', value: 10 },
+    })
+
+    // "Fallos" > 0 (activaría el default automático), pero "contador" < 10
+    // (la condición explícita, que manda, sigue siendo falsa).
+    const state = {
+      currentNodeId: finalId,
+      totalPoints: null,
+      variables: { [fallosVar.id]: 5, [counterVar.id]: 3 },
+      shuffledResponseIds: null,
+    }
+    const view = getView(project, state)
+    expect(view.kind).toBe('final')
+    if (view.kind === 'final') {
+      expect(view.usedAlternate).toBe(false)
+    }
   })
 })
 

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { buildHtmlBundle } from '../htmlBundle'
-import { BUNDLE_ELEMENT_ID } from '../exportedPlayerScript'
+import { BUNDLE_ELEMENT_ID, ROOT_ELEMENT_ID } from '../exportedPlayerScript'
 import type { ExportAssetMap } from '../exportAssets'
 import { CICLOS, cicloOutputName } from '../../domain'
 import type {
@@ -65,7 +65,7 @@ function textBlock(body: string): ContentBlock {
 }
 function imageBlock(
   assetId: string,
-  overrides?: { expandable?: boolean; size?: 'small' | 'normal' | 'large' },
+  overrides?: { expandable?: boolean; size?: 'small' | 'normal' | 'large'; alt?: string },
 ): ContentBlock {
   blockCounter += 1
   return { id: `block-image-${blockCounter}`, type: 'image', assetId, ...overrides }
@@ -672,6 +672,57 @@ describe('buildHtmlBundle — comportamiento del HTML generado (jsdom)', () => {
   })
 })
 
+describe('buildHtmlBundle — accesibilidad: foco y anuncio al cambiar de pantalla', () => {
+  beforeEach(() => {
+    document.body.innerHTML = ''
+  })
+
+  function stage(): HTMLElement {
+    const element = document.getElementById('brunch-root')
+    if (!element) throw new Error('No se ha encontrado #brunch-root.')
+    return element
+  }
+
+  function announcer(): HTMLElement | null {
+    return document.querySelector('[role="status"][aria-live="polite"]')
+  }
+
+  it('mueve el foco a la pantalla (#brunch-root) al pintar la primera vista', () => {
+    runExportedBundle(buildHtmlBundle(sampleProject(), sampleAssets))
+    expect(document.activeElement).toBe(stage())
+  })
+
+  it('vuelve a mover el foco tras cada cambio de pantalla (continuar, elegir, reiniciar)', () => {
+    runExportedBundle(buildHtmlBundle(sampleProject(), sampleAssets))
+
+    clickButton('Empezar el caso')
+    expect(document.activeElement).toBe(stage())
+
+    clickButton('Avisar al responsable')
+    expect(document.activeElement).toBe(stage())
+
+    clickButton('Reintentar')
+    expect(document.activeElement).toBe(stage())
+  })
+
+  it('crea una única región aria-live="polite" (nunca duplicada entre renders) con un mensaje al cambiar de pantalla', () => {
+    runExportedBundle(buildHtmlBundle(sampleProject(), sampleAssets))
+    const firstAnnouncer = announcer()
+    expect(firstAnnouncer).not.toBeNull()
+    expect(firstAnnouncer?.textContent).not.toBe('')
+
+    clickButton('Empezar el caso')
+    expect(document.querySelectorAll('[role="status"][aria-live="polite"]')).toHaveLength(1)
+    expect(announcer()).toBe(firstAnnouncer)
+    expect(announcer()?.textContent).not.toBe('')
+  })
+
+  it('#brunch-root es focusable mediante tabIndex = -1 sin entrar en el orden de tabulación normal', () => {
+    runExportedBundle(buildHtmlBundle(sampleProject(), sampleAssets))
+    expect(stage().getAttribute('tabindex')).toBe('-1')
+  })
+})
+
 describe('buildHtmlBundle — bloques de contenido de una diapositiva (milestone "Bloques de contenido")', () => {
   beforeEach(() => {
     document.body.innerHTML = ''
@@ -882,6 +933,33 @@ describe('buildHtmlBundle — imágenes ampliables + tamaño (petición de usuar
     ).toBe('none')
   })
 
+  it('hallazgo de auditoría (foco): al abrirse, el foco se mueve al botón "×"; al cerrarse, vuelve al botón que lo abrió', () => {
+    runExportedBundle(buildHtmlBundle(blocksProject([imageBlock(IMAGE_ASSET_ID)]), sampleAssets))
+    const triggerButton = currentCard().querySelector<HTMLImageElement>('img')?.closest('button')
+    if (!triggerButton) throw new Error('setup inválido: no hay botón de ampliar')
+    triggerButton.focus()
+
+    triggerButton.click()
+    const closeButton = document.querySelector<HTMLButtonElement>('.lightboxClose')
+    expect(document.activeElement).toBe(closeButton)
+
+    closeButton?.click()
+    expect(document.activeElement).toBe(triggerButton)
+  })
+
+  it('hallazgo de auditoría (foco): mientras está abierto, Tab/Shift+Tab no se escapa del diálogo — se queda en el botón "×"', () => {
+    runExportedBundle(buildHtmlBundle(blocksProject([imageBlock(IMAGE_ASSET_ID)]), sampleAssets))
+    currentCard().querySelector<HTMLImageElement>('img')?.closest('button')?.click()
+    const closeButton = document.querySelector<HTMLButtonElement>('.lightboxClose')
+    expect(document.activeElement).toBe(closeButton)
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }))
+    expect(document.activeElement).toBe(closeButton)
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true }))
+    expect(document.activeElement).toBe(closeButton)
+  })
+
   it('pulsar la propia imagen dentro del lightbox no lo cierra (solo pulsar el fondo)', () => {
     runExportedBundle(buildHtmlBundle(blocksProject([imageBlock(IMAGE_ASSET_ID)]), sampleAssets))
     currentCard().querySelector<HTMLImageElement>('img')?.closest('button')?.click()
@@ -921,6 +999,33 @@ describe('buildHtmlBundle — imágenes ampliables + tamaño (petición de usuar
     expect(images.map((img) => img.classList.contains('mediaNormal'))).toEqual([false, false, true])
   })
 
+  it('petición de usuario (texto alternativo personalizado): `alt` sustituye al genérico en la imagen, el botón de ampliar y el lightbox; sin `alt` usa el genérico', () => {
+    runExportedBundle(
+      buildHtmlBundle(
+        blocksProject([imageBlock(IMAGE_ASSET_ID, { alt: 'Diagrama del proceso de fabricación' })]),
+        sampleAssets,
+      ),
+    )
+
+    const image = currentCard().querySelector<HTMLImageElement>('img')
+    expect(image?.getAttribute('alt')).toBe('Diagrama del proceso de fabricación')
+    expect(image?.closest('button')?.getAttribute('aria-label')).toBe(
+      'Ampliar imagen: Diagrama del proceso de fabricación',
+    )
+
+    image?.closest('button')?.click()
+    const lightbox = document.querySelector<HTMLElement>('.lightboxBackdrop')
+    expect(lightbox?.querySelector('img')?.getAttribute('alt')).toBe(
+      'Diagrama del proceso de fabricación',
+    )
+  })
+
+  it('sin `alt`, se usa el texto genérico de siempre ("Imagen de esta pantalla")', () => {
+    runExportedBundle(buildHtmlBundle(blocksProject([imageBlock(IMAGE_ASSET_ID)]), sampleAssets))
+
+    const image = currentCard().querySelector<HTMLImageElement>('img')
+    expect(image?.getAttribute('alt')).toBe('Imagen de esta pantalla')
+  })
 })
 
 // ---------------------------------------------------------------------------
@@ -1764,13 +1869,10 @@ describe('buildHtmlBundle — milestone "+1 fallo con Game Over"', () => {
     })
   })
 
-  describe('confeti del Final "Perfecto" (petición de usuario: "con confeti", ampliada después: "si llegas al final sin fallos y con fallos, en los dos")', () => {
-    it('celebrate + contenido por defecto -> confeti presente en el HTML exportado', () => {
+  describe('confeti del Final: regla fija (petición de usuario: "quita el check del confeti... ponlo siempre en el Final TOP")', () => {
+    it('el Final TOP (contenido por defecto) SIEMPRE lleva confeti, sin ninguna configuración', () => {
       const project = gameOverFeaturesProject()
       project.graph.startNodeId = VISIT_DECISION_ID
-      const final = project.graph.nodes.find((node) => node.id === VISIT_FINAL_ID)
-      if (!final || final.type !== 'final') throw new Error('setup inválido')
-      final.celebrate = true
       // Sin visitar "Inicio" (que suma +5 a Fallos): la condición del
       // alternativo (>= 5) es falsa, se resuelve al contenido por defecto.
       runExportedBundle(buildHtmlBundle(project, {}))
@@ -1783,11 +1885,21 @@ describe('buildHtmlBundle — milestone "+1 fallo con Game Over"', () => {
       expect(confetti?.querySelectorAll('.confettiPiece').length).toBeGreaterThan(0)
     })
 
-    it('petición de usuario ("en los dos"): celebrate + contenido ALTERNATIVO -> confeti TAMBIÉN presente', () => {
+    it('el campo `celebrate` heredado de un documento antiguo se ignora: el Final TOP celebra igual aunque valga `false`', () => {
       const project = gameOverFeaturesProject()
+      project.graph.startNodeId = VISIT_DECISION_ID
       const final = project.graph.nodes.find((node) => node.id === VISIT_FINAL_ID)
       if (!final || final.type !== 'final') throw new Error('setup inválido')
-      final.celebrate = true
+      final.celebrate = false
+      runExportedBundle(buildHtmlBundle(project, {}))
+
+      clickButton('Seguir')
+
+      expect(currentCard().querySelector('.confetti')).not.toBeNull()
+    })
+
+    it('petición de usuario ("ponlo siempre en el TOP"): el Final "con fallos" (contenido ALTERNATIVO) NUNCA lleva confeti', () => {
+      const project = gameOverFeaturesProject()
       // Arranca en "Inicio" (+5 a Fallos): la condición del alternativo
       // (>= 5) se cumple, se resuelve al contenido ALTERNATIVO.
       runExportedBundle(buildHtmlBundle(project, {}))
@@ -1796,20 +1908,43 @@ describe('buildHtmlBundle — milestone "+1 fallo con Game Over"', () => {
       clickButton('Seguir')
 
       expect(currentCard().textContent).toContain('¡Buen trabajo!')
-      const confetti = currentCard().querySelector('.confetti')
-      expect(confetti).not.toBeNull()
-      expect(confetti?.querySelectorAll('.confettiPiece').length).toBeGreaterThan(0)
-    })
-
-    it('sin celebrate, nunca hay confeti, ni con el contenido por defecto ni con el alternativo', () => {
-      const project = gameOverFeaturesProject()
-      project.graph.startNodeId = VISIT_DECISION_ID
-      runExportedBundle(buildHtmlBundle(project, {}))
-
-      clickButton('Seguir')
-
-      expect(currentCard().textContent).toContain('¡Impresionante!')
       expect(currentCard().querySelector('.confetti')).toBeNull()
     })
+  })
+})
+
+describe('buildHtmlBundle — hallazgo de auditoría: JSON.parse del bundle embebido sin try/catch', () => {
+  beforeEach(() => {
+    document.body.innerHTML = ''
+  })
+
+  /** Sustituye el JSON embebido (`#brunch-bundle`) del HTML ya generado por
+   *  un valor deliberadamente inválido, simulando el archivo corrompiéndose
+   *  en tránsito (proxy corporativo, edición manual accidental…) DESPUÉS de
+   *  exportarse — `buildHtmlBundle` en sí siempre produce JSON válido, así
+   *  que no hay forma de llegar a este caso pidiéndole un proyecto raro. */
+  function corruptEmbeddedBundle(html: string): string {
+    const marker = `<script type="application/json" id="${BUNDLE_ELEMENT_ID}">`
+    const start = html.indexOf(marker) + marker.length
+    const end = html.indexOf('</script>', start)
+    return html.slice(0, start) + '{esto no es JSON válido' + html.slice(end)
+  }
+
+  it('un JSON embebido corrupto no lanza: pinta un mensaje legible en #brunch-root en vez de dejar la página en blanco', () => {
+    const html = corruptEmbeddedBundle(buildHtmlBundle(sampleProject(), {}))
+
+    expect(() => runExportedBundle(html)).not.toThrow()
+
+    const root = document.getElementById(ROOT_ELEMENT_ID)
+    expect(root?.textContent).toContain('No se ha podido cargar esta experiencia')
+  })
+
+  it('un JSON embebido válido sigue funcionando con normalidad (el try/catch no interfiere con el caso normal)', () => {
+    runExportedBundle(buildHtmlBundle(sampleProject(), {}))
+
+    expect(document.getElementById(ROOT_ELEMENT_ID)?.textContent).not.toContain(
+      'No se ha podido cargar esta experiencia',
+    )
+    expect(currentCard()).toBeTruthy()
   })
 })

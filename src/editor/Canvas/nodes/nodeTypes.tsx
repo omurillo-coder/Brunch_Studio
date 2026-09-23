@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { Handle, Position } from '@xyflow/react'
 import type { NodeProps } from '@xyflow/react'
 import { MAX_RESPONSES } from '../../../domain'
@@ -161,7 +162,12 @@ const SLIDE_COLOR_CARD_CLASS: Record<SlideColor, string | undefined> = {
  *  rojo, milestone "+1 fallo con Game Over"): solo la `slide` con
  *  `data.canvasBadge === 'game-over'` — se combina con cualquier color de
  *  fondo que además tenga, mismo canal `outline` que `cardFinal`/
- *  `cardIntro` (ver su comentario en `NodeCard.module.css`). */
+ *  `cardIntro` (ver su comentario en `NodeCard.module.css`). `cardUsesVariables`
+ *  (petición de usuario: "doble contorno... para que sepa que en esa
+ *  pantalla se han usado variables"): se pinta con un pseudo-elemento
+ *  (`::after`, ver `NodeCard.module.css`) precisamente para poder combinarse
+ *  SIEMPRE con cualquiera de los anillos/contornos de arriba, sin pisarlos
+ *  ni ser pisado. */
 function cardClassName(data: CanvasNodeData): string {
   return [
     styles.card,
@@ -172,6 +178,7 @@ function cardClassName(data: CanvasNodeData): string {
     data.hasNoOutgoing && styles.cardWarning,
     data.isHighlighted && styles.cardHighlighted,
     data.isDimmed && styles.cardDimmed,
+    data.usesVariables && styles.cardUsesVariables,
   ]
     .filter(Boolean)
     .join(' ')
@@ -411,7 +418,7 @@ function ResponseRow({ response }: { response: CanvasResponseSummary }) {
   )
 }
 
-export function SlideNodeView({ data }: NodeProps<CanvasFlowNode>) {
+function SlideNodeViewComponent({ data }: NodeProps<CanvasFlowNode>) {
   const responses = (data.responses ?? []).slice(0, MAX_SUMMARIZED_RESPONSES)
 
   return (
@@ -437,7 +444,18 @@ export function SlideNodeView({ data }: NodeProps<CanvasFlowNode>) {
   )
 }
 
-export function FinalNodeView({ data }: NodeProps<CanvasFlowNode>) {
+/**
+ * Hallazgo de auditoría ("los nodos del lienzo no están memoizados"):
+ * envuelto en `React.memo` — el adapter (`toFlowNodes` en `adapter.ts`, ver
+ * `FlowNodeCache`) ya garantiza que `data` conserva la MISMA referencia
+ * entre renders cuando nada relevante de ese nodo concreto cambió, así que
+ * `memo` puede saltarse el render de un nodo no tocado casi gratis — el
+ * trabajo de estabilidad de referencias ya estaba hecho, solo faltaba
+ * aprovecharlo aquí.
+ */
+export const SlideNodeView = memo(SlideNodeViewComponent)
+
+function FinalNodeViewComponent({ data }: NodeProps<CanvasFlowNode>) {
   return (
     <div className={cardClassName(data)}>
       <InHandle />
@@ -446,6 +464,9 @@ export function FinalNodeView({ data }: NodeProps<CanvasFlowNode>) {
     </div>
   )
 }
+
+/** Ver comentario de `SlideNodeView` — mismo criterio de memoización. */
+export const FinalNodeView = memo(FinalNodeViewComponent)
 
 /**
  * Tarjeta de la diapositiva de Inicio (nodo `intro`, milestone "Diapositiva
@@ -462,8 +483,11 @@ export function FinalNodeView({ data }: NodeProps<CanvasFlowNode>) {
  *   de una diapositiva normal (un `intro` no tiene).
  * - Cabecera propia (`IntroHeader`, no `Header`): sin título/Ref. oculta,
  *   con "INICIO" en tamaño grande — ver comentario de `IntroHeader`.
+ *
+ * Ver también el comentario de `SlideNodeView` sobre memoización — mismo
+ * criterio.
  */
-export function IntroNodeView({ data }: NodeProps<CanvasFlowNode>) {
+function IntroNodeViewComponent({ data }: NodeProps<CanvasFlowNode>) {
   return (
     <div className={cardClassName(data)}>
       <NoOutgoingBadge data={data} />
@@ -473,6 +497,8 @@ export function IntroNodeView({ data }: NodeProps<CanvasFlowNode>) {
     </div>
   )
 }
+
+export const IntroNodeView = memo(IntroNodeViewComponent)
 
 /**
  * Mapa `nodeTypes` de `@xyflow/react`. Definido una sola vez a nivel de

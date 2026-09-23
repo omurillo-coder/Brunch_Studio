@@ -24,15 +24,15 @@ import styles from './VariablesPanel.module.css'
  *
  * Decisión de diseño — tipo no editable tras crear la variable: una vez
  * creada, `VariableRow` (más abajo) NO ofrece ningún control para cambiar
- * `type`, solo nombre y valor inicial. Aunque `updateVariable` (dominio) lo
- * permitiría, cambiar el tipo de una variable ya referenciada por
- * condiciones/efectos en otras diapositivas dejaría esas referencias en un
- * estado ambiguo (p.ej. una condición `> 5` guardada sobre lo que ahora es
- * una booleana) sin que el dominio limpie nada automáticamente en ese caso
- * (a diferencia de `deleteVariable`, que sí limpia referencias colgantes).
- * Si el diseñador se equivoca de tipo, el flujo previsto es borrar la
- * variable y crearla de nuevo — el propio borrado ya avisa de qué se
- * limpia, ver `VariableRow`.
+ * `type`, solo nombre y valor inicial. `updateVariable` (dominio) SÍ limpia
+ * con seguridad cualquier condición/efecto que quedara incoherente si el
+ * tipo cambiara (misma limpieza que `deleteVariable`, ver su comentario en
+ * `src/domain/project.ts`), así que no es una cuestión de que hacerlo fuera
+ * inseguro — es una decisión de simplicidad de flujo: cambiar el tipo de
+ * una variable ya en uso siempre implica revisar a mano las condiciones que
+ * quedarían borradas, y borrar la variable y crearla de nuevo (con el mismo
+ * aviso explícito de qué se limpia, ver `VariableRow`) ya cubre ese caso sin
+ * necesitar un control de tipo aparte.
  */
 export interface VariablesPanelProps {
   /** Cierra el panel (mismo callback que el botón "Variables" de `Topbar`,

@@ -648,6 +648,15 @@
   color: var(--bs-color-text-muted);
 }
 
+/* Texto alternativo personalizado de una imagen (petición de usuario, ver
+   `ImageBlockOptions` en Inspector.tsx): `flex-basis: 100%` lo fuerza a su
+   propia línea dentro de `.imageOptions` (que si no, lo colocaría junto al
+   botón/desplegable por el `flex-wrap` de esa fila), ya que es un campo de
+   texto libre que necesita más ancho que los otros dos controles. */
+.imageAltField {
+  flex-basis: 100%;
+}
+
 /* Bloques de contenido de una diapositiva (milestone "Bloques de
    contenido", fase 2 — editor): lista ordenable de texto/imagen/audio.
    Sustituye a la antigua lista de imágenes + orden de contenido + audio

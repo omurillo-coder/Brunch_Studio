@@ -165,20 +165,21 @@ export function attachImageAsset(
 
 /**
  * Petición de usuario ("botón para hacer no ampliable la imagen" + "un
- * desplegable... Pequeño/Normal/Grande"): parche de las dos opciones
- * puramente visuales de un bloque de imagen — `expandable`/`size`, ver sus
- * comentarios en `ContentBlockSchema` (`schemas.ts`). Mismo criterio de
- * patch que el resto del dominio: `undefined` no toca ese campo, `null` lo
- * borra (vuelve al valor por defecto: ampliable/tamaño normal) — nunca hace
- * falta pasar los dos a la vez. Lanza `Error` si el nodo no existe/no es
- * diapositiva, si el bloque no existe, o si no es de tipo `image` — mismo
- * criterio que `attachImageAsset`.
+ * desplegable... Pequeño/Normal/Grande" + texto alternativo personalizado):
+ * parche de las opciones puramente visuales/accesibles de un bloque de
+ * imagen — `expandable`/`size`/`alt`, ver sus comentarios en
+ * `ContentBlockSchema` (`schemas.ts`). Mismo criterio de patch que el resto
+ * del dominio: `undefined` no toca ese campo, `null` lo borra (vuelve al
+ * valor por defecto: ampliable/tamaño normal/texto alternativo genérico) —
+ * nunca hace falta pasar los tres a la vez. Lanza `Error` si el nodo no
+ * existe/no es diapositiva, si el bloque no existe, o si no es de tipo
+ * `image` — mismo criterio que `attachImageAsset`.
  */
 export function updateImageBlockOptions(
   project: ProjectDocument,
   slideNodeId: string,
   blockId: string,
-  patch: { expandable?: boolean | null; size?: ImageSize | null },
+  patch: { expandable?: boolean | null; size?: ImageSize | null; alt?: string | null },
 ): ProjectDocument {
   const node = findSlideNode(project, slideNodeId)
   const index = findBlockIndex(node, blockId)
@@ -200,6 +201,9 @@ export function updateImageBlockOptions(
     }
     if (patch.size !== undefined) {
       draftBlock.size = patch.size === null ? undefined : patch.size
+    }
+    if (patch.alt !== undefined) {
+      draftBlock.alt = patch.alt === null || patch.alt === '' ? undefined : patch.alt
     }
     draft.metadata.updatedAt = new Date().toISOString()
   })

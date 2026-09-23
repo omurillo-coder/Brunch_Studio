@@ -35,6 +35,7 @@ import { CanvasAssetProvider } from './nodes/CanvasAssetContext'
 import type { CanvasAssetContextValue } from './nodes/CanvasAssetContext'
 import { ConnectionMenu } from './ConnectionMenu'
 import { useCanvasClipboard } from './useCanvasClipboard'
+import { useCanvasKeyboardCreate } from './useCanvasKeyboardCreate'
 import styles from './Canvas.module.css'
 
 /** Etiqueta accesible del botón de auto-layout, reutilizada como `title`
@@ -155,6 +156,11 @@ export function Canvas({ filePath }: CanvasProps) {
   // `useCanvasClipboard` para el detalle de por qué no interfiere con el
   // copiar/pegar de texto normal del navegador dentro de un campo editable.
   useCanvasClipboard()
+
+  // Hallazgo de auditoría ("crear un nodo nuevo depende del ratón"): `Enter`
+  // con exactamente un nodo seleccionado abre "¿Qué quieres añadir?" sin
+  // necesitar ningún arrastre — ver `useCanvasKeyboardCreate`.
+  useCanvasKeyboardCreate()
 
   // Bug real reportado por el usuario ("clic en una arista/nodo y luego en
   // otro nodo deja la pantalla en gris, como si se hubiera cerrado el

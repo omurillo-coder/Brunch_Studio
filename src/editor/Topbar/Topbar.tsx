@@ -109,6 +109,33 @@ function ExportToast({ status, message }: { status: string; message: string }) {
   )
 }
 
+/**
+ * Hallazgo de auditoría ("un fallo de guardado apenas se nota... sin
+ * refuerzo visual ni reintento automático"): sustituye al `<span
+ * className={styles.saveStatus}>` discreto cuando `saveStatus === 'error'`
+ * — mismo hueco de la barra, pero con fondo de color, texto explícito de lo
+ * que ha pasado, y un botón "Reintentar" explícito en vez de depender de que
+ * el usuario note el texto pequeño o sepa que el siguiente cambio/`Ctrl+S`
+ * reintenta solo.
+ *
+ * Sin estado local de "reintentando": `onRetry` (`flushPendingSave`) fija
+ * `saveStatus: 'saving'` de forma SÍNCRONA antes de la escritura real (ver
+ * `useAutosave.ts`), así que en cuanto se pulsa el botón este banner se
+ * desmonta solo (la condición `saveStatus === 'error'` de `Topbar` deja de
+ * cumplirse) y pasa a verse "Guardando…" — no hace falta deshabilitar nada a
+ * mano mientras tanto.
+ */
+function SaveErrorBanner({ onRetry }: { onRetry: () => void | Promise<void> }) {
+  return (
+    <div role="alert" className={styles.saveErrorBanner}>
+      <span>Error al guardar: tus últimos cambios no se han escrito en el archivo.</span>
+      <button type="button" className={styles.retrySaveButton} onClick={() => void onRetry()}>
+        Reintentar
+      </button>
+    </div>
+  )
+}
+
 function isEditableTarget(target: EventTarget | null): boolean {
   return (
     target instanceof HTMLElement &&
@@ -137,6 +164,15 @@ export interface TopbarProps {
   variablesPanelVisible: boolean
   /** Alterna la visibilidad del panel de variables. */
   onToggleVariablesPanel: () => void
+  /**
+   * Hallazgo de auditoría ("un fallo de guardado apenas se nota"): reintenta
+   * el guardado que falló. Es `flushPendingSave` de `useAutosave` (vive en
+   * `EditorScreen`, no aquí — mismo criterio de "el estado real vive fuera,
+   * `Topbar` solo lo traduce" que `saveStatus`): ya sabe reintentar SOLO
+   * cuando de verdad hay algo pendiente o el último intento falló, así que
+   * este botón puede llamarlo sin ninguna comprobación propia.
+   */
+  onRetrySave: () => void | Promise<void>
 }
 
 /**
@@ -156,6 +192,7 @@ export function Topbar({
   onToggleLeftPanel,
   variablesPanelVisible,
   onToggleVariablesPanel,
+  onRetrySave,
 }: TopbarProps) {
   const project = useProject()
   const saveStatus = useProjectStore((state) => state.saveStatus)
@@ -243,7 +280,11 @@ export function Topbar({
           <SidebarToggleIcon />
         </button>
         <span className={styles.projectName}>{project.metadata.name}</span>
-        <span className={styles.saveStatus}>{SAVE_STATUS_LABEL[saveStatus]}</span>
+        {saveStatus === 'error' ? (
+          <SaveErrorBanner onRetry={onRetrySave} />
+        ) : (
+          <span className={styles.saveStatus}>{SAVE_STATUS_LABEL[saveStatus]}</span>
+        )}
       </div>
       <div className={styles.right}>
         <button

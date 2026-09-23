@@ -26,7 +26,9 @@ export const EXPORTED_STYLES = `
   --bs-color-border-strong: #c9c9cf;
   --bs-color-text: #1b1b1f;
   --bs-color-text-muted: #6b6b74;
-  --bs-color-text-faint: #97979f;
+  /* Hallazgo de auditoría: oscurecido de #97979f a #6f6f78 para dar AA
+     (4.5:1) — ver el comentario de este mismo token en tokens.css. */
+  --bs-color-text-faint: #6f6f78;
   /* Acento corporativo iLERNA (#00aec7) con el mismo texto oscuro encima
      que en la app: blanco puro sobre este turquesa no llega a AA. */
   --bs-color-accent: #00aec7;
@@ -50,8 +52,8 @@ export const EXPORTED_STYLES = `
 
   --bs-font-sans: -apple-system, 'Segoe UI', Roboto, system-ui, sans-serif;
   --bs-font-size-sm: 12.5px;
-  --bs-font-size-md: 15px;
-  --bs-font-size-lg: 19px;
+  --bs-font-size-md: 13.5px;
+  --bs-font-size-lg: 15px;
 
   --bs-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
 }
@@ -64,7 +66,9 @@ export const EXPORTED_STYLES = `
     --bs-color-border-strong: #45454c;
     --bs-color-text: #ededef;
     --bs-color-text-muted: #a1a1aa;
-    --bs-color-text-faint: #71717a;
+    /* Hallazgo de auditoría: oscurecido de #71717a a #93939b para dar AA —
+       ver el comentario de este mismo token en tokens.css. */
+    --bs-color-text-faint: #93939b;
     --bs-color-accent: #2cc7de;
     --bs-color-accent-hover: #5ad6e8;
     --bs-color-accent-contrast: #06222a;
@@ -93,12 +97,45 @@ body {
   line-height: 1.5;
 }
 
+/* Petición de usuario ("que la salida esté desde la parte superior, no
+   centrado... que coja el eje superior para aparecer, así no tengo que
+   hacer scroll"): \`align-items: flex-start\` en vez de \`center\` — la
+   tarjeta arranca pegada arriba (con el margen de \`padding\` de siempre),
+   nunca centrada verticalmente en mitad de una pantalla vacía que obligaba
+   a hacer scroll hacia arriba para empezar a leer. Horizontalmente sigue
+   centrada (\`justify-content: center\`), eso no cambia. */
 .stage {
   min-height: 100vh;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   padding: var(--bs-space-6) var(--bs-space-4);
+}
+
+/* \`exportedPlayerScript.ts\` mueve el foco aquí (\`root.focus()\`) tras cada
+   cambio de pantalla, para quien navega con teclado o lector de pantalla —
+   ver \`focusStageAndAnnounce\`. No es un control interactivo en sí mismo
+   (\`tabIndex = -1\`, fuera del orden de tabulación normal), así que no le
+   hace falta el anillo de foco visible de un botón/enlace real. */
+.stage:focus {
+  outline: none;
+}
+
+/* Visualmente oculto pero expuesto a lectores de pantalla (patrón
+   estándar "sr-only"): la región \`aria-live="polite"\` que anuncia cada
+   cambio de pantalla (\`ensureRouteAnnouncer\`) no debe verse ni ocupar
+   espacio — su único destinatario es un lector de pantalla, nunca la
+   pantalla misma. */
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .noscript {
@@ -117,7 +154,7 @@ body {
    \`animation\` en la propia clase basta, sin tocar ese fichero. */
 .card {
   width: 100%;
-  max-width: 620px;
+  max-width: 520px;
   display: flex;
   flex-direction: column;
   gap: var(--bs-space-4);
@@ -257,6 +294,7 @@ body {
   font-family: inherit;
   font-weight: 700;
   font-size: 15px;
+  transition: background-color 0.15s ease;
 }
 
 .introButton:hover {
@@ -895,6 +933,7 @@ button:focus-visible {
   color: var(--bs-color-accent-contrast);
   font-size: var(--bs-font-size-md);
   font-weight: 600;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
 }
 
 .primaryButton:hover {
@@ -926,6 +965,7 @@ button:focus-visible {
   border: 1px solid var(--bs-color-border);
   border-radius: var(--bs-radius-md);
   background: var(--bs-color-bg);
+  transition: border-color 0.15s ease;
 }
 
 /* Hover: el borde vive en \`.option\` (ver arriba), así que el cambio de color
@@ -968,10 +1008,6 @@ button:focus-visible {
   gap: var(--bs-space-2);
   flex: 1 1 auto;
   min-width: 0;
-}
-
-.optionContent .media {
-  max-height: 180px;
 }
 
 .optionArrow {
@@ -1030,9 +1066,12 @@ button:focus-visible {
   max-height: 320px;
 }
 
+/* Petición de usuario ("haz más obvio el salto de Normal a Grande"): 640px,
+   el doble de \`.mediaNormal\` — mismo criterio que \`PlayerScreen.module.css\`,
+   ver su comentario. */
 .mediaLarge {
   max-width: 100%;
-  max-height: 480px;
+  max-height: 640px;
 }
 
 /* Envoltorio <button> de una imagen ampliable — mismas reglas que
@@ -1101,6 +1140,7 @@ button:focus-visible {
   font-size: 20px;
   line-height: 1;
   cursor: pointer;
+  transition: background-color 0.15s ease;
 }
 
 .lightboxClose:hover {

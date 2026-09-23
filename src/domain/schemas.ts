@@ -337,6 +337,13 @@ export const ContentBlockSchema = z.discriminatedUnion('type', [
      * sigue viéndose exactamente igual).
      */
     size: ImageSizeSchema.optional(),
+    /**
+     * Petición de usuario: texto alternativo personalizado para lectores de
+     * pantalla, editable desde el Inspector. `undefined` (o cadena vacía) =
+     * usa el texto genérico por defecto ("Imagen de esta pantalla") que ya
+     * se usaba antes de este campo — cambio puramente aditivo.
+     */
+    alt: z.string().optional(),
   }),
   z.object({
     id: z.string().uuid(),
@@ -846,3 +853,10 @@ export const MAX_RESPONSES = RESPONSE_LETTERS.length
  *  definido. Vive en el dominio para que Player e Inspector (placeholder)
  *  usen exactamente el mismo valor sin duplicar la cadena. */
 export const DEFAULT_CONTINUE_LABEL = 'Continuar'
+
+/** Texto alternativo por defecto de una imagen de contenido cuando
+ *  `ContentBlockSchema.alt` (imagen) no está definido. Mismo criterio que
+ *  `DEFAULT_CONTINUE_LABEL`: vive en el dominio para que Player, export
+ *  (`htmlBundle.ts`) e Inspector (placeholder) usen exactamente el mismo
+ *  valor sin duplicar la cadena. */
+export const DEFAULT_IMAGE_ALT = 'Imagen de esta pantalla'

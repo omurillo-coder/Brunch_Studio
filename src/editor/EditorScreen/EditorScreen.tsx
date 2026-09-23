@@ -5,6 +5,7 @@ import { LeftPanel } from '../LeftPanel/LeftPanel'
 import { Inspector } from '../Inspector/Inspector'
 import { VariablesPanel } from '../Variables/VariablesPanel'
 import { Canvas } from '../Canvas/Canvas'
+import { CanvasEmptyHint } from '../Canvas/CanvasEmptyHint'
 import { DiagnosticsPanel } from '../Diagnostics/DiagnosticsPanel'
 import { PlayerScreen } from '../../player/PlayerScreen'
 import { usePreviewMode } from '../../store'
@@ -129,11 +130,13 @@ export function EditorScreen({ filePath, onCloseProject }: EditorScreenProps) {
         onToggleLeftPanel={() => setLeftPanelVisible((visible) => !visible)}
         variablesPanelVisible={variablesPanelVisible}
         onToggleVariablesPanel={() => setVariablesPanelVisible((visible) => !visible)}
+        onRetrySave={flushPendingSave}
       />
       <div className={styles.body}>
         {leftPanelVisible && <LeftPanel />}
         <div className={styles.canvasArea}>
           <Canvas filePath={filePath} />
+          <CanvasEmptyHint />
           <DiagnosticsPanel />
         </div>
         {variablesPanelVisible ? (

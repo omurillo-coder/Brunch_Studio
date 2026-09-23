@@ -176,6 +176,31 @@ describe('updateImageBlockOptions (petición de usuario: "botón para hacer no a
     expect(clearedBlock?.type === 'image' ? clearedBlock.size : 'missing').toBeUndefined()
   })
 
+  it('`alt` fija un texto alternativo personalizado; cadena vacía o `null` lo borra (vuelve al genérico por defecto)', () => {
+    const { project, slideId, blockId } = withImageBlock()
+
+    const withAlt = updateImageBlockOptions(project, slideId, blockId, {
+      alt: 'Diagrama del proceso de fabricación',
+    })
+    expect(slideOf(withAlt, slideId).content[1]).toMatchObject({
+      alt: 'Diagrama del proceso de fabricación',
+    })
+    // Inmutabilidad: el bloque original no se toca.
+    const originalBlock = slideOf(project, slideId).content[1]
+    expect(originalBlock?.type === 'image' ? originalBlock.alt : 'missing').toBeUndefined()
+
+    const clearedWithEmptyString = updateImageBlockOptions(withAlt, slideId, blockId, { alt: '' })
+    const emptyBlock = slideOf(clearedWithEmptyString, slideId).content[1]
+    expect(emptyBlock?.type === 'image' ? emptyBlock.alt : 'missing').toBeUndefined()
+
+    const withAltAgain = updateImageBlockOptions(clearedWithEmptyString, slideId, blockId, {
+      alt: 'Otro texto',
+    })
+    const clearedWithNull = updateImageBlockOptions(withAltAgain, slideId, blockId, { alt: null })
+    const nullBlock = slideOf(clearedWithNull, slideId).content[1]
+    expect(nullBlock?.type === 'image' ? nullBlock.alt : 'missing').toBeUndefined()
+  })
+
   it('lanza si el bloque no existe, o si no es de tipo image', () => {
     const { project, slideId } = blankSlide()
     const textBlockId = slideOf(project, slideId).content[0]?.id

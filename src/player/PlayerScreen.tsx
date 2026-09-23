@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { useProject, useProjectStore, usePreviewStartNodeId } from '../store'
 import {
   CICLOS,
   cicloOutputName,
   DEFAULT_CONTINUE_LABEL,
+  DEFAULT_IMAGE_ALT,
   FINAL_ALTERNATE_BODY_LINE_1,
   FINAL_ALTERNATE_BODY_LINE_2,
   FINAL_ALTERNATE_HEADING,
@@ -26,6 +27,7 @@ import type {
   DecisionResponse,
   ImageSize,
   IntroNode,
+  Node,
   ProjectDocument,
   SlideNode,
   VariableState,
@@ -114,6 +116,15 @@ function PlayerImage({
  * propia imagen: pulsarla a ella no debe cerrar el lightbox (solo pulsar
  * fuera de ella, sobre el fondo). Traducción literal en `buildLightbox` de
  * `src/export/exportedPlayerScript.ts`.
+ *
+ * Hallazgo de auditoría ("el lightbox... no atrapa el foco"): ya tenía
+ * `role="dialog"`/Escape, pero no movía el foco a su interior al abrirse, no
+ * lo devolvía al cerrarse, y `Tab` podía escapar hacia la página de detrás.
+ * El único elemento enfocable de dentro es el botón "×" (la imagen no es
+ * interactiva) — así que "atrapar el foco" aquí es tan simple como
+ * enfocarlo al montar y, mientras el diálogo siga abierto, volver a
+ * enfocarlo en cualquier `Tab`/`Shift+Tab` en vez de dejar que el navegador
+ * mueva el foco a lo que haya justo antes/después en el documento.
  */
 function Lightbox({
   image,
@@ -122,9 +133,29 @@ function Lightbox({
   image: { dataUri: string; alt: string }
   onClose: () => void
 }) {
+  const closeButtonRef = useRef<HTMLButtonElement>(null)
+  const previouslyFocusedRef = useRef<HTMLElement | null>(null)
+
+  useEffect(() => {
+    previouslyFocusedRef.current = document.activeElement as HTMLElement | null
+    closeButtonRef.current?.focus()
+    return () => {
+      previouslyFocusedRef.current?.focus()
+    }
+  }, [])
+
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') onClose()
+      if (event.key === 'Escape') {
+        onClose()
+        return
+      }
+      if (event.key === 'Tab') {
+        // Único elemento enfocable del diálogo: cualquier Tab/Shift+Tab se
+        // queda dentro, nunca se escapa a la página de detrás.
+        event.preventDefault()
+        closeButtonRef.current?.focus()
+      }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
@@ -145,6 +176,7 @@ function Lightbox({
         onClick={(event) => event.stopPropagation()}
       />
       <button
+        ref={closeButtonRef}
         type="button"
         className={styles.lightboxClose}
         onClick={onClose}
@@ -238,7 +270,7 @@ function ContentBlockView({
           assetId={block.assetId}
           filePath={filePath}
           assetRepository={assetRepository}
-          alt="Imagen de esta pantalla"
+          alt={block.alt?.trim() || DEFAULT_IMAGE_ALT}
           size={block.size}
           // Petición de usuario: "un botón... para hacer no ampliable la
           // imagen" — `block.expandable === false` (marcado explícito
@@ -894,6 +926,19 @@ function FailureIndicator({
   )
 }
 
+/**
+ * Referencia legible de un nodo en el mensaje de "callejón sin salida"
+ * (hallazgo de auditoría) — mismo criterio "número + Ref. oculta" que ya usa
+ * `nodeLabel` en `DiagnosticsPanel.tsx` (no importado de ahí: es una
+ * diferencia de capa deliberada, el Player no debe depender de un
+ * componente de la UI del editor solo por una función de formato de tres
+ * líneas).
+ */
+function deadEndNodeLabel(node: Node): string {
+  const title = node.title.trim() || 'Sin ref. oculta'
+  return `${node.number}. ${title}`
+}
+
 export interface PlayerScreenProps {
   /**
    * Ruta absoluta del `.brunch` abierto. La necesita el Player para pedir
@@ -938,6 +983,7 @@ export interface PlayerScreenProps {
 export function PlayerScreen({ filePath }: PlayerScreenProps) {
   const project = useProject()
   const setPreviewMode = useProjectStore((state) => state.setPreviewMode)
+  const focusNode = useProjectStore((state) => state.focusNode)
   const previewStartNodeId = usePreviewStartNodeId()
   const { assetRepository } = useAppServices()
   const [playerState, setPlayerState] = useState<PlayerState>(() =>
@@ -973,6 +1019,21 @@ export function PlayerScreen({ filePath }: PlayerScreenProps) {
   }
 
   /**
+   * Hallazgo de auditoría ("el mensaje [de callejón sin salida] no indica
+   * qué diapositiva es ni ofrece un atajo para volver a ella — a diferencia
+   * del panel de Diagnostics, que sí centra el lienzo en el nodo
+   * problemático"): mismo `focusNode` que ya usa `DiagnosticsPanel` (selecciona
+   * el nodo Y pide al lienzo que lo centre), seguido de salir de "Probar" —
+   * mismo destino que `handleExit`, pero llegando ya con el nodo
+   * problemático seleccionado en vez de dejar que el usuario lo busque a
+   * mano en el lienzo.
+   */
+  function handleGoToNodeInEditor(nodeId: string) {
+    focusNode(nodeId)
+    setPreviewMode(false)
+  }
+
+  /**
    * Elige `response`: la misma lógica que antes iba en línea dentro del
    * `onClick` de `ResponseOption` — factorizada para que `GameOverCard`
    * (pantalla bespoke "Game Over", `brandedGameOverScreen`) dispare
@@ -1004,6 +1065,34 @@ export function PlayerScreen({ filePath }: PlayerScreenProps) {
       ? resolveGameOverResponses(view.visibleResponses)
       : null
 
+  // Accesibilidad, mismo criterio que `exportedPlayerScript.ts`
+  // (`focusStageAndAnnounce`, ver su comentario): cada cambio de vista
+  // sustituye TODO el contenido de `<main>` de golpe, así que sin esto
+  // alguien que navega con teclado se queda con el foco en el limbo (el
+  // botón que acaba de pulsar ya no existe) y alguien con lector de
+  // pantalla no se entera de que la pantalla cambió. `stageRef` apunta
+  // SIEMPRE al mismo elemento `<main>` (nunca se desmonta al cambiar de
+  // vista, solo cambian sus hijos), así que basta con un único
+  // `tabIndex={-1}` fijo en el JSX. El anuncio se escribe de forma
+  // imperativa sobre `announcerRef` (no como texto declarativo en el JSX)
+  // a propósito: si el texto fuera un string JSX literal idéntico al del
+  // render anterior, React ni siquiera tocaría el nodo del DOM y el lector
+  // de pantalla nunca se enteraría de un segundo cambio de pantalla con el
+  // mismo mensaje — escribir `textContent` a mano garantiza una mutación
+  // real del DOM en cada cambio, lo vea o no lea el usuario el mismo texto.
+  // Dependencias deliberadamente reducidas a `[view.kind, view.node?.id]`:
+  // solo debe disparar al cambiar de nodo/tipo de vista, no en cualquier
+  // otro render (p.ej. un cambio de `playerState.variables` sin navegar).
+  const stageRef = useRef<HTMLElement | null>(null)
+  const announcerRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    stageRef.current?.focus()
+    if (announcerRef.current) {
+      announcerRef.current.textContent = 'Contenido de la pantalla actualizado.'
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view.kind, view.node?.id ?? null])
+
   return (
     <div className={styles.screen}>
       <header className={styles.bar}>
@@ -1021,7 +1110,7 @@ export function PlayerScreen({ filePath }: PlayerScreenProps) {
         </div>
       </header>
 
-      <main className={styles.stage}>
+      <main className={styles.stage} ref={stageRef} tabIndex={-1}>
         {view.kind === 'intro' && (
           <IntroCard
             key={view.node.id}
@@ -1135,12 +1224,27 @@ export function PlayerScreen({ filePath }: PlayerScreenProps) {
         {view.kind === 'dead-end' && (
           <div className={styles.card}>
             <p className={styles.body}>
-              Esta diapositiva todavía no tiene una continuación configurada. Vuelve al editor para
-              conectarla con el resto de la experiencia.
+              {view.node
+                ? `${deadEndNodeLabel(view.node)} todavía no tiene una continuación configurada. Vuelve al editor para conectarla con el resto de la experiencia.`
+                : 'Esta diapositiva todavía no tiene una continuación configurada. Vuelve al editor para conectarla con el resto de la experiencia.'}
             </p>
+            {view.node && (
+              <button
+                type="button"
+                className={styles.introButton}
+                onClick={() => handleGoToNodeInEditor(view.node!.id)}
+              >
+                Volver al editor y seleccionar esta diapositiva
+              </button>
+            )}
           </div>
         )}
       </main>
+      {/* Visualmente oculto pero expuesto a lectores de pantalla
+          (`aria-live="polite"`, patrón estándar "sr-only"): anuncia cada
+          cambio de pantalla, ver el comentario de `stageRef`/`announcerRef`
+          más arriba. */}
+      <div role="status" aria-live="polite" className={styles.srOnly} ref={announcerRef} />
       {/* Lightbox de imagen ampliada: `position: fixed` a pantalla completa
           (ver `Lightbox` más arriba), así que su posición en el árbol es
           irrelevante — se renderiza aquí, como hermano de `<main>`, en vez de

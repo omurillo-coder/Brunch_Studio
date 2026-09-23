@@ -209,6 +209,21 @@ describe('script exportado — SCORM 2004 4ª edición', () => {
     expect(api.Terminate).toHaveBeenCalledWith('')
   })
 
+  it('hallazgo de auditoría: "Salir" y luego beforeunload solo llaman a Terminate una vez, no dos', () => {
+    const api = fakeScormAPI()
+    ;(window as unknown as { API_1484_11: typeof api }).API_1484_11 = api
+    const closeSpy = vi.spyOn(window, 'close').mockImplementation(() => {})
+
+    runExportedBundle(buildHtmlBundle(sampleProject(), emptyAssets))
+    clickButton('Continuar')
+    clickButton('Salir')
+    window.dispatchEvent(new Event('beforeunload'))
+
+    expect(api.Terminate).toHaveBeenCalledTimes(1)
+
+    closeSpy.mockRestore()
+  })
+
   it('no llama a Terminate en beforeunload si nunca hubo API (no-op de la fase 1)', () => {
     expect(() => {
       runExportedBundle(buildHtmlBundle(sampleProject(), emptyAssets))
@@ -278,5 +293,62 @@ describe('script exportado — SCORM 2004 4ª edición', () => {
 
     const card = document.querySelector('#brunch-root .finalSuccessCard')
     expect(card?.querySelector('.finalSuccessHeading')?.textContent).toBe('¡Impresionante!')
+  })
+
+  describe('hallazgo de auditoría: reintento de búsqueda de la API (LMS que la expone de forma perezosa)', () => {
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it('si la API aparece en window poco después de cargar el script, un reintento posterior la encuentra e inicializa igual', async () => {
+      vi.useFakeTimers()
+
+      // Sin ninguna API todavía en el instante de cargar el script: el
+      // primer intento síncrono (dentro de runExportedBundle) no la
+      // encuentra.
+      runExportedBundle(buildHtmlBundle(sampleProject(), emptyAssets))
+
+      const api = fakeScormAPI()
+      ;(window as unknown as { API_1484_11: typeof api }).API_1484_11 = api
+      expect(api.Initialize).not.toHaveBeenCalled()
+
+      // El primer reintento programado dispara a los 400ms (ver
+      // FIND_API_RETRY_BASE_MS en exportedPlayerScript.ts).
+      await vi.advanceTimersByTimeAsync(400)
+
+      expect(api.Initialize).toHaveBeenCalledWith('')
+    })
+
+    it('si la API nunca aparece, deja de reintentar tras agotar los intentos (no deja temporizadores colgados para siempre)', async () => {
+      vi.useFakeTimers()
+
+      runExportedBundle(buildHtmlBundle(sampleProject(), emptyAssets))
+
+      // Suma de todos los reintentos (400ms * (1+2+...+8) = 14400ms, ver
+      // MAX_FIND_API_RETRIES/FIND_API_RETRY_BASE_MS): de sobra para agotarlos
+      // todos sin que ninguna API haya aparecido nunca.
+      await vi.advanceTimersByTimeAsync(20000)
+
+      expect(vi.getTimerCount()).toBe(0)
+    })
+
+    it('si la API nunca aparece, "Salir" y beforeunload siguen sin lanzar (no-op de siempre)', async () => {
+      vi.useFakeTimers()
+      const closeSpy = vi.spyOn(window, 'close').mockImplementation(() => {})
+
+      expect(() => {
+        runExportedBundle(buildHtmlBundle(sampleProject(), emptyAssets))
+      }).not.toThrow()
+
+      await vi.advanceTimersByTimeAsync(20000)
+
+      expect(() => {
+        clickButton('Continuar')
+        clickButton('Salir')
+        window.dispatchEvent(new Event('beforeunload'))
+      }).not.toThrow()
+
+      closeSpy.mockRestore()
+    })
   })
 })

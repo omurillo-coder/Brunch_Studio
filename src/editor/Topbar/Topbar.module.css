@@ -31,6 +31,38 @@
   color: var(--bs-color-text-faint);
 }
 
+/* Hallazgo de auditoría ("un fallo de guardado apenas se nota"): banner de
+   más peso visual que `.saveStatus` (fondo + borde de color, no solo texto
+   pequeño) — ver `SaveErrorBanner` en Topbar.tsx. */
+.saveErrorBanner {
+  display: flex;
+  align-items: center;
+  gap: var(--bs-space-2);
+  font-size: var(--bs-font-size-xs);
+  color: var(--bs-color-danger);
+  background: var(--bs-color-danger-bg);
+  border: 1px solid var(--bs-color-danger);
+  border-radius: var(--bs-radius-sm);
+  padding: 3px var(--bs-space-2);
+  white-space: nowrap;
+}
+
+.retrySaveButton {
+  font-size: var(--bs-font-size-xs);
+  font-weight: 600;
+  color: var(--bs-color-danger-contrast);
+  background: var(--bs-color-danger);
+  border: none;
+  border-radius: var(--bs-radius-sm);
+  padding: 2px var(--bs-space-2);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.retrySaveButton:hover {
+  background: var(--bs-color-danger-hover);
+}
+
 .right {
   display: flex;
   align-items: center;
